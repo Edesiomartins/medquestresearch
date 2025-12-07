@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* ===========================
+   Paleta profissional MedQuest Research
+=========================== */
+:root {
+  --mq-green-primary: #10b981;    /* Emerald 500 - Verde principal */
+  --mq-green-dark: #0ea47a;       /* Verde clínico premium */
+  --mq-green-light: #d1fae5;      /* Emerald 100 - Fundos suaves */
+  --mq-green-accent: #34d399;     /* Emerald 400 - Destaques */
+  --mq-blue: #0284c7;             /* Azul científico (compatível com Cloud) */
+  --mq-gray: #f7f8fa;
+  --mq-text: #1e293b;
+  --mq-soft-border: rgba(0, 0, 0, 0.06);
+
+  color-scheme: light;
+}
+
+/* ===========================
+   Tipografia e corpo
+=========================== */
+body {
+  @apply antialiased text-slate-800 bg-slate-50;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", "Segoe UI", sans-serif;
+}
+
+/* ===========================
+   Área principal com efeito premium
+=========================== */
+.hero-gradient {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.12), transparent 60%),
+    radial-gradient(circle at 90% 90%, rgba(2, 132, 199, 0.08), transparent 70%);
+}
+
+/* ===========================
+   Cartões Premium
+=========================== */
+.card {
+  @apply bg-white border border-slate-200 rounded-xl shadow-sm p-5
+         transition-all duration-200;
+}
+
+.card:hover {
+  @apply shadow-md -translate-y-0.5 border-emerald-400/60;
+}
+
+/* ===========================
+   Títulos e subtítulos elegantes
+=========================== */
+h1, h2, h3 {
+  @apply tracking-tight;
+}
+
+h1 {
+  @apply text-3xl md:text-4xl font-semibold text-slate-900;
+}
+
+h2 {
+  @apply text-xl md:text-2xl font-semibold text-slate-800;
+}
+
+/* ===========================
+   Badge Premium (categoria)
+=========================== */
+.badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+         bg-emerald-50 text-emerald-700 border border-emerald-200;
+}
+
+/* ===========================
+   Botões profissionais
+=========================== */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition;
+}
+
+.btn-primary {
+  @apply bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm;
+}
+
+.btn-outline {
+  @apply border border-slate-300 hover:border-emerald-500 text-slate-700 hover:text-emerald-700 hover:bg-emerald-50/30;
+}
+
+/* ===========================
+   Inputs e campos
+=========================== */
+.input {
+  @apply w-full px-4 py-2 rounded-lg border border-slate-300
+         focus:outline-none focus:ring-2 focus:ring-emerald-500/40;
+}
+
+/* ===========================
+   Componente Logo SVG
+=========================== */
+.logo-icon {
+  @apply w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 
+         flex items-center justify-center text-white shadow-md;
+}
+
+.logo-icon-large {
+  @apply w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 
+         flex items-center justify-center shadow-lg border border-emerald-200;
+}
