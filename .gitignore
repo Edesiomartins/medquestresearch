@@ -37,7 +37,8 @@ coverage/
 .pytest_cache/
 
 # IDEs
-.vscode/
+# Permitir configurações do VS Code para o time
+# .vscode/
 .idea/
 *.swp
 *.swo
