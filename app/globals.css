@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "./dashboard.css";
+
 
 :root {
   --mq-blue-50: #f0f9ff;
@@ -99,11 +99,11 @@ h3 {
 }
 
 .divider {
-  @apply h-px bg-gradient-to-r from-transparent via-blue-200 to-transparent;
+  @apply h-px bg-linear-to-r from-transparent via-blue-200 to-transparent;
 }
 
 .divider-light {
-  @apply h-px bg-gradient-to-r from-transparent via-blue-100 to-transparent;
+  @apply h-px bg-linear-to-r from-transparent via-blue-100 to-transparent;
 }
 
 @keyframes fadeInUp {
