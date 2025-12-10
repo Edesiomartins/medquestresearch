@@ -1,13 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
-    domains: ['localhost', 'your-domain.com'], // Para imagens externas (ex.: PubMed)
-  },
-  // Otimizações para Vercel
-  experimental: {
-    appDir: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+    ],
   },
   // Headers para segurança (dados médicos)
   async headers() {

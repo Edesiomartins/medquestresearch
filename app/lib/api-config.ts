@@ -68,9 +68,9 @@ export const authenticatedFetch = async (
   options: RequestInit = {},
   token?: string
 ): Promise<Response> => {
-  const headers: HeadersInit = {
-    ...defaultFetchOptions.headers,
-    ...options.headers,
+  const headers: Record<string, string> = {
+    ...(defaultFetchOptions.headers as Record<string, string>),
+    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
