@@ -7,9 +7,14 @@ import os
 import hashlib
 import secrets
 import datetime
+from functools import wraps
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from pydantic import BaseModel, validator
+from typing import Optional
 
 # Banco de dados
 from database import db_select, db_select_one, db_execute
@@ -21,6 +26,7 @@ from Fact_checker import verificar_fatos
 from Perspective_research import buscar_perspectivas_pubmed
 from structure_visualizer import gerar_mapa_visual
 from pdf_processor import extrair_texto_pdf
+from gpt_engine import resumir_chunks
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -32,6 +38,14 @@ if BASE_DIR not in sys.path:
 
 app = Flask(__name__)
 CORS(app)
+
+# Config rate limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["100 per day", "10 per minute"],  # Ajuste conforme necessidade
+    storage_uri="memory://",  # Para produção, use Redis: "redis://localhost:6379"
+)
 
 
 # ============================================
@@ -82,6 +96,73 @@ def registrar_log(usuario_id, modulo, entrada, saida, creditos):
         INSERT INTO gen_logs_uso (usuario_id, modulo, entrada, saida, creditos_gastos, ip)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (usuario_id, modulo, entrada, saida, creditos, ip))
+
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+        g.user = user
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ============================================
+# ✅ MODELOS PYDANTIC PARA VALIDAÇÃO
+# ============================================
+
+class InputTexto(BaseModel):
+    texto_artigo: str
+    trecho: Optional[str] = None  # Para /explicar
+    nivel: Optional[str] = "graduação"
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if len(v) > 10000:  # Limite chars
+            raise ValueError('Texto muito longo')
+        return v
+
+
+class InputCritica(BaseModel):
+    texto_artigo: str
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if len(v) > 10000:  # Limite chars
+            raise ValueError('Texto muito longo')
+        return v
+
+
+class InputFatos(BaseModel):
+    texto_artigo: str
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if len(v) > 10000:  # Limite chars
+            raise ValueError('Texto muito longo')
+        return v
+
+
+class InputPerspectiva(BaseModel):
+    texto_artigo: str
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if len(v) > 10000:  # Limite chars
+            raise ValueError('Texto muito longo')
+        return v
+
+
+class InputMapa(BaseModel):
+    texto_artigo: str
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if len(v) > 10000:  # Limite chars
+            raise ValueError('Texto muito longo')
+        return v
 
 
 # ============================================
@@ -162,15 +243,21 @@ def creditos():
 # ============================================
 
 @app.route("/explicar", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_explicar():
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    data = request.json
-    texto_artigo = data.get("texto_artigo")
-    trecho = data.get("trecho")
-    nivel = data.get("nivel", "graduação")
+    try:
+        data = InputTexto(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+        trecho = data.trecho
+        nivel = data.nivel
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
     if not texto_artigo or not trecho:
         return jsonify({"erro": "Envie texto_artigo e trecho"}), 400
@@ -190,13 +277,19 @@ def rota_explicar():
 # ============================================
 
 @app.route("/critica", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_critica():
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    data = request.json
-    texto_artigo = data.get("texto_artigo")
+    try:
+        data = InputCritica(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
     if not texto_artigo:
         return jsonify({"erro": "Envie texto_artigo"}), 400
@@ -216,13 +309,19 @@ def rota_critica():
 # ============================================
 
 @app.route("/fatos", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_fatos():
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    data = request.json
-    texto_artigo = data.get("texto_artigo")
+    try:
+        data = InputFatos(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
     if not texto_artigo:
         return jsonify({"erro": "Envie texto_artigo"}), 400
@@ -242,13 +341,19 @@ def rota_fatos():
 # ============================================
 
 @app.route("/perspectiva", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_perspectiva():
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    data = request.json
-    texto_artigo = data.get("texto_artigo")
+    try:
+        data = InputPerspectiva(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
     if not texto_artigo:
         return jsonify({"erro": "Envie texto_artigo"}), 400
@@ -268,13 +373,19 @@ def rota_perspectiva():
 # ============================================
 
 @app.route("/mapa", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_mapa():
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
-    data = request.json
-    texto_artigo = data.get("texto_artigo")
+    try:
+        data = InputMapa(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
     if not texto_artigo:
         return jsonify({"erro": "Envie texto_artigo"}), 400
@@ -294,6 +405,7 @@ def rota_mapa():
 # ============================================
 
 @app.route("/pdf", methods=["POST"])
+@limiter.limit("5 per minute")
 def rota_pdf():
     user = autenticar(request)
     if not user:
@@ -314,12 +426,17 @@ def rota_pdf():
         return jsonify({"erro": "Créditos insuficientes"}), 402
 
     # salvar temporariamente
-    temp_path = f"/home/dredesiomartins/MedquestGen/backend/_temp_{secrets.token_hex(6)}.pdf"
+    temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}.pdf")
     arquivo.save(temp_path)
 
     try:
         # processar
         texto_extraido = extrair_texto_pdf(temp_path)
+        
+        if isinstance(texto_extraido, list):  # Chunks
+            texto_extraido = resumir_chunks(texto_extraido)
 
         registrar_log(
             user["id"],
@@ -338,3 +455,109 @@ def rota_pdf():
         # remover arquivo temporário
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+# ============================================
+# ✅ ROTAS RESEARCH COM DECORATOR
+# ============================================
+
+@app.route("/critical_analysis", methods=["POST"])
+@limiter.limit("5 per minute")
+@require_api_key
+def critical_analysis_route():
+    try:
+        data = InputCritica(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+    if not texto_artigo:
+        return jsonify({"erro": "Envie texto_artigo"}), 400
+
+    custo = 7
+    if not debitar_creditos(g.user["id"], custo):
+        return jsonify({"erro": "Créditos insuficientes"}), 402
+
+    resposta = aplicar_leitura_critica(texto_artigo)
+    registrar_log(g.user["id"], "critical_analysis", texto_artigo, resposta, custo)
+
+    return jsonify({"resultado": resposta})
+
+
+@app.route("/explain_concept", methods=["POST"])
+@limiter.limit("5 per minute")
+@require_api_key
+def explain_concept_route():
+    try:
+        data = InputTexto(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+        trecho = data.trecho
+        nivel = data.nivel
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+    if not texto_artigo or not trecho:
+        return jsonify({"erro": "Envie texto_artigo e trecho"}), 400
+
+    custo = 5
+    if not debitar_creditos(g.user["id"], custo):
+        return jsonify({"erro": "Créditos insuficientes"}), 402
+
+    resposta = explicar_conceito(texto_artigo, trecho, nivel)
+    registrar_log(g.user["id"], "explain_concept", texto_artigo, resposta, custo)
+
+    return jsonify({"resultado": resposta})
+
+
+@app.route("/fact_checker", methods=["POST"])
+@limiter.limit("5 per minute")
+@require_api_key
+def fact_checker_route():
+    try:
+        data = InputFatos(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+    if not texto_artigo:
+        return jsonify({"erro": "Envie texto_artigo"}), 400
+
+    custo = 5
+    if not debitar_creditos(g.user["id"], custo):
+        return jsonify({"erro": "Créditos insuficientes"}), 402
+
+    resposta = verificar_fatos(texto_artigo)
+    registrar_log(g.user["id"], "fact_checker", texto_artigo, resposta, custo)
+
+    return jsonify({"resultado": resposta})
+
+
+@app.route("/perspective_research", methods=["POST"])
+@limiter.limit("5 per minute")
+@require_api_key
+def perspective_research_route():
+    try:
+        data = InputPerspectiva(**request.json)  # Valida auto
+        texto_artigo = data.texto_artigo
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    except Exception as e:
+        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+    if not texto_artigo:
+        return jsonify({"erro": "Envie texto_artigo"}), 400
+
+    custo = 10
+    if not debitar_creditos(g.user["id"], custo):
+        return jsonify({"erro": "Créditos insuficientes"}), 402
+
+    resposta = buscar_perspectivas_pubmed(texto_artigo)
+    registrar_log(g.user["id"], "perspective_research", texto_artigo, resposta, custo)
+
+    return jsonify({"resultado": resposta})

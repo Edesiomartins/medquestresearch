@@ -1,69 +1,146 @@
-import type { ReactNode } from "react";
-import "./globals.css";
+"use client";
 
-export const metadata = {
-  title: "MedQuestResearch",
-  description:
-    "Plataforma inteligente de leitura crítica, análise científica e geração de conhecimento assistida por IA."
-};
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+// import "./dashboard.css"; // arquivo opcional para ajustes extras - descomente se criar o arquivo
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  const menu = [
+    { name: "Visão Geral", href: "/dashboard", icon: "📊" },
+    { name: "Meus Artigos", href: "/dashboard/artigos", icon: "📄" },
+    { name: "Análises", href: "/dashboard/analises", icon: "🔬" },
+    { name: "Configurações", href: "/dashboard/config", icon: "⚙️" },
+  ];
+
   return (
-    <html lang="pt-BR">
-      <body className="min-h-screen bg-slate-50 text-slate-900">
-        {/* GRADIENTE PREMIUM */}
-        <div className="hero-gradient min-h-screen">
-          {/* HEADER PREMIUM */}
-          <header className="border-b bg-white/70 backdrop-blur-md supports-[backdrop-filter]:bg-white/50">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-              {/* LOGO COM ÍCONE NOVO */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-lg font-bold shadow-md overflow-hidden">
-                  <svg
-                    viewBox="0 0 100 100"
-                    className="w-6 h-6"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    {/* Nuvem com símbolo de pesquisa */}
-                    <path
-                      d="M50 20C35 20 25 30 25 45C25 55 32 63 42 65C42 75 48 85 50 85C52 85 58 75 58 65C68 63 75 55 75 45C75 30 65 20 50 20Z"
-                      fill="white"
-                    />
-                    {/* Cruz de pesquisa/saúde */}
-                    <path
-                      d="M50 40V60M40 50H60"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </div>
+    <div className="flex min-h-screen bg-[var(--color-background)] text-[var(--color-text)]">
 
-                <div className="flex flex-col leading-tight">
-                  <span className="text-base font-semibold text-slate-900">
-                    MedQuestResearch
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    Análise científica com IA — módulo premium
-                  </span>
-                </div>
-              </div>
-
-              {/* ÁREA DIREITA DO HEADER */}
-              <div className="flex items-center gap-3">
-                <button className="btn-outline hidden md:block">
-                  Documentação
-                </button>
-                <button className="btn-primary">Entrar</button>
-              </div>
-            </div>
-          </header>
-
-          {/* CONTEÚDO PRINCIPAL */}
-          <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+      {/* ===== SIDEBAR — Desktop ===== */}
+      <aside className="
+        hidden md:flex 
+        w-64 flex-col 
+        backdrop-blur-xl 
+        bg-[rgba(0,56,99,0.55)]
+        border-r border-[rgba(255,255,255,0.1)]
+        text-white
+        shadow-xl
+      ">
+        {/* Logo */}
+        <div className="p-6 flex items-center gap-3 border-b border-[rgba(255,255,255,0.1)]">
+          <div className="h-12 w-12 rounded-xl flex items-center justify-center bg-[var(--color-primary)] shadow-lg">
+            <span className="text-white font-bold text-xl">MQ</span>
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-bold text-lg">MedQuest</span>
+            <span className="text-[var(--color-accent)] text-sm font-semibold">Research</span>
+          </div>
         </div>
-      </body>
-    </html>
+
+        {/* Menu */}
+        <nav className="flex-1 p-4 space-y-2">
+          {menu.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-lg transition-all
+                  ${active ? "bg-[rgba(255,255,255,0.15)] text-[var(--color-accent)] font-semibold" : "text-white/80 hover:bg-[rgba(255,255,255,0.1)] hover:text-white"}
+                `}
+              >
+                <span className="text-xl">{item.icon}</span>
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User */}
+        <div className="p-4 border-t border-[rgba(255,255,255,0.1)]">
+          <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-[rgba(255,255,255,0.1)] cursor-pointer transition">
+            <div className="w-10 h-10 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white font-bold">
+              ED
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Dr. Edesio</p>
+              <p className="text-xs opacity-80">Pesquisador</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ===== SIDEBAR — Mobile ===== */}
+      {open && (
+        <div
+          className="
+            fixed inset-0 z-40 flex md:hidden 
+            backdrop-blur-xl bg-[rgba(0,0,0,0.4)]
+          "
+          onClick={() => setOpen(false)}
+        >
+          <aside
+            className="
+              w-64 h-full bg-[rgba(0,56,99,0.55)] backdrop-blur-2xl text-white p-6 shadow-xl
+            "
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold">Menu</h2>
+            </div>
+
+            <nav className="space-y-4">
+              {menu.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="block text-white/90 hover:text-white font-medium"
+                  onClick={() => setOpen(false)}
+                >
+                  {item.icon} {item.name}
+                </Link>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      )}
+
+      {/* ===== MAIN AREA ===== */}
+      <div className="flex-1 flex flex-col">
+
+        {/* TOPBAR */}
+        <header
+          className="
+            h-16 flex items-center justify-between px-6
+            backdrop-blur-xl bg-[rgba(255,255,255,0.6)]
+            border-b border-[var(--color-border)]
+            shadow-sm sticky top-0 z-20
+          "
+        >
+          {/* Mobile toggle */}
+          <button
+            className="md:hidden p-2 text-[var(--color-primary)]"
+            onClick={() => setOpen(true)}
+          >
+            ☰
+          </button>
+
+          <h1 className="text-xl font-bold text-[var(--color-primary)]">Dashboard</h1>
+
+          <button className="hidden md:flex px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white font-semibold shadow hover:bg-[var(--color-primary-hover)] transition">
+            + Novo Artigo
+          </button>
+        </header>
+
+        {/* CONTENT */}
+        <main className="flex-1 p-8 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }

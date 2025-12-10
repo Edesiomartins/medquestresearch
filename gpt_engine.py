@@ -4,11 +4,11 @@ from dotenv import load_dotenv
 
 # Carrega chave do .env
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
 
 # Verifica se a chave foi carregada
 if not api_key:
-    raise ValueError("OPENAI_API_KEY não encontrada no arquivo .env")
+    raise ValueError("API_OPENAI_KEY_RESEARCH não encontrada no WSGI")
 
 # Cria cliente OpenAI com a chave
 client = OpenAI(api_key=api_key)
@@ -37,3 +37,28 @@ def gerar_resposta(prompt, temperatura=0.4):
         return resposta.choices[0].message.content
     except Exception as e:
         raise Exception(f"Erro ao gerar resposta: {str(e)}")
+
+
+def resumir_chunks(chunks, max_tokens=1000):
+    """
+    Resume lista de chunks para reduzir tamanho (para PDFs longos).
+    Args: chunks (lista strings), max_tokens (limite por resumo).
+    Returns: String resumida única.
+    """
+    resumos = []
+    for i, chunk in enumerate(chunks):
+        prompt = f"""
+        Resuma este chunk de artigo científico de forma concisa, mantendo conceitos chave, métodos e conclusões.
+        Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
+
+        {chunk}
+
+        """
+        resumo = gerar_resposta(prompt, temperatura=0.2)  # Baixa temp para precisão
+        resumos.append(resumo)
+    
+    # Combinar resumos
+    prompt_final = f"Combine estes resumos de chunks em um texto coeso final:\n" + "\n\n".join(resumos)
+    texto_final = gerar_resposta(prompt_final, temperatura=0.3)
+    
+    return texto_final

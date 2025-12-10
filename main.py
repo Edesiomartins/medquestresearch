@@ -1,4 +1,5 @@
-from gpt_engine import gerar_resposta
+import os
+from gpt_engine import gerar_resposta, resumir_chunks
 from pdf_processor import extrair_texto_pdf
 from explain_concept import explicar_conceito
 from critical_analysis import aplicar_leitura_critica
@@ -17,8 +18,18 @@ print("6 - Gerar mapa visual da estrutura do artigo")
 opcao = input("Escolha uma opção: ")
 
 if opcao in ["1", "2", "3", "4", "5", "6"]:
-    caminho = input("Caminho do PDF: ").strip()
-    texto = extrair_texto_pdf(caminho)
+    caminho = input("Caminho do PDF: ").strip().strip('"\'')  # Remove aspas se o usuário digitar
+    
+    if not os.path.exists(caminho):
+        print(f"❌ Erro: Arquivo não encontrado: {caminho}")
+        exit(1)
+    
+    texto = extrair_texto_pdf(caminho)  # Agora retorna chunks
+    
+    if isinstance(texto, list):  # Se chunks
+        texto_resumido = resumir_chunks(texto)
+        print(f"PDF longo resumido em {len(texto)} chunks.")
+        texto = texto_resumido  # Use resumido nas funções
 
     if opcao == "1":
         conceito = input("Qual conceito ou trecho deseja que seja explicado? ")
