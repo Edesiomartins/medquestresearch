@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { login as apiLogin, getCreditos, ApiResponse } from '../api';
+import {
+  login as apiLogin,
+  cadastro as apiCadastro,
+  getCreditos,
+} from '../api';
 
 interface Usuario {
   id?: string;
@@ -16,74 +20,158 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string>('');
 
-  const logout = () => {
+  /* =========================
+     Helpers internos
+  ========================= */
+
+  const hydrateSession = (
+    tokenValue: string,
+    usuarioValue?: Usuario | null,
+    creditosValue?: number
+  ) => {
+    setToken(tokenValue);
+    if (usuarioValue) setUsuario(usuarioValue);
+    if (typeof creditosValue === 'number') setCreditos(creditosValue);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', tokenValue);
+      if (usuarioValue) {
+        localStorage.setItem('usuario', JSON.stringify(usuarioValue));
+      }
+      if (typeof creditosValue === 'number') {
+        localStorage.setItem('creditos', String(creditosValue));
+      }
+    }
+  };
+
+  const clearSession = () => {
     setToken(null);
     setUsuario(null);
     setCreditos(0);
     setErro('');
+
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
+      localStorage.removeItem('usuario');
+      localStorage.removeItem('creditos');
     }
   };
+
+  /* =========================
+     Bootstrap da sessão
+  ========================= */
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+
+    const storedToken = localStorage.getItem('token');
+    
+    if (storedToken) {
+      // Não define o token ainda - aguarda validação
+      // Isso evita flash do dashboard antes da verificação
+      fetchUserData(storedToken);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  /* =========================
+     Fetch pós-login
+  ========================= */
 
   const fetchUserData = async (tokenValue: string) => {
     try {
       const res = await getCreditos(tokenValue);
+
       if (res.erro) {
         setErro(res.erro);
-        logout();
+        clearSession();
+        setLoading(false);
       } else {
-        setCreditos(res.creditos || 0);
-        setUsuario(res.usuario || null);
+        // Só define o token após validação bem-sucedida
+        setToken(tokenValue);
+        if (typeof res.creditos === 'number') {
+          setCreditos(res.creditos);
+        }
+        if (res.usuario) {
+          setUsuario(res.usuario);
+        }
+        setLoading(false);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao buscar dados do usuário:', error);
-    } finally {
+      clearSession();
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Verificar token no localStorage ao montar
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('token');
-      if (storedToken) {
-        setToken(storedToken);
-        // Buscar créditos e informações do usuário
-        fetchUserData(storedToken);
-      } else {
-        setLoading(false);
-      }
-    }
-  }, []);
+  /* =========================
+     LOGIN
+  ========================= */
 
   const login = async (email: string, senha: string): Promise<boolean> => {
     setLoading(true);
     setErro('');
+
     try {
       const res = await apiLogin(email, senha);
-      if (res.erro) {
-        setErro(res.erro);
+
+      if (res.erro || !res.token) {
+        setErro(res.erro || 'Erro ao fazer login');
         setLoading(false);
         return false;
       }
-      if (res.token) {
-        setToken(res.token);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('token', res.token);
-        }
-        setUsuario(res.usuario || null);
-        setCreditos(res.creditos || 0);
-        setLoading(false);
-        return true;
-      }
+
+      hydrateSession(res.token, res.usuario, res.creditos);
       setLoading(false);
-      return false;
+      return true;
     } catch (error: any) {
       setErro(error.message || 'Erro ao fazer login');
       setLoading(false);
       return false;
     }
+  };
+
+  /* =========================
+     CADASTRO (NOVO)
+  ========================= */
+
+  const register = async (
+    nome: string,
+    email: string,
+    senha: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    setErro('');
+
+    try {
+      const res = await apiCadastro(nome, email, senha);
+
+      if (res.erro || !res.token) {
+        setErro(res.erro || 'Erro ao cadastrar');
+        setLoading(false);
+        return false;
+      }
+
+      hydrateSession(res.token, res.usuario, res.creditos);
+      setLoading(false);
+      return true;
+    } catch (error: any) {
+      setErro(error.message || 'Erro ao cadastrar');
+      setLoading(false);
+      return false;
+    }
+  };
+
+  /* =========================
+     LOGOUT
+  ========================= */
+
+  const logout = () => {
+    clearSession();
   };
 
   return {
@@ -93,7 +181,7 @@ export function useAuth() {
     loading,
     erro,
     login,
+    register, // 👈 agora existe
     logout,
   };
 }
-

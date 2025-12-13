@@ -13,6 +13,24 @@ export default function RootLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = usePathname();
 
+  // Usa pathname do hook ou window.location como fallback (apenas no cliente)
+  const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
+  const pathnameStr = String(currentPath).trim().toLowerCase();
+  
+  // Lista de rotas de autenticação
+  const authRoutes = ['/login', '/register', '/esqueci-senha'];
+  
+  // Verifica se é rota de autenticação (exata ou sub-rota)
+  const isAuthRoute = authRoutes.some(route => 
+    pathnameStr === route || pathnameStr.startsWith(route + '/')
+  );
+
+  console.log(">>> PATHNAME REAL:", pathname);
+  console.log(">>> WINDOW LOCATION:", typeof window !== 'undefined' ? window.location.pathname : 'N/A');
+  console.log(">>> CURRENT PATH:", currentPath);
+  console.log(">>> PATHNAME STRING:", pathnameStr);
+  console.log(">>> IS AUTH ROUTE:", isAuthRoute);
+
   const menuItems = [
     { label: 'Dashboard', href: '/', icon: '📊' },
     { label: 'Explicar', href: '/explicar', icon: '📚' },
@@ -22,6 +40,18 @@ export default function RootLayout({
     { label: 'PDF', href: '/pdf', icon: '📄' },
   ];
 
+  // 🔹 MODO AUTH: sem sidebar, sem header
+  if (isAuthRoute) {
+    return (
+      <html lang="pt-BR">
+        <body className="bg-slate-50 text-slate-800">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // 🔹 MODO DASHBOARD: com sidebar + header + footer
   return (
     <html lang="pt-BR">
       <body className="bg-slate-50 text-slate-800">
@@ -45,6 +75,7 @@ export default function RootLayout({
                 {sidebarOpen ? '◀' : '▶'}
               </button>
             </div>
+
             {/* Menu Items */}
             <nav className="p-4 space-y-2">
               {menuItems.map((item) => (
@@ -65,6 +96,7 @@ export default function RootLayout({
                 </Link>
               ))}
             </nav>
+
             {/* Footer Info */}
             {sidebarOpen && (
               <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-blue-400 bg-blue-900/50">
@@ -74,6 +106,7 @@ export default function RootLayout({
               </div>
             )}
           </aside>
+
           {/* Main Content */}
           <div
             className={`flex-1 flex flex-col transition-all duration-300 ${
@@ -96,12 +129,14 @@ export default function RootLayout({
                 </div>
               </div>
             </header>
+
             {/* Page Content */}
             <main className="flex-1 overflow-auto bg-slate-50 p-6">
               <div className="max-w-7xl mx-auto">
                 {children}
               </div>
             </main>
+
             {/* Footer */}
             <footer className="bg-white border-t border-blue-200 px-6 py-4 text-center text-sm text-slate-600">
               <p>MedQuest Research © 2024 | Análise Científica com IA</p>

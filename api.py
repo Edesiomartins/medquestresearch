@@ -27,6 +27,7 @@ from Perspective_research import buscar_perspectivas_pubmed
 from structure_visualizer import gerar_mapa_visual
 from pdf_processor import extrair_texto_pdf
 from gpt_engine import resumir_chunks
+from docx import Document
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -96,6 +97,25 @@ def registrar_log(usuario_id, modulo, entrada, saida, creditos):
         INSERT INTO gen_logs_uso (usuario_id, modulo, entrada, saida, creditos_gastos, ip)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (usuario_id, modulo, entrada, saida, creditos, ip))
+
+
+def read_docx(file_path):
+    """Lê o conteúdo de um arquivo DOCX e retorna como string."""
+    doc = Document(file_path)
+    text = '\n'.join([p.text for p in doc.paragraphs])
+    return text
+
+
+def estimate_tokens(text: str):
+    """Estima o número de tokens baseado no texto."""
+    words = text.split()
+    tokens = len(words) // 2  # Aproximadamente 2 palavras por token (varia dependendo do idioma)
+    return tokens
+
+
+def calculate_cost(tokens):
+    """Calcula o custo em tokens com margem de ganho de 35%."""
+    return tokens * 1.35  # 35% de ganho sobre o custo
 
 
 def require_api_key(f):
