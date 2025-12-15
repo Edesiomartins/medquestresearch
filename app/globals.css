@@ -195,3 +195,9 @@ h3 {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* Remove posicionamento fixo do nextjs-portal */
+nextjs-portal {
+  left: unset !important;
+  top: unset !important;
+}
