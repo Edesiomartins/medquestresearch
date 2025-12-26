@@ -1,0 +1,101 @@
+import os
+import logging
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Tentar importação relativa primeiro, depois absoluta
+try:
+    from .chunker import chunk_text, combine_responses, estimate_tokens
+except ImportError:
+    try:
+        from chunker import chunk_text, combine_responses, estimate_tokens
+    except ImportError:
+        import backend.chunker as chunker
+        chunk_text = chunker.chunk_text
+        combine_responses = chunker.combine_responses
+        estimate_tokens = chunker.estimate_tokens
+
+# Carrega chave do .env
+load_dotenv()
+
+def _check_research_env():
+    if not os.getenv("API_OPENAI_KEY_RESEARCH"):
+        raise RuntimeError("API_OPENAI_KEY_RESEARCH não configurada")
+
+# Inicializa cliente OpenAI (será criado quando necessário)
+client = None
+
+def _get_client():
+    """Retorna o cliente OpenAI, criando se necessário."""
+    global client
+    if client is None:
+        _check_research_env()
+        api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
+        client = OpenAI(api_key=api_key)
+    return client
+
+def _chamar_nova_api(modelo, prompt, temperatura=None):
+    cliente = _get_client()
+    response = cliente.responses.create(
+        model=modelo,
+        input=prompt
+    )
+    return response.output_text
+
+def gerar_resposta(prompt, temperatura=1):
+    """Gera resposta usando modelo configurado (padrão: gpt-5-mini para velocidade)."""
+    _check_research_env()
+    try:
+        cliente = _get_client()
+        # Permite configurar modelo via variável de ambiente, senão usa gpt-5-mini (mais rápido)
+        modelo = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        
+        # Log do valor exato da variável modelo antes da chamada
+        logging.warning(f"[GPT_ENGINE] Modelo configurado: '{modelo}' (tipo: {type(modelo).__name__})")
+        
+        try:
+            # Nova chamada da API que retorna diretamente o texto
+            resposta = _chamar_nova_api(modelo, prompt, temperatura)
+            return resposta
+        except Exception as e:
+            # Log completo do erro incluindo a classe
+            logging.error(f"[GPT_ENGINE] Erro na chamada da API:")
+            logging.error(f"[GPT_ENGINE] Classe do erro: {e.__class__.__name__}")
+            logging.error(f"[GPT_ENGINE] Mensagem completa: {str(e)}")
+            logging.error(f"[GPT_ENGINE] Modelo usado: '{modelo}'")
+            raise Exception(f"Erro ao gerar resposta: {str(e)} (classe: {e.__class__.__name__})")
+    except Exception as e:
+        logging.error(f"[GPT_ENGINE] Erro geral em gerar_resposta: {str(e)} (classe: {e.__class__.__name__})")
+        raise Exception(f"Erro ao gerar resposta: {str(e)}")
+
+
+def gerar_resposta_com_chunking(texto_longo, prompt_template, temperatura=0.4):
+    """Processa texto longo em chunks."""
+    chunks = chunk_text(texto_longo, chunk_size=3000, overlap=500)
+    respostas = []
+    
+    for i, chunk in enumerate(chunks):
+        prompt = prompt_template.format(chunk=chunk)
+        resposta = gerar_resposta(prompt, temperatura)
+        respostas.append(resposta)
+    
+    return combine_responses(respostas)
+
+
+def resumir_chunks(chunks, max_tokens=1000):
+    """Resume lista de chunks para reduzir tamanho."""
+    resumos = []
+    for i, chunk in enumerate(chunks):
+        prompt = f"""
+        Resuma este chunk de artigo científico de forma concisa, mantendo conceitos chave, métodos e conclusões.
+        Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
+
+        {chunk}
+        """
+        resumo = gerar_resposta(prompt, temperatura=0.2)
+        resumos.append(resumo)
+    
+    prompt_final = f"Combine estes resumos de chunks em um texto coeso final:\n" + "\n\n".join(resumos)
+    texto_final = gerar_resposta(prompt_final, temperatura=0.3)
+    
+    return texto_final

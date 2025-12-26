@@ -1,0 +1,10 @@
+openai
+python-dotenv
+PyMuPDF
+flask
+flask-cors
+flask-limiter
+pydantic
+pymysql
+python-docx
+gunicorn
