@@ -664,14 +664,17 @@ def handle_error(e):
 # ✅ ROTAS BÁSICAS
 # ============================================
 
-@app.route("/")
+@limiter.exempt
+@app.route("/", methods=["GET", "HEAD"])
 def index():
     return jsonify({"status": "MedQuestGen API está ativa ✅", "version": "2.0"})
 
+@limiter.exempt
 @app.route("/ping")
 def ping():
     return jsonify({"message": "pong", "timestamp": datetime.datetime.now().isoformat()})
 
+@limiter.exempt
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.datetime.now().isoformat()})
@@ -720,6 +723,7 @@ def cadastro():
         return jsonify({"erro": "Erro ao criar usuário", "detalhes": str(e)}), 500
 
 # ✅ ROTA LOGIN - ACEITA POST E OPTIONS
+@limiter.limit("5 per minute")
 @app.route("/login", methods=["POST", "OPTIONS"])
 def login():
     # Tratar OPTIONS primeiro, antes de qualquer coisa
