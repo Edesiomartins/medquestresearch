@@ -52,4 +52,5 @@ htmlcov/
 
 # PythonAnywhere specific
 WSGI.PY
-# Mantenha WSGI.PY fora do Git para não expor chaves de API
+wsgi.py
+# Mantenha WSGI.PY/wsgi.py fora do Git para não expor chaves de API

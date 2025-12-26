@@ -1,21 +1,31 @@
 import pymysql
 import pymysql.cursors
+import os
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente
+load_dotenv()
 
 # ============================================================
-# ✅ CONFIGURAÇÃO FIXA DO BANCO (MedQuestGen)
+# ✅ CONFIGURAÇÃO DO BANCO (via variáveis de ambiente)
 # ============================================================
 
-DB_HOST = "dredesiomartins.mysql.pythonanywhere-services.com"
-DB_USER = "dredesiomartins"
-DB_PASS = "Minhavida.25"
-DB_NAME = "dredesiomartins$MedquestGen"
+DB_HOST = os.getenv("DB_HOST", "dredesiomartins.mysql.pythonanywhere-services.com")
+DB_USER = os.getenv("DB_USER", "dredesiomartins")
+DB_PASS = os.getenv("DB_PASSWORD", "")
+DB_NAME = os.getenv("DB_NAME", "dredesiomartins$MedquestResearch")
 
 
 # ============================================================
 # ✅ CRIAR CONEXÃO GLOBAL (reuso recomendado no PythonAnywhere)
 # ============================================================
 
-def get_connection():
+def get_connection(autocommit=True):
+    """
+    Cria conexão com o banco de dados.
+    Por padrão usa autocommit=True para compatibilidade.
+    Para threads com commit explícito, use autocommit=False.
+    """
     try:
         conn = pymysql.connect(
             host=DB_HOST,
@@ -23,7 +33,7 @@ def get_connection():
             password=DB_PASS,
             database=DB_NAME,
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True
+            autocommit=autocommit
         )
         return conn
     except Exception as e:
@@ -58,15 +68,16 @@ def db_select_one(query, params=None):
 
 
 def db_execute(query, params=None):
-    """Executa INSERT/UPDATE/DELETE."""
+    """Executa INSERT/UPDATE/DELETE e retorna rowcount."""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(query, params or ())
+            rowcount = cursor.rowcount
             conn.commit()
-            return True
+            return rowcount
     except Exception as e:
         print("❌ ERRO ao executar comando SQL:", e)
-        return False
+        return 0
     finally:
         conn.close()

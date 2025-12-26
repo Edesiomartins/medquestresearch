@@ -7,3 +7,4 @@ flask-limiter
 pydantic
 pymysql
 python-docx
+gunicorn

@@ -7,89 +7,217 @@ import os
 import hashlib
 import secrets
 import datetime
+import time
+import logging
+import threading
+import traceback
+import json
 from functools import wraps
 
 from flask import Flask, request, jsonify, g
-from flask_cors import CORS
+from flask_cors import CORS  # ✅ Usar Flask-CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from pydantic import BaseModel, validator
 from typing import Optional
 
-# Banco de dados
-from database import db_select, db_select_one, db_execute
-
-# Módulos internos de IA (arquivos reais enviados)
-from explain_concept import explicar_conceito
-from critical_analysis import aplicar_leitura_critica
-from Fact_checker import verificar_fatos
-from Perspective_research import buscar_perspectivas_pubmed
-from structure_visualizer import gerar_mapa_visual
-from pdf_processor import extrair_texto_pdf
-from gpt_engine import resumir_chunks
-from docx import Document
+# process_chunks e combine_responses agora são usados apenas dentro de run_with_two_chunks
+from docx import Document  # pyright: ignore[reportMissingImports]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 # ============================================
+# ✅ AJUSTAR IMPORTAÇÕES PARA FUNCIONAR TANTO NA RAIZ QUANTO EM backend/
+# ============================================
+
+# Banco de dados - tentar relativo primeiro, depois absoluto
+# Se estiver em backend/, adicionar o diretório ao path para importações absolutas funcionarem
+_parent_dir = os.path.dirname(BASE_DIR)
+if _parent_dir not in sys.path and os.path.basename(BASE_DIR) == "backend":
+    sys.path.insert(0, _parent_dir)
+    # Também adicionar backend/ ao path
+    if BASE_DIR not in sys.path:
+        sys.path.insert(0, BASE_DIR)
+
+try:
+    from .database import db_select, db_select_one, db_execute, get_connection
+except ImportError:
+    try:
+        import database
+        db_select = database.db_select
+        db_select_one = database.db_select_one
+        db_execute = database.db_execute
+        get_connection = database.get_connection
+    except ImportError:
+        # Última tentativa: importar do backend
+        import backend.database as database
+        db_select = database.db_select
+        db_select_one = database.db_select_one
+        db_execute = database.db_execute
+        get_connection = database.get_connection
+
+try:
+    from .explain_concept import explicar_conceito
+except ImportError:
+    try:
+        import explain_concept
+        explicar_conceito = explain_concept.explicar_conceito
+    except ImportError:
+        import backend.explain_concept as explain_concept
+        explicar_conceito = explain_concept.explicar_conceito
+
+try:
+    from .critical_analysis import aplicar_leitura_critica
+except ImportError:
+    try:
+        import critical_analysis
+        aplicar_leitura_critica = critical_analysis.aplicar_leitura_critica
+    except ImportError:
+        import backend.critical_analysis as critical_analysis
+        aplicar_leitura_critica = critical_analysis.aplicar_leitura_critica
+
+try:
+    from .Fact_checker import verificar_fatos
+except ImportError:
+    try:
+        import Fact_checker
+        verificar_fatos = Fact_checker.verificar_fatos
+    except ImportError:
+        import backend.Fact_checker as Fact_checker
+        verificar_fatos = Fact_checker.verificar_fatos
+
+try:
+    from .Perspective_research import buscar_perspectivas_pubmed
+except ImportError:
+    try:
+        import Perspective_research
+        buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
+    except ImportError:
+        import backend.Perspective_research as Perspective_research
+        buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
+
+try:
+    from .structure_visualizer import visualizar_estrutura
+except ImportError:
+    try:
+        import structure_visualizer
+        visualizar_estrutura = structure_visualizer.visualizar_estrutura
+    except ImportError:
+        import backend.structure_visualizer as structure_visualizer
+        visualizar_estrutura = structure_visualizer.visualizar_estrutura
+
+try:
+    from .structure_mapper import gerar_mapa_estrutura
+except ImportError:
+    try:
+        import structure_mapper
+        gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
+    except ImportError:
+        import backend.structure_mapper as structure_mapper
+        gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
+
+try:
+    from .pdf_processor import extrair_texto_pdf
+except ImportError:
+    try:
+        import pdf_processor
+        extrair_texto_pdf = pdf_processor.extrair_texto_pdf
+    except ImportError:
+        import backend.pdf_processor as pdf_processor
+        extrair_texto_pdf = pdf_processor.extrair_texto_pdf
+
+# ============================================
 # ✅ APLICAÇÃO FLASK
 # ============================================
 
 app = Flask(__name__)
-CORS(app)
 
-# Config rate limiting
+# ✅ CONFIGURAR CORS (SIMPLES E DIRETO)
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": False,
+        "max_age": 3600
+    }
+})
+
+# Adicionar decorator para garantir CORS em todas as rotas
+@app.after_request
+def after_request(response):
+    """Adiciona cabeçalhos CORS em todas as respostas."""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response
+
+# ✅ Configuração de rate limiting
+# Função para ignorar OPTIONS no rate limiting (evita erro 500 no preflight)
+def key_func():
+    if request.method == "OPTIONS":
+        return None  # Não aplicar rate limit em OPTIONS
+    return get_remote_address()
+
 limiter = Limiter(
-    get_remote_address,
+    key_func=key_func,
     app=app,
-    default_limits=["100 per day", "10 per minute"],  # Ajuste conforme necessidade
-    storage_uri="memory://",  # Para produção, use Redis: "redis://localhost:6379"
+    default_limits=["100 per day", "10 per minute"],
+    storage_uri="memory://",
 )
 
-
 # ============================================
-# ✅ FUNÇÕES AUXILIARES (TOKEN, AUTENTICAÇÃO, LOGS)
+# ✅ FUNÇÕES AUXILIARES
 # ============================================
 
 def gerar_token():
     return secrets.token_hex(32)
 
-
 def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
-
 
 def autenticar(request):
     token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
     if not token:
         return None
-
-    row = db_select_one(
-        "SELECT * FROM gen_usuarios WHERE token=%s",
-        (token,)
-    )
+    row = db_select_one("SELECT * FROM usuarios WHERE token=%s", (token,))
     return row
 
+def creditos_disponiveis(usuario):
+    return max(0, usuario["creditos"] - usuario["creditos_usados"])
 
-def debitar_creditos(usuario_id, quantia):
-    user = db_select_one("SELECT * FROM gen_usuarios WHERE id=%s", (usuario_id,))
-    if not user:
+def debitar_creditos(usuario_id, qtd):
+    """Debita créditos apenas se houver créditos disponíveis suficientes."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                UPDATE usuarios
+                SET creditos_usados = creditos_usados + %s
+                WHERE id = %s AND (creditos - creditos_usados) >= %s
+            """, (qtd, usuario_id, qtd))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"❌ ERRO ao debitar créditos: {e}")
         return False
+    finally:
+        conn.close()
 
-    if user["creditos"] < quantia:
-        return False
-
-    db_execute("""
-        UPDATE gen_usuarios
-        SET creditos = creditos - %s,
-            creditos_usados = creditos_usados + %s
-        WHERE id=%s
-    """, (quantia, quantia, usuario_id))
-
-    return True
-
+def db_insert_return_id(sql, params):
+    """Executa um INSERT e retorna o ID do registro inserido."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, params)
+            conn.commit()
+            return cursor.lastrowid
+    finally:
+        conn.close()
 
 def registrar_log(usuario_id, modulo, entrada, saida, creditos):
     ip = request.remote_addr
@@ -98,25 +226,11 @@ def registrar_log(usuario_id, modulo, entrada, saida, creditos):
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (usuario_id, modulo, entrada, saida, creditos, ip))
 
-
 def read_docx(file_path):
     """Lê o conteúdo de um arquivo DOCX e retorna como string."""
     doc = Document(file_path)
     text = '\n'.join([p.text for p in doc.paragraphs])
     return text
-
-
-def estimate_tokens(text: str):
-    """Estima o número de tokens baseado no texto."""
-    words = text.split()
-    tokens = len(words) // 2  # Aproximadamente 2 palavras por token (varia dependendo do idioma)
-    return tokens
-
-
-def calculate_cost(tokens):
-    """Calcula o custo em tokens com margem de ganho de 35%."""
-    return tokens * 1.35  # 35% de ganho sobre o custo
-
 
 def require_api_key(f):
     @wraps(f)
@@ -128,6 +242,342 @@ def require_api_key(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def log_t(msg):
+    """Função auxiliar para logging com timestamp."""
+    logging.warning(f"[TIMER] {msg} @ {time.time():.2f}")
+
+def run_with_two_chunks(
+    texto: str,
+    process_func,
+    chunk_size: int = 1800,
+    overlap: int = 300,
+    max_chunks: int = 2
+):
+    """
+    Executa processamento de IA em no máximo DOIS chunks,
+    evitando timeout no PythonAnywhere.
+    """
+    from .chunker import chunk_text, combine_responses
+
+    log_t("ANTES chunking")
+    chunks = chunk_text(texto, chunk_size=chunk_size, overlap=overlap)
+    log_t("DEPOIS chunking")
+
+    # Segurança absoluta: no máximo 2 chunks
+    chunks = chunks[:max_chunks]
+
+    respostas = []
+    for i, chunk in enumerate(chunks, 1):
+        log_t(f"ANTES OpenAI chunk {i}")
+        resposta = process_func(chunk)
+        log_t(f"DEPOIS OpenAI chunk {i}")
+        respostas.append(resposta)
+
+    log_t("ANTES montagem resposta")
+    texto_final = combine_responses(respostas)
+    log_t("DEPOIS montagem resposta")
+
+    aviso = (
+        "\n\n⚠️ Nota: esta análise foi gerada a partir de uma parte do texto "
+        "para garantir rapidez e estabilidade da plataforma."
+    )
+
+    return texto_final + aviso
+
+# ============================================
+# ✅ FUNÇÕES DE PROCESSAMENTO ASSÍNCRONO
+# ============================================
+
+def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: str):
+    """Processa job de explicação de conceito em background."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - explicar")
+        
+        # Limite defensivo
+        texto_artigo = texto_artigo[:6000]
+        
+        def processar_chunk(chunk):
+            return explicar_conceito(chunk, trecho, nivel)
+        
+        # Chamada pesada
+        resultado = run_with_two_chunks(
+            texto_artigo,
+            processar_chunk,
+            chunk_size=1800,
+            overlap=300
+        )
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - explicar")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - explicar\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)  # Limitar tamanho do erro
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
+def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "geral"):
+    """Processa job de análise crítica em background - SEM chunking para análise focada."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - critica (foco: {foco_analise})")
+        
+        # Limitar texto drasticamente para análise focada (sem chunking)
+        texto_artigo = texto_artigo[:3000]  # Reduzido de 4000 para 3000
+        
+        # Chamada direta SEM chunking - análise focada é mais rápida
+        resultado = aplicar_leitura_critica(texto_artigo, foco_analise)
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - critica")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - critica\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
+def processar_job_fatos(job_id: int, texto_artigo: str):
+    """Processa job de verificação de fatos em background - SEM chunking."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - fatos")
+        
+        # Limitar texto e chamar diretamente, sem chunking
+        texto_artigo = texto_artigo[:4000]
+        resultado = verificar_fatos(texto_artigo)
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - fatos")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - fatos\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
+def processar_job_perspectiva(job_id: int, texto_artigo: str):
+    """Processa job de pesquisa de perspectivas em background."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - perspectiva")
+        
+        # Limitar texto para reduzir tempo de processamento
+        texto_artigo = texto_artigo[:4000]
+        
+        def processar_chunk(chunk):
+            return buscar_perspectivas_pubmed(chunk)
+        
+        resultado = run_with_two_chunks(
+            texto_artigo,
+            processar_chunk,
+            chunk_size=2000,  # Aumentado para reduzir número de chunks
+            overlap=200  # Reduzido para acelerar
+        )
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - perspectiva")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - perspectiva\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
+def processar_job_mapa(job_id: int, texto_artigo: str):
+    """Processa job de visualização de estrutura em background - SEM chunking."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - mapa")
+        
+        # Limitar texto e chamar diretamente, sem chunking
+        texto_artigo = texto_artigo[:4000]
+        resultado = visualizar_estrutura(texto_artigo)
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - mapa")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - mapa\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
+def processar_job_structure_mapper(job_id: int, texto_artigo: str):
+    """Processa job de mapeamento de estrutura em background - SEM chunking."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - structure_mapper")
+        
+        # Limitar texto e chamar diretamente, sem chunking
+        texto_artigo = texto_artigo[:4000]
+        resultado = gerar_mapa_estrutura(texto_artigo)
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - structure_mapper")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - structure_mapper\n{erro}")
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # autocommit=False para permitir controle explícito do commit
+        conn = get_connection(autocommit=False)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()  # Commit explícito na mesma conexão
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
 
 # ============================================
 # ✅ MODELOS PYDANTIC PARA VALIDAÇÃO
@@ -135,55 +585,80 @@ def require_api_key(f):
 
 class InputTexto(BaseModel):
     texto_artigo: str
-    trecho: Optional[str] = None  # Para /explicar
+    trecho: Optional[str] = None
     nivel: Optional[str] = "graduação"
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
-        if len(v) > 10000:  # Limite chars
-            raise ValueError('Texto muito longo')
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
         return v
-
 
 class InputCritica(BaseModel):
     texto_artigo: str
+    foco_analise: Optional[str] = "geral"  # Método de análise crítica escolhido
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
-        if len(v) > 10000:  # Limite chars
-            raise ValueError('Texto muito longo')
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
         return v
-
 
 class InputFatos(BaseModel):
     texto_artigo: str
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
-        if len(v) > 10000:  # Limite chars
-            raise ValueError('Texto muito longo')
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
         return v
-
 
 class InputPerspectiva(BaseModel):
     texto_artigo: str
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
-        if len(v) > 10000:  # Limite chars
-            raise ValueError('Texto muito longo')
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
         return v
-
 
 class InputMapa(BaseModel):
     texto_artigo: str
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
-        if len(v) > 10000:  # Limite chars
-            raise ValueError('Texto muito longo')
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
         return v
 
+# ============================================
+# ✅ HANDLER DE ERROS GLOBAL
+# ============================================
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    """Handler global para capturar erros e retornar JSON."""
+    import traceback
+    
+    # Log do erro
+    print(f"❌ Erro capturado: {str(e)}")
+    print(traceback.format_exc())
+    
+    # Determinar status code
+    status_code = 500
+    if hasattr(e, 'code'):
+        status_code = e.code
+    elif hasattr(e, 'status_code'):
+        status_code = e.status_code
+    
+    # Retornar resposta JSON
+    response = jsonify({
+        "erro": "Erro interno do servidor",
+        "detalhes": str(e) if app.debug else "Erro ao processar requisição"
+    })
+    response.status_code = status_code
+    
+    return response
 
 # ============================================
 # ✅ ROTAS BÁSICAS
@@ -191,393 +666,591 @@ class InputMapa(BaseModel):
 
 @app.route("/")
 def index():
-    return jsonify({"status": "MedQuestGen API está ativa ✅"})
-
+    return jsonify({"status": "MedQuestGen API está ativa ✅", "version": "2.0"})
 
 @app.route("/ping")
 def ping():
-    return jsonify({"message": "pong"})
+    return jsonify({"message": "pong", "timestamp": datetime.datetime.now().isoformat()})
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy", "timestamp": datetime.datetime.now().isoformat()})
 
 # ============================================
-# ✅ ROTAS DE USUÁRIO (CADASTRO / LOGIN / CRÉDITOS)
+# ✅ ROTAS DE USUÁRIO
 # ============================================
 
-@app.route("/cadastro", methods=["POST"])
+@app.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
-    data = request.json
-    nome = data.get("nome")
-    email = data.get("email")
-    senha = data.get("senha")
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"erro": "Dados não fornecidos"}), 400
+        
+        nome = data.get("nome")
+        email = data.get("email")
+        senha = data.get("senha")
 
-    if not nome or not email or not senha:
-        return jsonify({"erro": "Campos obrigatórios faltando"}), 400
+        if not nome or not email or not senha:
+            return jsonify({"erro": "Campos obrigatórios faltando"}), 400
 
-    if db_select_one("SELECT * FROM gen_usuarios WHERE email=%s", (email,)):
-        return jsonify({"erro": "Email já cadastrado"}), 400
+        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,)):
+            return jsonify({"erro": "Email já cadastrado"}), 400
 
-    senha_hash = hash_senha(senha)
-    token = gerar_token()
+        senha_hash = hash_senha(senha)
+        token = gerar_token()
 
-    db_execute("""
-        INSERT INTO gen_usuarios (nome, email, senha_hash, token, creditos)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (nome, email, senha_hash, token, 50))
+        db_execute("""
+            INSERT INTO usuarios (nome, email, senha_hash, creditos)
+            VALUES (%s, %s, %s, 10)
+        """, (nome, email, senha_hash))
 
-    return jsonify({"status": "Usuário criado", "token": token})
+        db_execute("UPDATE usuarios SET token=%s WHERE email=%s", (token, email))
 
+        return jsonify({"status": "Usuário criado", "token": token})
+    
+    except Exception as e:
+        return jsonify({"erro": "Erro ao criar usuário", "detalhes": str(e)}), 500
 
-@app.route("/login", methods=["POST"])
+# ✅ ROTA LOGIN - ACEITA POST E OPTIONS
+@app.route("/login", methods=["POST", "OPTIONS"])
 def login():
-    data = request.json
-    email = data.get("email")
-    senha = data.get("senha")
+    # Tratar OPTIONS primeiro, antes de qualquer coisa
+    if request.method == "OPTIONS":
+        try:
+            response = jsonify({})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            response.headers.add('Access-Control-Max-Age', '3600')
+            return response, 200
+        except Exception as e:
+            # Se houver erro, retornar 200 mesmo assim com CORS básico
+            logging.error(f"Erro em OPTIONS /login: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            response = jsonify({})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            return response, 200
+    
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"erro": "Dados inválidos"}), 400
+        
+        email = data.get("email")
+        senha = data.get("senha")
 
-    row = db_select_one("SELECT * FROM gen_usuarios WHERE email=%s", (email,))
-    if not row:
-        return jsonify({"erro": "Email não encontrado"}), 404
+        if not email or not senha:
+            return jsonify({"erro": "Email e senha são obrigatórios"}), 400
 
-    if row["senha_hash"] != hash_senha(senha):
-        return jsonify({"erro": "Senha incorreta"}), 401
+        row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,))
+        if not row:
+            return jsonify({"erro": "Email não encontrado"}), 404
 
-    token = gerar_token()
-    db_execute("UPDATE gen_usuarios SET token=%s WHERE id=%s", (token, row["id"]))
+        if row["senha_hash"] != hash_senha(senha):
+            return jsonify({"erro": "Senha incorreta"}), 401
 
-    return jsonify({"token": token})
+        token = gerar_token()
+        db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
 
+        return jsonify({"token": token, "status": "Login realizado com sucesso"})
+    
+    except Exception as e:
+        return jsonify({"erro": "Erro ao fazer login", "detalhes": str(e)}), 500
 
-@app.route("/creditos", methods=["GET"])
+@app.route("/creditos", methods=["GET", "OPTIONS"])
 def creditos():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    try:
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
 
-    return jsonify({
-        "creditos": user["creditos"],
-        "creditos_usados": user["creditos_usados"]
-    })
+        # Verificar se user tem as chaves necessárias
+        if "creditos" not in user or "creditos_usados" not in user:
+            logging.error(f"Usuário sem chaves de créditos: {user.keys()}")
+            return jsonify({"erro": "Erro ao buscar créditos", "detalhes": "Dados do usuário incompletos"}), 500
 
+        disponiveis = creditos_disponiveis(user)
+        
+        return jsonify({
+            "creditos": user.get("creditos", 0),
+            "creditos_usados": user.get("creditos_usados", 0),
+            "creditos_disponiveis": disponiveis
+        })
+    except KeyError as e:
+        logging.error(f"Erro de chave em creditos: {e}, user keys: {list(user.keys()) if user else 'None'}")
+        return jsonify({"erro": "Erro ao buscar créditos", "detalhes": f"Chave faltando: {str(e)}"}), 500
+    except Exception as e:
+        logging.error(f"Erro em creditos: {e}")
+        import traceback
+        logging.error(traceback.format_exc())
+        return jsonify({"erro": "Erro ao buscar créditos", "detalhes": str(e)}), 500
+
+@app.route("/jobs", methods=["GET", "OPTIONS"])
+@limiter.limit("30 per minute")
+def listar_jobs():
+    """Lista todos os jobs do usuário."""
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    try:
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        jobs = db_select(
+            "SELECT id, modulo, status FROM research_jobs WHERE usuario_id = %s ORDER BY id DESC",
+            (user["id"],)
+        )
+
+        # Formatar resposta conforme especificado
+        response = [
+            {
+                "id": job["id"],
+                "modulo": job.get("modulo", ""),
+                "status": job["status"]
+            }
+            for job in jobs
+        ]
+
+        return jsonify(response)
+    except Exception as e:
+        logging.error(f"Erro em listar_jobs: {e}")
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+
+@app.route("/job/<int:job_id>", methods=["GET", "OPTIONS"])
+@app.route("/status/<int:job_id>", methods=["GET", "OPTIONS"])
+@limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
+def status_job(job_id):
+    """Verifica o status de um job de processamento assíncrono."""
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    try:
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        job = db_select_one(
+            "SELECT * FROM research_jobs WHERE id = %s AND usuario_id = %s",
+            (job_id, user["id"])
+        )
+
+        if not job:
+            return jsonify({"erro": "Job não encontrado"}), 404
+
+        response = {
+            "request_id": job["id"],
+            "status": job["status"],
+            "modulo": job.get("modulo", ""),
+            "created_at": job.get("created_at", "").isoformat() if job.get("created_at") else None
+        }
+
+        # Se o job estiver completo, incluir o resultado
+        if job["status"] == "done" and job.get("resultado"):
+            response["resultado"] = job["resultado"]
+
+        # Se o job falhou, incluir o erro
+        if job["status"] == "failed" and job.get("erro"):
+            response["erro"] = job["erro"]
+            response["detalhes"] = job["erro"]
+
+        return jsonify(response)
+    except Exception as e:
+        logging.error(f"Erro em status_job: {e}")
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
 # ============================================
-# ✅ ROTAS DE IA — EXPLICAR
+# ✅ ROTAS DE IA
 # ============================================
 
-@app.route("/explicar", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/explicar", methods=["POST", "OPTIONS"])
+@app.route("/explain_concept", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_explicar():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    log_t("INICIO REQUEST")
+    print(">>> ENTROU NA ROTA /explicar")
     try:
-        data = InputTexto(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-        trecho = data.trecho
-        nivel = data.nivel
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        try:
+            data = InputTexto(**request.json)
+            texto_artigo = data.texto_artigo
+            trecho = data.trecho
+            nivel = data.nivel
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+        if not trecho:
+            return jsonify({"erro": "Campo 'trecho' é obrigatório"}), 400
+
+        custo = 5
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
+
+        # Criar job assíncrono
+        dados_extras = json.dumps({"trecho": trecho, "nivel": nivel})
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
+            (user["id"], "explicar", "processing", texto_artigo, custo, dados_extras)
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_explicar,
+            args=(job_id, texto_artigo, trecho, nivel),
+            daemon=True
+        ).start()
+
+        log_t("FIM REQUEST")
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
     except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+        import traceback
+        print("ERRO NA ROTA /explicar")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-    if not texto_artigo or not trecho:
-        return jsonify({"erro": "Envie texto_artigo e trecho"}), 400
-
-    custo = 5
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = explicar_conceito(texto_artigo, trecho, nivel)
-    registrar_log(user["id"], "explicar", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-# ============================================
-# ✅ LEITURA CRÍTICA
-# ============================================
-
-@app.route("/critica", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/critica", methods=["POST", "OPTIONS"])
+@app.route("/critical_analysis", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_critica():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
     try:
-        data = InputCritica(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        try:
+            data = InputCritica(**request.json)
+            texto_artigo = data.texto_artigo
+            foco_analise = data.foco_analise or "geral"
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+        custo = 7
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
+
+        # Criar job assíncrono
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
+            (user["id"], "critica", "processing", texto_artigo, custo, json.dumps({"foco_analise": foco_analise}))
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_critica,
+            args=(job_id, texto_artigo, foco_analise),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
     except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+        import traceback
+        print("ERRO NA ROTA /critica")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 7
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = aplicar_leitura_critica(texto_artigo)
-    registrar_log(user["id"], "critica", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-# ============================================
-# ✅ VERIFICAR FATOS
-# ============================================
-
-@app.route("/fatos", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/fatos", methods=["POST", "OPTIONS"])
+@app.route("/fact_checker", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_fatos():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
     try:
-        data = InputFatos(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        try:
+            data = InputFatos(**request.json)
+            texto_artigo = data.texto_artigo
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+        custo = 5
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
+
+        # Criar job assíncrono
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            (user["id"], "fatos", "processing", texto_artigo, custo)
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_fatos,
+            args=(job_id, texto_artigo),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
     except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+        import traceback
+        print("ERRO NA ROTA /fatos")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 5
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = verificar_fatos(texto_artigo)
-    registrar_log(user["id"], "fatos", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-# ============================================
-# ✅ PERSPECTIVA CIENTÍFICA / PUBMED
-# ============================================
-
-@app.route("/perspectiva", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/perspectiva", methods=["POST", "OPTIONS"])
+@app.route("/perspective_research", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_perspectiva():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
     try:
-        data = InputPerspectiva(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        try:
+            data = InputPerspectiva(**request.json)
+            texto_artigo = data.texto_artigo
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+        custo = 10
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
+
+        # Criar job assíncrono
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            (user["id"], "perspectiva", "processing", texto_artigo, custo)
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_perspectiva,
+            args=(job_id, texto_artigo),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
     except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+        import traceback
+        print("ERRO NA ROTA /perspectiva")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 10
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = buscar_perspectivas_pubmed(texto_artigo)
-    registrar_log(user["id"], "perspectiva", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-# ============================================
-# ✅ MAPA MENTAL
-# ============================================
-
-@app.route("/mapa", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/mapa", methods=["POST", "OPTIONS"])
+@app.route("/structure_visualizer", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_mapa():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
     try:
-        data = InputMapa(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
+
+        try:
+            data = InputMapa(**request.json)
+            texto_artigo = data.texto_artigo
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+
+        custo = 8
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
+
+        # Criar job assíncrono
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            (user["id"], "mapa", "processing", texto_artigo, custo)
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_mapa,
+            args=(job_id, texto_artigo),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
     except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
+        import traceback
+        print("ERRO NA ROTA /mapa")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
+@app.route("/structure_mapper", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
+def rota_structure_mapper():
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
+    try:
+        user = autenticar(request)
+        if not user:
+            return jsonify({"erro": "Não autorizado"}), 401
 
-    custo = 8
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
+        try:
+            data = InputMapa(**request.json)
+            texto_artigo = data.texto_artigo
+        except Exception as e:
+            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
 
-    resposta = gerar_mapa_visual(texto_artigo)
-    registrar_log(user["id"], "mapa", texto_artigo, resposta, custo)
+        custo = 6
+        if not debitar_creditos(user["id"], custo):
+            return jsonify({"erro": "Créditos insuficientes"}), 402
 
-    return jsonify({"resultado": resposta})
+        # Criar job assíncrono
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            (user["id"], "structure_mapper", "processing", texto_artigo, custo)
+        )
 
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_structure_mapper,
+            args=(job_id, texto_artigo),
+            daemon=True
+        ).start()
 
-# ============================================
-# ✅ PROCESSAR PDF (USANDO extrair_texto_pdf)
-# ============================================
+        return jsonify({
+            "request_id": job_id,
+            "status": "processing"
+        }), 202
+    except Exception as e:
+        import traceback
+        print("ERRO NA ROTA /structure_mapper")
+        traceback.print_exc()
+        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/pdf", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route("/pdf", methods=["POST", "OPTIONS"])
+@limiter.limit("10 per minute")
 def rota_pdf():
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        return response, 200
+    
     user = autenticar(request)
     if not user:
         return jsonify({"erro": "Não autorizado"}), 401
 
     if "file" not in request.files:
-        return jsonify({"erro": "Arquivo PDF não enviado"}), 400
+        return jsonify({"erro": "Arquivo não enviado", "detalhes": "Campo 'file' não encontrado"}), 400
 
     arquivo = request.files["file"]
 
-    # verifica extensão
-    if not arquivo.filename.lower().endswith(".pdf"):
-        return jsonify({"erro": "Envie um arquivo PDF válido"}), 400
+    if arquivo.filename == '':
+        return jsonify({"erro": "Nenhum arquivo selecionado"}), 400
 
-    # custo
-    custo = 12
-    if not debitar_creditos(user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
+    if not arquivo.filename or not arquivo.filename.lower().endswith((".pdf", ".docx")):
+        return jsonify({"erro": "Formato inválido", "detalhes": "Apenas PDF e DOCX"}), 400
 
-    # salvar temporariamente
+    extensao = arquivo.filename.lower().split('.')[-1]
+    
     temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
     os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}.pdf")
+    temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}.{extensao}")
     arquivo.save(temp_path)
 
     try:
-        # processar
-        texto_extraido = extrair_texto_pdf(temp_path)
+        if extensao == 'pdf':
+            texto_extraido = extrair_texto_pdf(temp_path)
+        elif extensao == 'docx':
+            texto_extraido = read_docx(temp_path)
+        else:
+            return jsonify({"erro": "Formato não suportado"}), 400
         
-        if isinstance(texto_extraido, list):  # Chunks
-            texto_extraido = resumir_chunks(texto_extraido)
+        if isinstance(texto_extraido, list):
+            texto_extraido = "\n\n".join(texto_extraido)
 
-        registrar_log(
-            user["id"],
-            "pdf",
-            "[ARQUIVO PDF]",
-            texto_extraido[:5000],  # evita log gigante
-            custo
-        )
+        texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
+        registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, 0)
 
         return jsonify({"resultado": texto_extraido})
 
     except Exception as e:
-        return jsonify({"erro": "Falha ao processar PDF", "detalhes": str(e)}), 500
+        return jsonify({"erro": "Falha ao processar arquivo", "detalhes": str(e)}), 500
 
     finally:
-        # remover arquivo temporário
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-
 # ============================================
-# ✅ ROTAS RESEARCH COM DECORATOR
+# ✅ EXECUÇÃO LOCAL (para desenvolvimento)
 # ============================================
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
 
-@app.route("/critical_analysis", methods=["POST"])
-@limiter.limit("5 per minute")
-@require_api_key
-def critical_analysis_route():
-    try:
-        data = InputCritica(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 7
-    if not debitar_creditos(g.user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = aplicar_leitura_critica(texto_artigo)
-    registrar_log(g.user["id"], "critical_analysis", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-@app.route("/explain_concept", methods=["POST"])
-@limiter.limit("5 per minute")
-@require_api_key
-def explain_concept_route():
-    try:
-        data = InputTexto(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-        trecho = data.trecho
-        nivel = data.nivel
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
-    if not texto_artigo or not trecho:
-        return jsonify({"erro": "Envie texto_artigo e trecho"}), 400
-
-    custo = 5
-    if not debitar_creditos(g.user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = explicar_conceito(texto_artigo, trecho, nivel)
-    registrar_log(g.user["id"], "explain_concept", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-@app.route("/fact_checker", methods=["POST"])
-@limiter.limit("5 per minute")
-@require_api_key
-def fact_checker_route():
-    try:
-        data = InputFatos(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 5
-    if not debitar_creditos(g.user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = verificar_fatos(texto_artigo)
-    registrar_log(g.user["id"], "fact_checker", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
-
-
-@app.route("/perspective_research", methods=["POST"])
-@limiter.limit("5 per minute")
-@require_api_key
-def perspective_research_route():
-    try:
-        data = InputPerspectiva(**request.json)  # Valida auto
-        texto_artigo = data.texto_artigo
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    except Exception as e:
-        return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
-    if not texto_artigo:
-        return jsonify({"erro": "Envie texto_artigo"}), 400
-
-    custo = 10
-    if not debitar_creditos(g.user["id"], custo):
-        return jsonify({"erro": "Créditos insuficientes"}), 402
-
-    resposta = buscar_perspectivas_pubmed(texto_artigo)
-    registrar_log(g.user["id"], "perspective_research", texto_artigo, resposta, custo)
-
-    return jsonify({"resultado": resposta})
