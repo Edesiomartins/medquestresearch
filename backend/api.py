@@ -134,29 +134,33 @@ except ImportError:
 
 app = Flask(__name__)
 
-# ✅ CONFIGURAR CORS (SIMPLES E DIRETO)
-# Configurar CORS para aceitar todas as origens
+# ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
+# Configurar CORS apenas para o domínio do Vercel
+# Nota: O frontend adiciona /genapi, mas o backend não tem esse prefixo nas rotas
 CORS(app, 
-     resources={r"/*": {"origins": "*"}},
+     resources={
+         r"/*": {
+             "origins": ["https://medquestresearch.vercel.app"]
+         }
+     },
      supports_credentials=False,
      allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
      max_age=3600)
 
-# Adicionar decorator para garantir CORS em todas as respostas (backup)
+# Adicionar decorator para garantir CORS apenas para origem do Vercel
 @app.after_request
 def after_request(response):
-    """Adiciona cabeçalhos CORS em todas as respostas."""
-    # Garantir que os headers CORS estejam sempre presentes
+    """Adiciona cabeçalhos CORS apenas para origem do Vercel."""
     origin = request.headers.get('Origin')
-    if origin:
+    # Permitir apenas o domínio do Vercel
+    allowed_origins = ['https://medquestresearch.vercel.app']
+    if origin in allowed_origins:
         response.headers.add('Access-Control-Allow-Origin', origin)
-    else:
-        response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
-    response.headers.add('Access-Control-Max-Age', '3600')
-    response.headers.add('Access-Control-Allow-Credentials', 'false')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        response.headers.add('Access-Control-Allow-Credentials', 'false')
     return response
 
 # ✅ Configuração de rate limiting
