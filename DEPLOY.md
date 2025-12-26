@@ -56,10 +56,12 @@ vercel --cwd medquestgen-frontend
 ## ⚙️ Configuração Importante
 
 O arquivo `vercel.json` na raiz já está configurado com:
-- **rootDirectory**: `medquestgen-frontend`
 - **framework**: `nextjs`
-- **buildCommand**: `npm install && npm run build`
+- **buildCommand**: `npm run build`
 - **outputDirectory**: `.next`
+- **installCommand**: `npm install`
+
+⚠️ **NOTA**: A propriedade `rootDirectory` não é mais suportada. Configure o Root Directory nas Settings do projeto no Vercel (Settings → General → Root Directory).
 
 O Vercel detectará automaticamente essas configurações!
 

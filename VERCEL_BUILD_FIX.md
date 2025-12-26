@@ -43,10 +43,11 @@ O arquivo `vercel.json` foi atualizado para garantir que o root directory está 
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "rootDirectory": "."
+  "framework": "nextjs"
 }
 ```
+
+⚠️ **NOTA**: A propriedade `rootDirectory` não é mais suportada pelo Vercel. Configure o Root Directory nas Settings do projeto no Vercel.
 
 ### Solução 4: Verificar no Painel do Vercel
 
