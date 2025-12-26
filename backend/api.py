@@ -135,25 +135,28 @@ except ImportError:
 app = Flask(__name__)
 
 # ✅ CONFIGURAR CORS (SIMPLES E DIRETO)
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-        "expose_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": False,
-        "max_age": 3600
-    }
-})
+# Configurar CORS para aceitar todas as origens
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=False,
+     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+     max_age=3600)
 
-# Adicionar decorator para garantir CORS em todas as rotas
+# Adicionar decorator para garantir CORS em todas as respostas (backup)
 @app.after_request
 def after_request(response):
     """Adiciona cabeçalhos CORS em todas as respostas."""
-    response.headers.add('Access-Control-Allow-Origin', '*')
+    # Garantir que os headers CORS estejam sempre presentes
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
     response.headers.add('Access-Control-Max-Age', '3600')
+    response.headers.add('Access-Control-Allow-Credentials', 'false')
     return response
 
 # ✅ Configuração de rate limiting
@@ -723,10 +726,10 @@ def cadastro():
         return jsonify({"erro": "Erro ao criar usuário", "detalhes": str(e)}), 500
 
 # ✅ ROTA LOGIN - ACEITA POST E OPTIONS
-@limiter.limit("5 per minute")
 @app.route("/login", methods=["POST", "OPTIONS"])
 def login():
-    # Tratar OPTIONS primeiro, antes de qualquer coisa
+    # Tratar OPTIONS primeiro, antes de qualquer coisa (sem rate limit)
+    # O key_func já ignora OPTIONS, mas garantimos aqui também
     if request.method == "OPTIONS":
         try:
             response = jsonify({})
