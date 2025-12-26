@@ -37,7 +37,7 @@ def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
         
         # Se ainda estiver vazio, usar método padrão
         if not pagina_texto or len(pagina_texto.strip()) == 0:
-        pagina_texto = pagina.get_text()
+            pagina_texto = pagina.get_text()
         
         texto_completo += pagina_texto + "\n"
     
