@@ -6,6 +6,7 @@ from critical_analysis import aplicar_leitura_critica
 from Fact_checker import verificar_fatos as verificar_fatos_artigo
 from Perspective_research import buscar_perspectivas_pubmed
 from structure_visualizer import gerar_mapa_visual
+from structure_mapper import gerar_mapa_estrutura
 
 print("=== MEDQUESTRESEARCH ===")
 print("1 - Explicar conceito ou trecho")
@@ -51,7 +52,7 @@ if opcao in ["1", "2", "3", "4", "5", "6"]:
 
     elif opcao == "5":
         print("\n🗺️ Mapa mental da estrutura:")
-        print(gerar_mapa_visual(texto))
+        print(gerar_mapa_estrutura(texto))
 
     elif opcao == "6":
         print("\n🗺️ Mapa visual da estrutura:")

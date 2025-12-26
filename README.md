@@ -92,17 +92,22 @@ MedquestResearch/
 #### Frontend (Vercel/Next.js)
 Configure no painel do Vercel ou em `.env.local`:
 ```bash
-NEXT_PUBLIC_API_URL=https://dredesiomartins.pythonanywhere.com/genapi
+NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
 ```
+
+Substitua `seu-app.onrender.com` pela URL real do seu serviço no Render.
 
 📖 **Guia Completo**: Veja `VERCEL_ENV_SETUP.md` para instruções passo a passo de como adicionar variáveis de ambiente no Vercel.
 
-#### Backend (PythonAnywhere)
-As variáveis são configuradas no arquivo `WSGI.PY` (não versionado no Git):
+#### Backend (Render)
+As variáveis são configuradas no painel do Render (Environment Variables):
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - Configuração do banco de dados
 - `API_OPENAI_KEY_RESEARCH` - Chave da API OpenAI
 - `RESEARCH_API_KEY` - Chave de autenticação da API Research
+- `OPENAI_MODEL` - Modelo GPT (padrão: gpt-4o-mini)
+- `FLASK_ENV` - Ambiente Flask (production)
 
-⚠️ **IMPORTANTE**: O arquivo `WSGI.PY` contém chaves sensíveis e NÃO deve ser commitado no Git (já está no `.gitignore`).
+📖 **Guia Completo**: Veja `DEPLOY_RENDER.md` para instruções de deploy no Render.
 
 ## 🔄 Deploys Automáticos
 

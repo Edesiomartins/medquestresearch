@@ -3,25 +3,25 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-      "dev": "next dev",
+      "dev": "cross-env NODE_OPTIONS=--no-warnings next dev",
       "build": "next build",
       "start": "next start",
       "lint": "eslint"
     },
     "dependencies": {
-      "next": "16.0.7",
-      "react": "19.2.1",
-      "react-dom": "19.2.1"
+      "next": "^16.1.0",
+      "react": "^19.2.1",
+      "react-dom": "^19.2.1"
     },
     "devDependencies": {
       "@tailwindcss/postcss": "^4.0.0",
-      "@types/node": "^20.0.0",
+      "@types/node": "^22.0.0",
       "@types/react": "^19.0.0",
       "@types/react-dom": "^19.0.0",
       "eslint": "^9.0.0",
-      "eslint-config-next": "16.0.7",
+      "eslint-config-next": "^16.1.0",
       "tailwindcss": "^4.0.0",
-      "typescript": "^5.0.0"
+      "typescript": "^5.7.0"
     }
   }
   

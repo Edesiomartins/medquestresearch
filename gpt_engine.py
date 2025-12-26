@@ -1,50 +1,89 @@
 import os
+import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# Tentar importação relativa primeiro, depois absoluta
+try:
+    from .chunker import chunk_text, combine_responses, estimate_tokens
+except ImportError:
+    try:
+        from chunker import chunk_text, combine_responses, estimate_tokens
+    except ImportError:
+        import backend.chunker as chunker
+        chunk_text = chunker.chunk_text
+        combine_responses = chunker.combine_responses
+        estimate_tokens = chunker.estimate_tokens
+
 # Carrega chave do .env
 load_dotenv()
-api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
 
-# Verifica se a chave foi carregada
-if not api_key:
-    raise ValueError("API_OPENAI_KEY_RESEARCH não encontrada no WSGI")
+def _check_research_env():
+    if not os.getenv("API_OPENAI_KEY_RESEARCH"):
+        raise RuntimeError("API_OPENAI_KEY_RESEARCH não configurada")
 
-# Cria cliente OpenAI com a chave
-client = OpenAI(api_key=api_key)
+# Inicializa cliente OpenAI (será criado quando necessário)
+client = None
 
-# Função para gerar resposta do GPT-4o
-def gerar_resposta(prompt, temperatura=0.4):
-    """
-    Gera uma resposta usando o GPT-4o através da API OpenAI v1.0.0+
-    
-    Args:
-        prompt: A pergunta ou texto do usuário
-        temperatura: Controla a aleatoriedade (0.0 a 2.0), padrão 0.4
-    
-    Returns:
-        str: A resposta gerada pelo modelo
-    """
+def _get_client():
+    """Retorna o cliente OpenAI, criando se necessário."""
+    global client
+    if client is None:
+        _check_research_env()
+        api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
+        client = OpenAI(api_key=api_key)
+    return client
+
+def _chamar_nova_api(modelo, prompt, temperatura=None):
+    cliente = _get_client()
+    response = cliente.responses.create(
+        model=modelo,
+        input=prompt
+    )
+    return response.output_text
+
+def gerar_resposta(prompt, temperatura=1):
+    """Gera resposta usando modelo configurado (padrão: gpt-5-mini para velocidade)."""
+    _check_research_env()
     try:
-        resposta = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Você é um assistente especializado em pesquisa científica e questões médicas."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperatura,
-        )
-        return resposta.choices[0].message.content
+        cliente = _get_client()
+        # Permite configurar modelo via variável de ambiente, senão usa gpt-5-mini (mais rápido)
+        modelo = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        
+        # Log do valor exato da variável modelo antes da chamada
+        logging.warning(f"[GPT_ENGINE] Modelo configurado: '{modelo}' (tipo: {type(modelo).__name__})")
+        
+        try:
+            # Nova chamada da API que retorna diretamente o texto
+            resposta = _chamar_nova_api(modelo, prompt, temperatura)
+            return resposta
+        except Exception as e:
+            # Log completo do erro incluindo a classe
+            logging.error(f"[GPT_ENGINE] Erro na chamada da API:")
+            logging.error(f"[GPT_ENGINE] Classe do erro: {e.__class__.__name__}")
+            logging.error(f"[GPT_ENGINE] Mensagem completa: {str(e)}")
+            logging.error(f"[GPT_ENGINE] Modelo usado: '{modelo}'")
+            raise Exception(f"Erro ao gerar resposta: {str(e)} (classe: {e.__class__.__name__})")
     except Exception as e:
+        logging.error(f"[GPT_ENGINE] Erro geral em gerar_resposta: {str(e)} (classe: {e.__class__.__name__})")
         raise Exception(f"Erro ao gerar resposta: {str(e)}")
 
 
+def gerar_resposta_com_chunking(texto_longo, prompt_template, temperatura=0.4):
+    """Processa texto longo em chunks."""
+    chunks = chunk_text(texto_longo, chunk_size=3000, overlap=500)
+    respostas = []
+    
+    for i, chunk in enumerate(chunks):
+        prompt = prompt_template.format(chunk=chunk)
+        resposta = gerar_resposta(prompt, temperatura)
+        respostas.append(resposta)
+    
+    return combine_responses(respostas)
+
+
 def resumir_chunks(chunks, max_tokens=1000):
-    """
-    Resume lista de chunks para reduzir tamanho (para PDFs longos).
-    Args: chunks (lista strings), max_tokens (limite por resumo).
-    Returns: String resumida única.
-    """
+    """Resume lista de chunks para reduzir tamanho."""
     resumos = []
     for i, chunk in enumerate(chunks):
         prompt = f"""
@@ -52,12 +91,10 @@ def resumir_chunks(chunks, max_tokens=1000):
         Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
 
         {chunk}
-
         """
-        resumo = gerar_resposta(prompt, temperatura=0.2)  # Baixa temp para precisão
+        resumo = gerar_resposta(prompt, temperatura=0.2)
         resumos.append(resumo)
     
-    # Combinar resumos
     prompt_final = f"Combine estes resumos de chunks em um texto coeso final:\n" + "\n\n".join(resumos)
     texto_final = gerar_resposta(prompt_final, temperatura=0.3)
     

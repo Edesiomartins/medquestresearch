@@ -1,6 +1,11 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Especifica o diretório raiz do projeto para evitar aviso de múltiplos lockfiles
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     remotePatterns: [
       {
@@ -26,6 +31,11 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    // Não usa mais proxy - todas as chamadas vão direto para o Render
+    // Configure NEXT_PUBLIC_API_BASE_URL com a URL do Render
+    return [];
+  },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

@@ -52,7 +52,7 @@ except ImportError:
         get_connection = database.get_connection
     except ImportError:
         # Última tentativa: importar do backend
-        import backend.database as database
+        import backend.database as database  # type: ignore[reportMissingImports]
         db_select = database.db_select
         db_select_one = database.db_select_one
         db_execute = database.db_execute
@@ -65,7 +65,7 @@ except ImportError:
         import explain_concept
         explicar_conceito = explain_concept.explicar_conceito
     except ImportError:
-        import backend.explain_concept as explain_concept
+        import backend.explain_concept as explain_concept  # type: ignore[reportMissingImports]
         explicar_conceito = explain_concept.explicar_conceito
 
 try:
@@ -75,7 +75,7 @@ except ImportError:
         import critical_analysis
         aplicar_leitura_critica = critical_analysis.aplicar_leitura_critica
     except ImportError:
-        import backend.critical_analysis as critical_analysis
+        import backend.critical_analysis as critical_analysis  # pyright: ignore[reportMissingImports]
         aplicar_leitura_critica = critical_analysis.aplicar_leitura_critica
 
 try:
@@ -85,7 +85,7 @@ except ImportError:
         import Fact_checker
         verificar_fatos = Fact_checker.verificar_fatos
     except ImportError:
-        import backend.Fact_checker as Fact_checker
+        import backend.Fact_checker as Fact_checker  # type: ignore[reportMissingImports]
         verificar_fatos = Fact_checker.verificar_fatos
 
 try:
@@ -95,7 +95,7 @@ except ImportError:
         import Perspective_research
         buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
     except ImportError:
-        import backend.Perspective_research as Perspective_research
+        import backend.Perspective_research as Perspective_research  # type: ignore[reportMissingImports]
         buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
 
 try:
@@ -105,7 +105,7 @@ except ImportError:
         import structure_visualizer
         visualizar_estrutura = structure_visualizer.visualizar_estrutura
     except ImportError:
-        import backend.structure_visualizer as structure_visualizer
+        import backend.structure_visualizer as structure_visualizer  # type: ignore[reportMissingImports]
         visualizar_estrutura = structure_visualizer.visualizar_estrutura
 
 try:
@@ -115,7 +115,7 @@ except ImportError:
         import structure_mapper
         gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
     except ImportError:
-        import backend.structure_mapper as structure_mapper
+        import backend.structure_mapper as structure_mapper  # type: ignore[reportMissingImports]
         gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
 
 try:
@@ -125,7 +125,7 @@ except ImportError:
         import pdf_processor
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
     except ImportError:
-        import backend.pdf_processor as pdf_processor
+        import backend.pdf_processor as pdf_processor  # type: ignore[reportMissingImports]
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
 
 # ============================================

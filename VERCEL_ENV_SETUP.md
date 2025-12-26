@@ -1,104 +1,37 @@
-# 🔧 Como Adicionar Variáveis de Ambiente no Vercel
+# 🔧 Configuração de Variáveis de Ambiente no Vercel
 
-## 📍 Passo a Passo Detalhado
+## 📋 Variáveis Necessárias
 
-### 1️⃣ Acesse o Painel do Vercel
+Configure a seguinte variável de ambiente no Vercel:
 
-1. Acesse: **https://vercel.com**
-2. Faça login com sua conta (GitHub, GitLab ou Bitbucket)
+### `NEXT_PUBLIC_API_BASE_URL`
 
-### 2️⃣ Selecione seu Projeto
+**Descrição**: URL base do backend da API MedQuestResearch
 
-1. No **Dashboard**, encontre o projeto **MedquestResearch**
-2. Clique no nome do projeto para abrir
-
-### 3️⃣ Acesse as Configurações
-
-1. No menu superior do projeto, clique em **"Settings"** (Configurações)
-2. No menu lateral esquerdo, clique em **"Environment Variables"** (Variáveis de Ambiente)
-
-### 4️⃣ Adicione a Variável
-
-1. Você verá uma seção com campos para adicionar variáveis
-2. Preencha os campos:
-
-   **Key (Chave):** ⚠️ **COPIE EXATAMENTE** (sem espaços extras)
-   ```
-   NEXT_PUBLIC_API_URL
-   ```
-   
-   ⚠️ **IMPORTANTE**: 
-   - Use apenas letras MAIÚSCULAS
-   - Use underscores (_) para separar palavras
-   - NÃO use hífens (-), pontos (.) ou espaços
-   - NÃO comece com número
-   - Exemplo correto: `NEXT_PUBLIC_API_URL`
-   - Exemplo ERRADO: `NEXT-PUBLIC-API-URL` ou `next_public_api_url`
-
-   **Value (Valor):**
-   ```
-   https://dredesiomartins.pythonanywhere.com/genapi
-   ```
-
-3. Selecione os **Environments** (Ambientes) onde a variável será usada:
-   - ✅ **Production** (Produção)
-   - ✅ **Preview** (Preview/Staging)
-   - ✅ **Development** (Desenvolvimento) - opcional
-
-4. Clique no botão **"Add"** ou **"Save"**
-
-### 5️⃣ Verificar se foi Adicionada
-
-Após adicionar, você verá a variável listada na tabela:
-- **Name**: `NEXT_PUBLIC_API_URL`
-- **Value**: `https://dredesiomartins.pythonanywhere.com/genapi` (oculto por segurança)
-- **Environments**: Production, Preview, Development
-
-### 6️⃣ Fazer Novo Deploy (Importante!)
-
-⚠️ **IMPORTANTE**: Após adicionar variáveis de ambiente, você precisa fazer um novo deploy:
-
-**Opção A - Deploy Automático:**
-- Faça um commit e push para o GitHub
-- O Vercel detectará automaticamente e fará deploy com as novas variáveis
-
-**Opção B - Redeploy Manual:**
-1. Vá para a aba **"Deployments"** (Deploys)
-2. Clique nos três pontos (⋯) do último deploy
-3. Selecione **"Redeploy"**
-4. Confirme o redeploy
-
-## 📸 Visualização da Interface
+**Valor**:
 
 ```
-Vercel Dashboard
-└── MedquestResearch (projeto)
-    └── Settings
-        └── Environment Variables
-            └── [Formulário]
-                ├── Key: NEXT_PUBLIC_API_URL
-                ├── Value: https://dredesiomartins.pythonanywhere.com/genapi
-                ├── ☑ Production
-                ├── ☑ Preview
-                └── ☐ Development (opcional)
-                └── [Add/Save Button]
+https://seu-app.onrender.com
 ```
 
-## ✅ Verificação
+Substitua `seu-app.onrender.com` pela URL real do seu serviço no Render.
 
-Para verificar se a variável está funcionando:
+## 🚀 Como Configurar no Vercel
 
-1. Após o deploy, acesse sua aplicação no Vercel
-2. Abra o **Console do Navegador** (F12 → Console)
-3. Execute no console:
-   ```javascript
-   console.log(process.env.NEXT_PUBLIC_API_URL);
-   ```
-4. Deve retornar: `https://dredesiomartins.pythonanywhere.com/genapi`
+### Método 1: Via Dashboard Web
 
-## 🔍 Alternativa: Via CLI do Vercel
+1. Acesse [Vercel Dashboard](https://vercel.com/dashboard)
+2. Selecione seu projeto **MedQuestResearch**
+3. Vá em **Settings** → **Environment Variables**
+4. Clique em **Add New**
+5. Configure:
+   - **Key**: `NEXT_PUBLIC_API_BASE_URL`
+   - **Value**: `https://seu-app.onrender.com` (substitua pela URL real do Render)
+   - **Environments**: Selecione `Production`, `Preview` e `Development`
+6. Clique em **Save**
+7. **Importante**: Faça um novo deploy para aplicar as mudanças
 
-Se preferir usar a linha de comando:
+### Método 2: Via CLI
 
 ```bash
 # Instalar Vercel CLI (se ainda não tiver)
@@ -108,72 +41,54 @@ npm i -g vercel
 vercel login
 
 # Adicionar variável de ambiente
-vercel env add NEXT_PUBLIC_API_URL
+vercel env add NEXT_PUBLIC_API_BASE_URL
 
 # Quando solicitado, digite o valor:
-# https://dredesiomartins.pythonanywhere.com/genapi
+# https://dredesiomartins.pythonanywhere.com
 
-# Selecione os ambientes (Production, Preview, Development)
+# Aplicar a todas as environments
+vercel env pull .env.local
 ```
 
-## ⚠️ Observações Importantes
+## 🔄 Após Configurar
 
-1. **Prefixo `NEXT_PUBLIC_`**: 
-   - Variáveis que começam com `NEXT_PUBLIC_` são expostas ao cliente (browser)
-   - Use apenas para valores que podem ser públicos
-   - NUNCA use para chaves secretas!
+1. **Redeploy obrigatório**: As variáveis de ambiente só são aplicadas em novos deploys
+2. Vá em **Deployments** → Selecione o último deploy → **Redeploy**
+3. Ou faça um novo commit e push para trigger automático
 
-2. **Redeploy Necessário**:
-   - Variáveis de ambiente são injetadas no momento do build
-   - Sempre faça um novo deploy após adicionar/modificar variáveis
+## ✅ Verificação
 
-3. **Valores Sensíveis**:
-   - Se precisar de valores secretos, use variáveis SEM o prefixo `NEXT_PUBLIC_`
-   - Essas variáveis só estarão disponíveis no servidor (API Routes)
+Após o deploy, verifique se está funcionando:
 
-## 🆘 Problemas Comuns
+1. Acesse sua aplicação no Vercel
+2. Abra o console do navegador (F12)
+3. Verifique se as requisições estão indo para a URL correta
+4. Teste fazer login ou upload de PDF
 
-### ❌ Erro: "The name contains invalid characters"
-**Causa**: O nome da variável contém caracteres inválidos.
+## 🔍 Troubleshooting
+
+### Problema: Requisições ainda vão para URL antiga
+
+**Solução**: 
+- Verifique se a variável está configurada corretamente
+- Faça um novo deploy (as variáveis só são aplicadas em novos builds)
+- Limpe o cache do navegador
+
+### Problema: CORS errors
 
 **Solução**:
-- ✅ Use APENAS letras MAIÚSCULAS (A-Z)
-- ✅ Use underscores (_) para separar palavras
-- ✅ NÃO use: hífens (-), pontos (.), espaços, ou outros caracteres especiais
-- ✅ NÃO comece com número
-- ✅ Nome correto: `NEXT_PUBLIC_API_URL`
-- ✅ Nomes ERRADOS: `NEXT-PUBLIC-API-URL`, `next_public_api_url`, `NEXT.PUBLIC.API.URL`
+- Verifique se o backend está configurado para aceitar requisições do domínio do Vercel
+- Confirme que o CORS está habilitado no backend
 
-**Exemplo de nomes válidos**:
-- ✅ `NEXT_PUBLIC_API_URL`
-- ✅ `API_BASE_URL`
-- ✅ `MY_VARIABLE_NAME`
+### Problema: 404 Not Found
 
-**Exemplo de nomes inválidos**:
-- ❌ `NEXT-PUBLIC-API-URL` (hífen não permitido)
-- ❌ `next_public_api_url` (minúsculas podem causar problemas)
-- ❌ `NEXT.PUBLIC.API.URL` (ponto não permitido)
-- ❌ `123_API_URL` (não pode começar com número)
+**Solução**:
+- Verifique se a URL está correta (sem barra no final)
+- Confirme que o backend está rodando e acessível
+- Teste a URL diretamente no navegador: `https://sua-url.com/genapi/health`
 
-### Variável não aparece no código?
-- ✅ Verifique se fez redeploy após adicionar
-- ✅ Verifique se o nome está correto: `NEXT_PUBLIC_API_URL` (copie exatamente)
-- ✅ Verifique se selecionou o ambiente correto (Production)
+## 📝 Notas
 
-### Erro 404 nas chamadas de API?
-- ✅ Verifique se a URL está correta: `https://dredesiomartins.pythonanywhere.com/genapi`
-- ✅ Verifique se o prefixo `/genapi` está configurado no WSGI.PY
-- ✅ Teste a URL diretamente no navegador: `https://dredesiomartins.pythonanywhere.com/genapi/ping`
-
-### Como editar uma variável existente?
-1. Vá em **Settings** → **Environment Variables**
-2. Clique nos três pontos (⋯) ao lado da variável
-3. Selecione **"Edit"**
-4. Modifique o valor
-5. Salve e faça redeploy
-
-## 📚 Documentação Oficial
-
-Para mais informações, consulte:
-- https://vercel.com/docs/concepts/projects/environment-variables
-
+- Variáveis que começam com `NEXT_PUBLIC_` são expostas ao cliente (browser)
+- Não coloque chaves secretas em variáveis `NEXT_PUBLIC_*`
+- Para desenvolvimento local, crie um arquivo `.env.local` com as mesmas variáveis

@@ -2,32 +2,38 @@
 
 ## 📋 Visão Geral
 
-O MedQuestResearch possui uma API própria isolada do MedQuest Cloud, acessível através do prefixo `/genapi` no PythonAnywhere.
+O MedQuestResearch possui uma API própria, acessível através do prefixo `/genapi` no Render.
 
 ## 🔗 Estrutura de URLs
 
-### Produção (PythonAnywhere)
-- **URL Base**: `https://dredesiomartins.pythonanywhere.com/genapi`
-- **Configuração**: Definida no arquivo `WSGI.PY` (não versionado no Git)
+### Produção (Render)
+- **URL Base**: `https://seu-app.onrender.com/genapi`
+- **Configuração**: Definida via variáveis de ambiente no Render
 
 ### Desenvolvimento Local
-- **URL Base**: `https://dredesiomartins.pythonanywhere.com/genapi` (ou configure localhost se necessário)
+- **URL Base**: Use a mesma URL do Render ou configure via `.env.local`
 
 ## 🔐 Variáveis de Ambiente
 
-### Backend (PythonAnywhere - WSGI.PY)
-As seguintes variáveis são configuradas no `WSGI.PY`:
+### Backend (Render)
+As seguintes variáveis são configuradas no painel do Render (Environment Variables):
 
-```python
-os.environ["API_OPENAI_KEY_RESEARCH"] = "sua-chave-openai"
-os.environ["RESEARCH_API_KEY"] = "sua-chave-research"
+```bash
+DB_HOST=dredesiomartins.mysql.pythonanywhere-services.com
+DB_USER=dredesiomartins
+DB_PASSWORD=sua_senha
+DB_NAME=dredesiomartins$MedquestResearch
+API_OPENAI_KEY_RESEARCH=sk-proj-sua-chave-openai
+OPENAI_MODEL=gpt-4o-mini
+RESEARCH_API_KEY=amordaminhavida162524*
+FLASK_ENV=production
 ```
 
 ### Frontend (Next.js/Vercel)
 Configure no painel do Vercel ou em `.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://dredesiomartins.pythonanywhere.com/genapi
+NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
 ```
 
 ## 📍 Endpoints Disponíveis
@@ -103,7 +109,7 @@ const data = await response.json();
 
 ## 📝 Notas de Deploy
 
-1. **PythonAnywhere**: O `WSGI.PY` configura as variáveis de ambiente e monta o dispatcher
-2. **Vercel**: Configure `NEXT_PUBLIC_API_URL` nas variáveis de ambiente
+1. **Render**: Configure todas as variáveis de ambiente no painel do Render
+2. **Vercel**: Configure `NEXT_PUBLIC_API_BASE_URL` com a URL do Render
 3. **GitHub**: O código não contém chaves sensíveis (protegido pelo `.gitignore`)
 

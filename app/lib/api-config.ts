@@ -3,27 +3,22 @@
  * 
  * Esta configuração garante que todas as chamadas de API usem o prefixo correto
  * baseado no ambiente (desenvolvimento/produção).
+ * 
+ * PRODUÇÃO (Render):
+ *   NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
+ *   → Usa a URL do Render diretamente
+ * 
+ * DESENVOLVIMENTO (.env.local):
+ *   NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
+ *   → Ou use a URL do Render também em desenvolvimento
  */
 
-// URL base da API - ajuste conforme necessário
-// Em produção (PythonAnywhere): usa o prefixo /genapi configurado no WSGI.PY
-// Em desenvolvimento local: pode usar http://localhost:5000 ou a URL do PythonAnywhere
-const getApiBaseUrl = (): string => {
-  // Se estiver definida uma variável de ambiente, use ela
-  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // Em produção (Vercel), aponta para o PythonAnywhere com prefixo /genapi
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://dredesiomartins.pythonanywhere.com/genapi';
-  }
-  
-  // Em desenvolvimento, pode apontar para localhost ou PythonAnywhere
-  return 'https://dredesiomartins.pythonanywhere.com/genapi';
-};
+// URL base da API - OBRIGATÓRIA (Render)
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
-export const API_BASE_URL = getApiBaseUrl();
+if (!API_BASE_URL) {
+  console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Render.');
+}
 
 // Endpoints da API
 export const API_ENDPOINTS = {
@@ -48,12 +43,21 @@ export const API_ENDPOINTS = {
   EXPLAIN_CONCEPT: '/explain_concept',
   FACT_CHECKER: '/fact_checker',
   PERSPECTIVE_RESEARCH: '/perspective_research',
+  
+  // Rotas de status de jobs assíncronos
+  JOB_STATUS: '/job',
+  JOBS: '/jobs',
 } as const;
 
 // Função helper para construir URLs completas
-export const getApiUrl = (endpoint: string): string => {
-  return `${API_BASE_URL}${endpoint}`;
-};
+export function getApiUrl(path: string): string {
+  // Adiciona /genapi à URL base do Render
+  if (!API_BASE_URL) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Render nas variáveis de ambiente.');
+  }
+  
+  return `${API_BASE_URL}/genapi${path}`;
+}
 
 // Configuração padrão para fetch requests
 export const defaultFetchOptions: RequestInit = {
@@ -62,11 +66,12 @@ export const defaultFetchOptions: RequestInit = {
   },
 };
 
-// Função helper para fazer requisições autenticadas
+// Função helper para fazer requisições autenticadas com timeout
 export const authenticatedFetch = async (
   endpoint: string,
   options: RequestInit = {},
-  token?: string
+  token?: string,
+  timeout: number = 300000 // 5 minutos (300 segundos) para processamento de IA
 ): Promise<Response> => {
   const headers: Record<string, string> = {
     ...(defaultFetchOptions.headers as Record<string, string>),
@@ -77,10 +82,26 @@ export const authenticatedFetch = async (
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(getApiUrl(endpoint), {
-    ...defaultFetchOptions,
-    ...options,
-    headers,
-  });
+  // Criar AbortController para timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(getApiUrl(endpoint), {
+      ...defaultFetchOptions,
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Timeout: A requisição demorou mais de ${timeout / 1000} segundos`);
+    }
+    throw error;
+  }
 };
 

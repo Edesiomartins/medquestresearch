@@ -1,18 +1,33 @@
-from gpt_engine import gerar_resposta
+# Tentar importação relativa primeiro, depois absoluta
+try:
+    from .gpt_engine import gerar_resposta
+except ImportError:
+    try:
+        from gpt_engine import gerar_resposta
+    except ImportError:
+        import backend.gpt_engine as gpt_engine
+        gerar_resposta = gpt_engine.gerar_resposta
 
-def gerar_mapa_estrutura(texto_artigo):
+def gerar_mapa_estrutura(texto_artigo: str) -> str:
+    """
+    Mapeia a estrutura lógica e organizacional de um texto de artigo científico.
+    SEM chunking - chama o modelo uma única vez.
+    """
     prompt = f"""
-Você é um assistente de leitura científica. Abaixo está o texto de um artigo científico.
-Sua tarefa é analisar a estrutura lógica e gerar um mapa mental textual com os seguintes elementos:
+Você é um mapeador de estrutura de documentos. Analise o texto do artigo científico
+e descreva sua estrutura lógica e organizacional.
 
-- Principais seções (introdução, métodos, resultados, discussão, conclusão)
-- Conexão entre as ideias
-- Destaques conceituais
+IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês.
 
-Apresente o resultado de forma organizada e hierárquica, usando marcadores, recuos e tópicos, como um esboço visual.
-
+---
 Texto do artigo:
 {texto_artigo}
+
+Apresente o mapa da estrutura, incluindo:
+- Seções principais (Introdução, Métodos, Resultados, Discussão, Conclusão, etc.).
+- Subseções importantes.
+- A relação lógica entre as seções.
+- O fluxo de informações e argumentos.
 """
     resposta = gerar_resposta(prompt)
     return resposta

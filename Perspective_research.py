@@ -1,24 +1,37 @@
-from gpt_engine import gerar_resposta
+# Tentar importação relativa primeiro, depois absoluta
+try:
+    from .gpt_engine import gerar_resposta
+except ImportError:
+    try:
+        from gpt_engine import gerar_resposta
+    except ImportError:
+        import backend.gpt_engine as gpt_engine
+        gerar_resposta = gpt_engine.gerar_resposta
 
-def buscar_perspectivas_pubmed(texto_artigo):
+def buscar_perspectivas_pubmed(texto_artigo: str, tema_foco: str = "") -> str:
+    """
+    Identifica diferentes perspectivas ou pontos de vista em um texto de artigo científico.
+    NOTA: Esta função é chamada dentro de run_with_two_chunks, então não faz chunking adicional.
+    """
+    # Limitar texto para evitar chamadas muito longas
+    texto_artigo = texto_artigo[:4000]
+    
     prompt = f"""
-Você é um assistente científico que ajuda pesquisadores a analisar múltiplas perspectivas sobre um tema.
+Você é um pesquisador de perspectivas. Analise o texto do artigo científico
+e identifique as diferentes perspectivas, argumentos ou pontos de vista apresentados,
+especialmente em relação a: {tema_foco}.
 
-Abaixo está o conteúdo principal de um artigo científico. Leia atentamente e:
+IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês.
 
-1. Identifique o tema central e a hipótese principal do artigo.
-2. Pesquise no PubMed estudos recentes que:
-   - Confirmem a mesma hipótese
-   - Apresentem conclusões diferentes ou contraditórias
-3. Compare os achados do artigo com os estudos encontrados.
-4. Apresente um resumo estruturado com perspectivas distintas (com autores e datas se possível).
-
-Texto base:
-\"\"\"
+---
+Texto do artigo:
 {texto_artigo}
-\"\"\"
 
-Publique as conclusões em forma de comparação.
+Apresente as perspectivas encontradas, indicando:
+- Qual é a perspectiva.
+- Quem a defende (se identificável).
+- Os principais argumentos ou evidências que a sustentam.
+- Se há perspectivas conflitantes ou complementares.
 """
     resposta = gerar_resposta(prompt)
     return resposta
