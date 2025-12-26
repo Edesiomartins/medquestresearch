@@ -52,5 +52,17 @@ htmlcov/
 
 # PythonAnywhere specific
 WSGI.PY
-wsgi.py
+backend/wsgi.py
 # Mantenha WSGI.PY/wsgi.py fora do Git para não expor chaves de API
+
+# Backend
+backend/__pycache__/
+backend/*.pyc
+backend/temp/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/.vercel

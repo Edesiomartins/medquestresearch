@@ -2,116 +2,106 @@
 
 Plataforma inteligente de leitura crítica, análise científica e geração de conhecimento assistida por IA.
 
+## 📁 Estrutura do Projeto
+
+```
+MedquestResearch/
+├── backend/              # Backend Python (Flask)
+│   ├── api.py           # Aplicação Flask principal
+│   ├── database.py      # Configuração do banco de dados
+│   ├── gpt_engine.py    # Engine de IA (OpenAI)
+│   ├── requirements.txt # Dependências Python
+│   ├── render.yaml      # Configuração do Render
+│   └── ...              # Outros módulos Python
+│
+├── frontend/            # Frontend Next.js
+│   ├── app/            # Páginas e componentes Next.js
+│   ├── package.json    # Dependências Node.js
+│   ├── next.config.ts  # Configuração do Next.js
+│   └── ...             # Outros arquivos do frontend
+│
+└── README.md           # Este arquivo
+```
+
 ## 🚀 Tecnologias
 
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Backend**: Python (processamento de PDFs, análise crítica, fact-checking)
+- **Backend**: Python (Flask), OpenAI API, PyMuPDF
 
 ## 📦 Instalação
 
 ### Backend (Python)
+
 ```bash
+cd backend
 pip install -r requirements.txt
 ```
 
 ### Frontend (Next.js)
+
 ```bash
+cd frontend
 npm install
 ```
 
 ## 🛠️ Desenvolvimento
 
-### Executar o servidor de desenvolvimento
+### Backend
+
 ```bash
+cd backend
+python api.py
+```
+
+O servidor Flask estará disponível em `http://localhost:5000`
+
+### Frontend
+
+```bash
+cd frontend
 npm run dev
 ```
 
 Acesse [http://localhost:3000](http://localhost:3000) no navegador.
 
-### Build para produção
-```bash
-npm run build
-npm start
-```
+## 🚀 Deploy
 
-## 🚀 Deploy no Vercel
+### Backend (Render)
 
-O projeto está configurado para deploy automático no Vercel.
+Siga o guia em `backend/README_RENDER.md` ou `backend/DEPLOY_RENDER.md`
 
-### Deploy via Interface Web
+### Frontend (Vercel)
 
-1. Acesse [https://vercel.com](https://vercel.com)
-2. Faça login com sua conta GitHub
-3. Clique em **"Add New Project"**
-4. Importe o repositório do GitHub
-5. O Vercel detectará automaticamente o Next.js
-6. Clique em **"Deploy"**
-
-### Deploy via CLI
-
-```bash
-# Instalar Vercel CLI
-npm i -g vercel
-
-# Fazer login
-vercel login
-
-# Deploy
-vercel
-```
-
-## 📁 Estrutura do Projeto
-
-```
-MedquestResearch/
-├── app/                    # Páginas e componentes Next.js
-│   ├── lib/
-│   │   └── api-config.ts  # Configuração centralizada da API
-│   ├── layout.tsx         # Layout principal
-│   ├── page.tsx           # Página inicial
-│   └── globals.css        # Estilos globais
-├── api.py                 # API Python (Flask)
-├── database.py            # Configuração do banco de dados
-├── pdf_processor.py       # Processamento de PDFs
-├── gpt_engine.py          # Engine de IA (OpenAI)
-├── requirements.txt       # Dependências Python
-├── package.json           # Dependências Node.js
-├── API_CONFIG.md          # Documentação da API
-└── WSGI.PY                # Configuração PythonAnywhere (não versionado)
-```
+1. Configure a variável de ambiente `NEXT_PUBLIC_API_BASE_URL` com a URL do Render
+2. Siga o guia em `frontend/VERCEL_ENV_SETUP.md`
 
 ## ⚙️ Configuração
 
-### Arquivos de Configuração
-- `vercel.json` - Configuração do deploy no Vercel
-- `API_CONFIG.md` - Documentação completa da API e endpoints
-- `app/lib/api-config.ts` - Configuração centralizada da API para o frontend
-
 ### Variáveis de Ambiente
 
-#### Frontend (Vercel/Next.js)
-Configure no painel do Vercel ou em `.env.local`:
-```bash
-NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
-```
-
-Substitua `seu-app.onrender.com` pela URL real do seu serviço no Render.
-
-📖 **Guia Completo**: Veja `VERCEL_ENV_SETUP.md` para instruções passo a passo de como adicionar variáveis de ambiente no Vercel.
-
 #### Backend (Render)
-As variáveis são configuradas no painel do Render (Environment Variables):
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - Configuração do banco de dados
-- `API_OPENAI_KEY_RESEARCH` - Chave da API OpenAI
-- `RESEARCH_API_KEY` - Chave de autenticação da API Research
-- `OPENAI_MODEL` - Modelo GPT (padrão: gpt-4o-mini)
-- `FLASK_ENV` - Ambiente Flask (production)
+Configure no painel do Render:
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `API_OPENAI_KEY_RESEARCH`
+- `RESEARCH_API_KEY`
+- `OPENAI_MODEL`
+- `FLASK_ENV`
 
-📖 **Guia Completo**: Veja `DEPLOY_RENDER.md` para instruções de deploy no Render.
+#### Frontend (Vercel)
+Configure no painel do Vercel:
+- `NEXT_PUBLIC_API_BASE_URL` - URL do backend no Render
 
-## 🔄 Deploys Automáticos
+📖 **Guias Completos**:
+- Backend: `backend/DEPLOY_RENDER.md`
+- Frontend: `frontend/VERCEL_ENV_SETUP.md`
+- Conexão: `CONEXAO_FRONTEND_BACKEND.md`
 
-Após conectar ao GitHub, cada push para o branch principal fará deploy automático no Vercel.
+## 📝 Documentação
+
+- `backend/API_CONFIG.md` - Documentação da API
+- `backend/README_RENDER.md` - Deploy no Render
+- `frontend/VERCEL_ENV_SETUP.md` - Configuração do Vercel
+- `CONEXAO_FRONTEND_BACKEND.md` - Como conectar frontend e backend
 
 ## 📝 Licença
 
