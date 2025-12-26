@@ -155,12 +155,21 @@ def after_request(response):
     origin = request.headers.get('Origin')
     # Permitir apenas o domínio do Vercel
     allowed_origins = ['https://medquestresearch.vercel.app']
+    
+    # Se o origin estiver na lista permitida, adicionar headers CORS
     if origin in allowed_origins:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        response.headers.add('Access-Control-Allow-Credentials', 'false')
+        # Não sobrescrever se já foi definido (evita duplicação)
+        if 'Access-Control-Allow-Origin' not in response.headers:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+        if 'Access-Control-Allow-Headers' not in response.headers:
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+        if 'Access-Control-Allow-Methods' not in response.headers:
+            response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD')
+        if 'Access-Control-Max-Age' not in response.headers:
+            response.headers.add('Access-Control-Max-Age', '3600')
+        if 'Access-Control-Allow-Credentials' not in response.headers:
+            response.headers.add('Access-Control-Allow-Credentials', 'false')
+    
     return response
 
 # ✅ Configuração de rate limiting
@@ -180,6 +189,18 @@ limiter = Limiter(
 # ============================================
 # ✅ FUNÇÕES AUXILIARES
 # ============================================
+
+def handle_options_request(allowed_methods: str = "GET, POST, OPTIONS"):
+    """Função helper para tratar requisições OPTIONS com CORS correto."""
+    origin = request.headers.get('Origin')
+    allowed_origins = ['https://medquestresearch.vercel.app']
+    response = jsonify({})
+    if origin in allowed_origins:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    response.headers.add('Access-Control-Allow-Methods', allowed_methods)
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response, 200
 
 def gerar_token():
     return secrets.token_hex(32)
@@ -693,11 +714,7 @@ def health():
 @app.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
     if request.method == "OPTIONS":
-        response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-        return response, 200
+        return handle_options_request("POST, OPTIONS")
     
     try:
         data = request.json
@@ -733,25 +750,8 @@ def cadastro():
 @app.route("/login", methods=["POST", "OPTIONS"])
 def login():
     # Tratar OPTIONS primeiro, antes de qualquer coisa (sem rate limit)
-    # O key_func já ignora OPTIONS, mas garantimos aqui também
     if request.method == "OPTIONS":
-        try:
-            response = jsonify({})
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-            response.headers.add('Access-Control-Max-Age', '3600')
-            return response, 200
-        except Exception as e:
-            # Se houver erro, retornar 200 mesmo assim com CORS básico
-            logging.error(f"Erro em OPTIONS /login: {e}")
-            import traceback
-            logging.error(traceback.format_exc())
-            response = jsonify({})
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-            return response, 200
+        return handle_options_request("POST, OPTIONS")
     
     try:
         data = request.json
@@ -783,7 +783,10 @@ def login():
 def creditos():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -820,7 +823,10 @@ def listar_jobs():
     """Lista todos os jobs do usuário."""
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -857,7 +863,10 @@ def status_job(job_id):
     """Verifica o status de um job de processamento assíncrono."""
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -906,7 +915,10 @@ def status_job(job_id):
 def rota_explicar():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -964,7 +976,10 @@ def rota_explicar():
 def rota_critica():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -1014,7 +1029,10 @@ def rota_critica():
 def rota_fatos():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -1063,7 +1081,10 @@ def rota_fatos():
 def rota_perspectiva():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -1112,7 +1133,10 @@ def rota_perspectiva():
 def rota_mapa():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -1160,7 +1184,10 @@ def rota_mapa():
 def rota_structure_mapper():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
@@ -1208,7 +1235,10 @@ def rota_structure_mapper():
 def rota_pdf():
     if request.method == "OPTIONS":
         response = jsonify({})
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        allowed_origins = ['https://medquestresearch.vercel.app']
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         return response, 200
