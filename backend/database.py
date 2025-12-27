@@ -33,12 +33,20 @@ else:
     DB_PORT = int(os.getenv("DB_PORT", "5432"))
 
 # Validar que todas as variáveis estão configuradas
-if not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
-    missing = [k for k, v in {
-        "DATABASE_URL (ou DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)": DATABASE_URL or (DB_HOST and DB_USER and DB_PASS and DB_NAME)
-    }.items() if not v]
+# Se DATABASE_URL não estiver configurado, verificar variáveis individuais
+if not DATABASE_URL and not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
+    missing = []
+    if not DB_HOST:
+        missing.append("DB_HOST")
+    if not DB_USER:
+        missing.append("DB_USER")
+    if not DB_PASS:
+        missing.append("DB_PASSWORD")
+    if not DB_NAME:
+        missing.append("DB_NAME")
+    
     raise ValueError(
-        f"❌ Variáveis de ambiente do banco de dados não configuradas.\n"
+        f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
         f"Configure DATABASE_URL no Render Dashboard: Settings > Environment Variables\n"
         f"Ou configure individualmente: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
     )
