@@ -8,14 +8,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: DB_HOST
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_NAME
-        sync: false
+      # DATABASE_URL é fornecido automaticamente pelo Render quando você conecta um banco PostgreSQL
+      # Não precisa configurar manualmente - o Render faz isso automaticamente
       - key: API_OPENAI_KEY_RESEARCH
         sync: false
       - key: OPENAI_MODEL

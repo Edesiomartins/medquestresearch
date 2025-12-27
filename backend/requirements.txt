@@ -5,6 +5,6 @@ flask
 flask-cors
 flask-limiter
 pydantic
-pymysql
+psycopg2-binary
 python-docx
 gunicorn
