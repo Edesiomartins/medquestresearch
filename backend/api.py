@@ -714,9 +714,17 @@ def cadastro():
 @limiter.exempt  # Exempt para garantir que OPTIONS não passe pelo rate limiter
 def login():
     # Tratar OPTIONS primeiro (antes de qualquer processamento)
-    # Flask-CORS deve adicionar os headers automaticamente
     if request.method == "OPTIONS":
-        return jsonify({}), 200
+        # Criar resposta vazia
+        response = jsonify({})
+        # Adicionar headers CORS manualmente para garantir
+        origin = request.headers.get('Origin')
+        if origin == 'https://medquestresearch.vercel.app':
+            response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
     
     # Aplicar rate limit apenas para POST (key_func já ignora OPTIONS)
     # Mas vamos garantir que não haja erro
