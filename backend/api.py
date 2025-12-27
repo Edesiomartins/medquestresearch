@@ -14,7 +14,7 @@ import traceback
 import json
 from functools import wraps
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, Blueprint, Blueprint
 from flask_cors import CORS  # ✅ Usar Flask-CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -133,6 +133,9 @@ except ImportError:
 # ============================================
 
 app = Flask(__name__)
+
+# ✅ Criar Blueprint com prefixo /genapi para todas as rotas da API
+api_bp = Blueprint('api', __name__, url_prefix='/genapi')
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
 # Configurar CORS apenas para o domínio do Vercel
@@ -674,7 +677,7 @@ def health():
 # ✅ ROTAS DE USUÁRIO
 # ============================================
 
-@app.route("/cadastro", methods=["POST", "OPTIONS"])
+@api_bp.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
     try:
         data = request.json
@@ -707,7 +710,7 @@ def cadastro():
         return jsonify({"erro": "Erro ao criar usuário", "detalhes": str(e)}), 500
 
 # ✅ ROTA LOGIN - ACEITA POST E OPTIONS
-@app.route("/login", methods=["POST", "OPTIONS"])
+@api_bp.route("/login", methods=["POST", "OPTIONS"])
 def login():
     try:
         data = request.json
@@ -735,7 +738,7 @@ def login():
     except Exception as e:
         return jsonify({"erro": "Erro ao fazer login", "detalhes": str(e)}), 500
 
-@app.route("/creditos", methods=["GET", "OPTIONS"])
+@api_bp.route("/creditos", methods=["GET", "OPTIONS"])
 def creditos():
     try:
         user = autenticar(request)
@@ -763,7 +766,7 @@ def creditos():
         logging.error(traceback.format_exc())
         return jsonify({"erro": "Erro ao buscar créditos", "detalhes": str(e)}), 500
 
-@app.route("/jobs", methods=["GET", "OPTIONS"])
+@api_bp.route("/jobs", methods=["GET", "OPTIONS"])
 @limiter.limit("30 per minute")
 def listar_jobs():
     """Lista todos os jobs do usuário."""
@@ -792,8 +795,8 @@ def listar_jobs():
         logging.error(f"Erro em listar_jobs: {e}")
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/job/<int:job_id>", methods=["GET", "OPTIONS"])
-@app.route("/status/<int:job_id>", methods=["GET", "OPTIONS"])
+@api_bp.route("/job/<int:job_id>", methods=["GET", "OPTIONS"])
+@api_bp.route("/status/<int:job_id>", methods=["GET", "OPTIONS"])
 @limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
 def status_job(job_id):
     """Verifica o status de um job de processamento assíncrono."""
@@ -835,8 +838,8 @@ def status_job(job_id):
 # ✅ ROTAS DE IA
 # ============================================
 
-@app.route("/explicar", methods=["POST", "OPTIONS"])
-@app.route("/explain_concept", methods=["POST", "OPTIONS"])
+@api_bp.route("/explicar", methods=["POST", "OPTIONS"])
+@api_bp.route("/explain_concept", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_explicar():
     log_t("INICIO REQUEST")
@@ -886,8 +889,8 @@ def rota_explicar():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/critica", methods=["POST", "OPTIONS"])
-@app.route("/critical_analysis", methods=["POST", "OPTIONS"])
+@api_bp.route("/critica", methods=["POST", "OPTIONS"])
+@api_bp.route("/critical_analysis", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_critica():
     try:
@@ -929,8 +932,8 @@ def rota_critica():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/fatos", methods=["POST", "OPTIONS"])
-@app.route("/fact_checker", methods=["POST", "OPTIONS"])
+@api_bp.route("/fatos", methods=["POST", "OPTIONS"])
+@api_bp.route("/fact_checker", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_fatos():
     try:
@@ -971,8 +974,8 @@ def rota_fatos():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/perspectiva", methods=["POST", "OPTIONS"])
-@app.route("/perspective_research", methods=["POST", "OPTIONS"])
+@api_bp.route("/perspectiva", methods=["POST", "OPTIONS"])
+@api_bp.route("/perspective_research", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_perspectiva():
     try:
@@ -1013,8 +1016,8 @@ def rota_perspectiva():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/mapa", methods=["POST", "OPTIONS"])
-@app.route("/structure_visualizer", methods=["POST", "OPTIONS"])
+@api_bp.route("/mapa", methods=["POST", "OPTIONS"])
+@api_bp.route("/structure_visualizer", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_mapa():
     try:
@@ -1055,7 +1058,7 @@ def rota_mapa():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/structure_mapper", methods=["POST", "OPTIONS"])
+@api_bp.route("/structure_mapper", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_structure_mapper():
     try:
@@ -1096,7 +1099,7 @@ def rota_structure_mapper():
         traceback.print_exc()
         return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
 
-@app.route("/pdf", methods=["POST", "OPTIONS"])
+@api_bp.route("/pdf", methods=["POST", "OPTIONS"])
 @limiter.limit("10 per minute")
 def rota_pdf():
     user = autenticar(request)
@@ -1143,6 +1146,11 @@ def rota_pdf():
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+# ============================================
+# ✅ REGISTRAR BLUEPRINT COM PREFIXO /genapi
+# ============================================
+app.register_blueprint(api_bp)
 
 # ============================================
 # ✅ EXECUÇÃO LOCAL (para desenvolvimento)
