@@ -142,7 +142,7 @@ api_bp = Blueprint('api', __name__)
 # IMPORTANTE: Configurar CORS antes de registrar o Blueprint
 CORS(app, 
      resources={
-         r"/*": {
+    r"/*": {
              "origins": ["https://medquestresearch.vercel.app"]
          }
      },
@@ -250,7 +250,7 @@ def run_with_two_chunks(
 ):
     """
     Executa processamento de IA em no máximo DOIS chunks,
-    evitando timeout no PythonAnywhere.
+    evitando timeout no servidor.
     """
     from .chunker import chunk_text, combine_responses
 
@@ -717,15 +717,15 @@ def login():
     # Tratar OPTIONS primeiro (antes de qualquer processamento)
     if request.method == "OPTIONS":
         # Criar resposta vazia
-        response = jsonify({})
+            response = jsonify({})
         # Adicionar headers CORS manualmente para garantir
         origin = request.headers.get('Origin')
         if origin == 'https://medquestresearch.vercel.app':
             response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
+            response.headers.add('Access-Control-Max-Age', '3600')
+            return response, 200
     
     # Aplicar rate limit apenas para POST (key_func já ignora OPTIONS)
     # Mas vamos garantir que não haja erro
