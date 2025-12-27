@@ -1,15 +1,15 @@
 /**
  * Configuração centralizada da API do MedQuestResearch
  * 
- * Esta configuração garante que todas as chamadas de API usem o prefixo correto
+ * Esta configuração garante que todas as chamadas de API usem a URL correta
  * baseado no ambiente (desenvolvimento/produção).
  * 
  * PRODUÇÃO (Render):
- *   NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
- *   → Usa a URL do Render diretamente
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch.onrender.com
+ *   → Usa a URL do Render diretamente (sem prefixo /genapi)
  * 
  * DESENVOLVIMENTO (.env.local):
- *   NEXT_PUBLIC_API_BASE_URL=https://seu-app.onrender.com
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch.onrender.com
  *   → Ou use a URL do Render também em desenvolvimento
  */
 
@@ -51,12 +51,12 @@ export const API_ENDPOINTS = {
 
 // Função helper para construir URLs completas
 export function getApiUrl(path: string): string {
-  // Adiciona /genapi à URL base do Render
+  // Usa a URL base do Render diretamente (sem prefixo /genapi)
   if (!API_BASE_URL) {
     throw new Error('NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Render nas variáveis de ambiente.');
   }
   
-  return `${API_BASE_URL}/genapi${path}`;
+  return `${API_BASE_URL}${path}`;
 }
 
 // Configuração padrão para fetch requests

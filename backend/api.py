@@ -134,8 +134,8 @@ except ImportError:
 
 app = Flask(__name__)
 
-# ✅ Criar Blueprint com prefixo /genapi para todas as rotas da API
-api_bp = Blueprint('api', __name__, url_prefix='/genapi')
+# ✅ Criar Blueprint para todas as rotas da API (sem prefixo)
+api_bp = Blueprint('api', __name__)
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
 # Configurar CORS apenas para o domínio do Vercel
@@ -661,7 +661,7 @@ def handle_error(e):
 @limiter.exempt
 @app.route("/", methods=["GET", "HEAD"])
 def index():
-    return jsonify({"status": "MedQuestGen API está ativa ✅", "version": "2.0"})
+    return jsonify({"status": "Medquestresearch API está ativa ✅", "version": "2.0"})
 
 @limiter.exempt
 @app.route("/ping")
