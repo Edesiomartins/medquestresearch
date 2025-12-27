@@ -9,15 +9,30 @@ load_dotenv()
 # ============================================================
 # ✅ CONFIGURAÇÃO DO BANCO (via variáveis de ambiente)
 # ============================================================
+# IMPORTANTE: Configure estas variáveis no Render Dashboard
+# ou em um arquivo .env para desenvolvimento local
 
-DB_HOST = os.getenv("DB_HOST", "dredesiomartins.mysql.pythonanywhere-services.com")
-DB_USER = os.getenv("DB_USER", "dredesiomartins")
-DB_PASS = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "dredesiomartins$MedquestResearch")
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
+
+# Validar que todas as variáveis estão configuradas
+if not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
+    missing = [k for k, v in {
+        "DB_HOST": DB_HOST,
+        "DB_USER": DB_USER,
+        "DB_PASSWORD": DB_PASS,
+        "DB_NAME": DB_NAME
+    }.items() if not v]
+    raise ValueError(
+        f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
+        f"Configure no Render Dashboard: Settings > Environment Variables"
+    )
 
 
 # ============================================================
-# ✅ CRIAR CONEXÃO GLOBAL (reuso recomendado no PythonAnywhere)
+# ✅ CRIAR CONEXÃO GLOBAL (reuso recomendado)
 # ============================================================
 
 def get_connection(autocommit=True):
