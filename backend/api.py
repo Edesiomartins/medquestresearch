@@ -711,7 +711,15 @@ def cadastro():
 
 # ✅ ROTA LOGIN - ACEITA POST E OPTIONS
 @api_bp.route("/login", methods=["POST", "OPTIONS"])
+@limiter.exempt  # Exempt para garantir que OPTIONS não passe pelo rate limiter
 def login():
+    # Tratar OPTIONS primeiro (antes de qualquer processamento)
+    # Flask-CORS deve adicionar os headers automaticamente
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    
+    # Aplicar rate limit apenas para POST (key_func já ignora OPTIONS)
+    # Mas vamos garantir que não haja erro
     try:
         data = request.json
         if not data:
