@@ -139,6 +139,7 @@ api_bp = Blueprint('api', __name__)
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
 # Configurar CORS apenas para o domínio do Vercel
+# IMPORTANTE: Configurar CORS antes de registrar o Blueprint
 CORS(app, 
      resources={
          r"/*": {
