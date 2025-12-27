@@ -152,18 +152,17 @@ CORS(app,
      max_age=3600)
 
 # ✅ Configuração de rate limiting
-# Função para ignorar OPTIONS no rate limiting (evita erro 500 no preflight)
-def key_func():
-    if request.method == "OPTIONS":
-        return None  # Não aplicar rate limit em OPTIONS
-    return get_remote_address()
-
 limiter = Limiter(
-    key_func=key_func,
+    key_func=get_remote_address,
     app=app,
     default_limits=["100 per day", "10 per minute"],
     storage_uri="memory://",
 )
+
+# Filtrar requisições OPTIONS para não aplicar rate limiting
+@limiter.request_filter
+def skip_options():
+    return request.method == "OPTIONS"
 
 # ============================================
 # ✅ FUNÇÕES AUXILIARES
@@ -712,7 +711,7 @@ def cadastro():
 
 # ✅ ROTA LOGIN - ACEITA POST E OPTIONS
 @api_bp.route("/login", methods=["POST", "OPTIONS"])
-@limiter.exempt  # Exempt para garantir que OPTIONS não passe pelo rate limiter
+@limiter.limit("5 per minute")  # Rate limit apenas para POST (OPTIONS é filtrado automaticamente)
 def login():
     # Tratar OPTIONS primeiro (antes de qualquer processamento)
     if request.method == "OPTIONS":
