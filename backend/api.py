@@ -679,6 +679,19 @@ def health():
 
 @api_bp.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
+    # Tratar OPTIONS primeiro (antes de qualquer processamento)
+    if request.method == "OPTIONS":
+        # Criar resposta vazia
+        response = jsonify({})
+        # Adicionar headers CORS manualmente para garantir
+        origin = request.headers.get('Origin')
+        if origin == 'https://medquestresearch.vercel.app':
+            response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response, 200
+    
     try:
         data = request.json
         if not data:
