@@ -30,24 +30,8 @@ else:
     DB_NAME = os.getenv("DB_NAME")
     DB_PORT = int(os.getenv("DB_PORT", "5432"))
 
-# Validar que todas as variáveis estão configuradas
-# Se DATABASE_URL não estiver configurado, verificar variáveis individuais
-if not DATABASE_URL and not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
-    missing = []
-    if not DB_HOST:
-        missing.append("DB_HOST")
-    if not DB_USER:
-        missing.append("DB_USER")
-    if not DB_PASS:
-        missing.append("DB_PASSWORD")
-    if not DB_NAME:
-        missing.append("DB_NAME")
-    
-    raise ValueError(
-        f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
-        f"Configure DATABASE_URL no Railway Dashboard: Variables\n"
-        f"Ou configure individualmente: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
-    )
+# Validação será feita apenas quando tentar conectar (lazy validation)
+# Isso evita erros na importação do módulo
 
 
 # ============================================================
@@ -60,6 +44,24 @@ def get_connection(autocommit=True):
     Por padrão usa autocommit=True para compatibilidade.
     Para threads com commit explícito, use autocommit=False.
     """
+    # Validar variáveis de ambiente apenas quando tentar conectar
+    if not DATABASE_URL and not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
+        missing = []
+        if not DB_HOST:
+            missing.append("DB_HOST")
+        if not DB_USER:
+            missing.append("DB_USER")
+        if not DB_PASS:
+            missing.append("DB_PASSWORD")
+        if not DB_NAME:
+            missing.append("DB_NAME")
+        
+        raise ValueError(
+            f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
+            f"Configure DATABASE_URL no Railway Dashboard: Variables\n"
+            f"Ou configure individualmente: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
+        )
+    
     try:
         # Usar DATABASE_URL se disponível, senão usar variáveis individuais
         if DATABASE_URL:
