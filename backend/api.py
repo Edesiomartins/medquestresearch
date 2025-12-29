@@ -655,30 +655,30 @@ class InputMapa(BaseModel):
 # ✅ HANDLER DE ERROS GLOBAL
 # ============================================
 
-@app.errorhandler(Exception)
-def handle_error(e):
+@app.exception_handler(Exception)
+async def handle_exception(request: Request, exc: Exception):
     """Handler global para capturar erros e retornar JSON."""
     import traceback
     
     # Log do erro
-    print(f"❌ Erro capturado: {str(e)}")
+    print(f"❌ Erro capturado: {str(exc)}")
     print(traceback.format_exc())
     
     # Determinar status code
     status_code = 500
-    if hasattr(e, 'code'):
-        status_code = e.code
-    elif hasattr(e, 'status_code'):
-        status_code = e.status_code
+    if hasattr(exc, 'code'):
+        status_code = exc.code
+    elif hasattr(exc, 'status_code'):
+        status_code = exc.status_code
     
     # Retornar resposta JSON
-    response = jsonify({
-        "erro": "Erro interno do servidor",
-        "detalhes": str(e) if app.debug else "Erro ao processar requisição"
-    })
-    response.status_code = status_code
-    
-    return response
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "erro": "Erro interno do servidor",
+            "detalhes": str(exc)
+        }
+    )
 
 # ============================================
 # ✅ ROTAS BÁSICAS
