@@ -4,20 +4,20 @@
  * Esta configuração garante que todas as chamadas de API usem a URL correta
  * baseado no ambiente (desenvolvimento/produção).
  * 
- * PRODUÇÃO (Render):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch.onrender.com
- *   → Usa a URL do Render diretamente (sem prefixo /genapi)
+ * PRODUÇÃO (Railway):
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api-production.up.railway.app
+ *   → Usa a URL do Railway diretamente
  * 
  * DESENVOLVIMENTO (.env.local):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch.onrender.com
- *   → Ou use a URL do Render também em desenvolvimento
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api-production.up.railway.app
+ *   → Ou use a URL do Railway também em desenvolvimento
  */
 
-// URL base da API - OBRIGATÓRIA (Render)
+// URL base da API - OBRIGATÓRIA (Railway)
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 if (!API_BASE_URL) {
-  console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Render.');
+  console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Railway.');
 }
 
 // Endpoints da API
@@ -51,9 +51,9 @@ export const API_ENDPOINTS = {
 
 // Função helper para construir URLs completas
 export function getApiUrl(path: string): string {
-  // Usa a URL base do Render diretamente (sem prefixo /genapi)
+  // Usa a URL base do Railway diretamente
   if (!API_BASE_URL) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Render nas variáveis de ambiente.');
+    throw new Error('NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Railway nas variáveis de ambiente.');
   }
   
   return `${API_BASE_URL}${path}`;

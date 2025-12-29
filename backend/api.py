@@ -14,10 +14,12 @@ import traceback
 import json
 from functools import wraps
 
-from flask import Flask, request, jsonify, g, Blueprint, Blueprint
-from flask_cors import CORS  # ✅ Usar Flask-CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from fastapi import FastAPI, Request, HTTPException, Depends, Header, File, UploadFile, status
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel, validator
 from typing import Optional
 
@@ -129,40 +131,59 @@ except ImportError:
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
 
 # ============================================
-# ✅ APLICAÇÃO FLASK
+# ✅ APLICAÇÃO FASTAPI
 # ============================================
 
-app = Flask(__name__)
-
-# ✅ Criar Blueprint para todas as rotas da API (sem prefixo)
-api_bp = Blueprint('api', __name__)
+app = FastAPI(title="MedQuestResearch API", version="2.0")
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
 # Configurar CORS apenas para o domínio do Vercel
-# IMPORTANTE: Configurar CORS antes de registrar o Blueprint
-CORS(app, 
-     resources={
-    r"/*": {
-             "origins": ["https://medquestresearch.vercel.app"]
-         }
-     },
-     supports_credentials=False,
-     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-     max_age=3600)
-
-# ✅ Configuração de rate limiting
-limiter = Limiter(
-    key_func=get_remote_address,
-    app=app,
-    default_limits=["100 per day", "10 per minute"],
-    storage_uri="memory://",
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://medquestresearch.vercel.app"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    max_age=3600,
 )
 
-# Filtrar requisições OPTIONS para não aplicar rate limiting
-@limiter.request_filter
-def skip_options():
-    return request.method == "OPTIONS"
+# ✅ Configuração de rate limiting
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ============================================
+# ✅ MODELOS PYDANTIC
+# ============================================
+
+class CadastroRequest(BaseModel):
+    nome: str
+    email: str
+    senha: str
+
+class LoginRequest(BaseModel):
+    email: str
+    senha: str
+
+class ExplicarRequest(BaseModel):
+    texto_artigo: str
+    trecho: str
+    nivel: str
+
+class CriticaRequest(BaseModel):
+    texto_artigo: str
+    pergunta: Optional[str] = None
+
+class FatosRequest(BaseModel):
+    texto_artigo: str
+    afirmacoes: list
+
+class PerspectivaRequest(BaseModel):
+    texto_artigo: str
+    pergunta: str
+
+class MapaRequest(BaseModel):
+    texto_artigo: str
 
 # ============================================
 # ✅ FUNÇÕES AUXILIARES
@@ -174,8 +195,11 @@ def gerar_token():
 def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
 
-def autenticar(request):
-    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+def autenticar(authorization: Optional[str] = Header(None)):
+    """Função de autenticação para FastAPI."""
+    if not authorization:
+        return None
+    token = authorization.replace("Bearer ", "").strip()
     if not token:
         return None
     row = db_select_one("SELECT * FROM usuarios WHERE token=%s", (token,))
@@ -204,17 +228,22 @@ def debitar_creditos(usuario_id, qtd):
 
 def db_insert_return_id(sql, params):
     """Executa um INSERT e retorna o ID do registro inserido."""
+    # Para PostgreSQL, precisamos usar RETURNING id
+    if "RETURNING" not in sql.upper():
+        sql = sql.rstrip(";") + " RETURNING id"
+    
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(sql, params)
+            result = cursor.fetchone()
             conn.commit()
-            return cursor.lastrowid
+            return result["id"] if result else None
     finally:
         conn.close()
 
-def registrar_log(usuario_id, modulo, entrada, saida, creditos):
-    ip = request.remote_addr
+def registrar_log(usuario_id, modulo, entrada, saida, creditos, request: Request = None):
+    ip = request.client.host if request and request.client else "unknown"
     db_execute("""
         INSERT INTO gen_logs_uso (usuario_id, modulo, entrada, saida, creditos_gastos, ip)
         VALUES (%s, %s, %s, %s, %s, %s)
@@ -226,15 +255,12 @@ def read_docx(file_path):
     text = '\n'.join([p.text for p in doc.paragraphs])
     return text
 
-def require_api_key(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-        g.user = user
-        return f(*args, **kwargs)
-    return decorated_function
+async def require_api_key(authorization: str = Header(None)):
+    """Dependency para autenticação em rotas FastAPI."""
+    user = autenticar(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    return user
 
 def log_t(msg):
     """Função auxiliar para logging com timestamp."""
@@ -658,152 +684,97 @@ def handle_error(e):
 # ✅ ROTAS BÁSICAS
 # ============================================
 
-@limiter.exempt
-@app.route("/", methods=["GET", "HEAD"])
+@app.get("/")
 def index():
-    return jsonify({"status": "Medquestresearch API está ativa ✅", "version": "2.0"})
+    return {"status": "Medquestresearch API está ativa ✅", "version": "2.0"}
 
-@limiter.exempt
-@app.route("/ping")
+@app.get("/ping")
 def ping():
-    return jsonify({"message": "pong", "timestamp": datetime.datetime.now().isoformat()})
+    return {"message": "pong", "timestamp": datetime.datetime.now().isoformat()}
 
-@limiter.exempt
-@app.route("/health")
+@app.get("/health")
 def health():
-    return jsonify({"status": "healthy", "timestamp": datetime.datetime.now().isoformat()})
+    return {"status": "healthy", "timestamp": datetime.datetime.now().isoformat()}
 
 # ============================================
 # ✅ ROTAS DE USUÁRIO
 # ============================================
 
-@api_bp.route("/cadastro", methods=["POST", "OPTIONS"])
-def cadastro():
-    # Tratar OPTIONS primeiro (antes de qualquer processamento)
-    if request.method == "OPTIONS":
-        # Criar resposta vazia
-        response = jsonify({})
-        # Adicionar headers CORS manualmente para garantir
-        origin = request.headers.get('Origin')
-        if origin == 'https://medquestresearch.vercel.app':
-            response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
-    
+@app.post("/cadastro")
+def cadastro(data: CadastroRequest):
     try:
-        data = request.json
-        if not data:
-            return jsonify({"erro": "Dados não fornecidos"}), 400
-        
-        nome = data.get("nome")
-        email = data.get("email")
-        senha = data.get("senha")
+        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,)):
+            raise HTTPException(status_code=400, detail="Email já cadastrado")
 
-        if not nome or not email or not senha:
-            return jsonify({"erro": "Campos obrigatórios faltando"}), 400
-
-        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,)):
-            return jsonify({"erro": "Email já cadastrado"}), 400
-
-        senha_hash = hash_senha(senha)
+        senha_hash = hash_senha(data.senha)
         token = gerar_token()
 
         db_execute("""
             INSERT INTO usuarios (nome, email, senha_hash, creditos)
             VALUES (%s, %s, %s, 10)
-        """, (nome, email, senha_hash))
+        """, (data.nome, data.email, senha_hash))
 
-        db_execute("UPDATE usuarios SET token=%s WHERE email=%s", (token, email))
+        db_execute("UPDATE usuarios SET token=%s WHERE email=%s", (token, data.email))
 
-        return jsonify({"status": "Usuário criado", "token": token})
+        return {"status": "Usuário criado", "token": token}
     
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"erro": "Erro ao criar usuário", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro ao criar usuário: {str(e)}")
 
-# ✅ ROTA LOGIN - ACEITA POST E OPTIONS
-@api_bp.route("/login", methods=["POST", "OPTIONS"])
-@limiter.limit("5 per minute")  # Rate limit apenas para POST (OPTIONS é filtrado automaticamente)
-def login():
-    # Tratar OPTIONS primeiro (antes de qualquer processamento)
-    if request.method == "OPTIONS":
-        # Criar resposta vazia
-        response = jsonify({})
-        # Adicionar headers CORS manualmente para garantir
-        origin = request.headers.get('Origin')
-        if origin == 'https://medquestresearch.vercel.app':
-            response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With')
-        response.headers.add('Access-Control-Max-Age', '3600')
-        return response, 200
-    
-    # Aplicar rate limit apenas para POST (key_func já ignora OPTIONS)
-    # Mas vamos garantir que não haja erro
+@app.post("/login")
+@limiter.limit("5 per minute")
+def login(data: LoginRequest):
     try:
-        data = request.json
-        if not data:
-            return jsonify({"erro": "Dados inválidos"}), 400
-        
-        email = data.get("email")
-        senha = data.get("senha")
-
-        if not email or not senha:
-            return jsonify({"erro": "Email e senha são obrigatórios"}), 400
-
-        row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,))
+        row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,))
         if not row:
-            return jsonify({"erro": "Email não encontrado"}), 404
+            raise HTTPException(status_code=404, detail="Email não encontrado")
 
-        if row["senha_hash"] != hash_senha(senha):
-            return jsonify({"erro": "Senha incorreta"}), 401
+        if row["senha_hash"] != hash_senha(data.senha):
+            raise HTTPException(status_code=401, detail="Senha incorreta")
 
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
 
-        return jsonify({"token": token, "status": "Login realizado com sucesso"})
+        return {"token": token, "status": "Login realizado com sucesso"}
     
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"erro": "Erro ao fazer login", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer login: {str(e)}")
 
-@api_bp.route("/creditos", methods=["GET", "OPTIONS"])
-def creditos():
+@app.get("/creditos")
+def creditos(user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
         # Verificar se user tem as chaves necessárias
         if "creditos" not in user or "creditos_usados" not in user:
             logging.error(f"Usuário sem chaves de créditos: {user.keys()}")
-            return jsonify({"erro": "Erro ao buscar créditos", "detalhes": "Dados do usuário incompletos"}), 500
-
+            raise HTTPException(status_code=500, detail="Dados do usuário incompletos")
+        
         disponiveis = creditos_disponiveis(user)
         
-        return jsonify({
+        return {
             "creditos": user.get("creditos", 0),
             "creditos_usados": user.get("creditos_usados", 0),
             "creditos_disponiveis": disponiveis
-        })
+        }
+    except HTTPException:
+        raise
     except KeyError as e:
         logging.error(f"Erro de chave em creditos: {e}, user keys: {list(user.keys()) if user else 'None'}")
-        return jsonify({"erro": "Erro ao buscar créditos", "detalhes": f"Chave faltando: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail=f"Chave faltando: {str(e)}")
     except Exception as e:
         logging.error(f"Erro em creditos: {e}")
         import traceback
         logging.error(traceback.format_exc())
-        return jsonify({"erro": "Erro ao buscar créditos", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar créditos: {str(e)}")
 
-@api_bp.route("/jobs", methods=["GET", "OPTIONS"])
+@app.get("/jobs")
 @limiter.limit("30 per minute")
-def listar_jobs():
+def listar_jobs(user = Depends(require_api_key)):
     """Lista todos os jobs do usuário."""
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
         jobs = db_select(
             "SELECT id, modulo, status FROM research_jobs WHERE usuario_id = %s ORDER BY id DESC",
             (user["id"],)
@@ -819,28 +790,24 @@ def listar_jobs():
             for job in jobs
         ]
 
-        return jsonify(response)
+        return response
     except Exception as e:
         logging.error(f"Erro em listar_jobs: {e}")
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/job/<int:job_id>", methods=["GET", "OPTIONS"])
-@api_bp.route("/status/<int:job_id>", methods=["GET", "OPTIONS"])
+@app.get("/job/{job_id}")
+@app.get("/status/{job_id}")
 @limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
-def status_job(job_id):
+def status_job(job_id: int, user = Depends(require_api_key)):
     """Verifica o status de um job de processamento assíncrono."""
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
         job = db_select_one(
             "SELECT * FROM research_jobs WHERE id = %s AND usuario_id = %s",
             (job_id, user["id"])
         )
 
         if not job:
-            return jsonify({"erro": "Job não encontrado"}), 404
+            raise HTTPException(status_code=404, detail="Job não encontrado")
 
         response = {
             "request_id": job["id"],
@@ -858,333 +825,298 @@ def status_job(job_id):
             response["erro"] = job["erro"]
             response["detalhes"] = job["erro"]
 
-        return jsonify(response)
+        return response
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Erro em status_job: {e}")
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
 # ============================================
 # ✅ ROTAS DE IA
 # ============================================
 
-@api_bp.route("/explicar", methods=["POST", "OPTIONS"])
-@api_bp.route("/explain_concept", methods=["POST", "OPTIONS"])
+@app.post("/explicar")
+@app.post("/explain_concept")
 @limiter.limit("10 per minute")
-def rota_explicar():
+def rota_explicar(data: InputTexto, request: Request, user = Depends(require_api_key)):
     log_t("INICIO REQUEST")
     print(">>> ENTROU NA ROTA /explicar")
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputTexto(**request.json)
-            texto_artigo = data.texto_artigo
-            trecho = data.trecho
-            nivel = data.nivel
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
-        if not trecho:
-            return jsonify({"erro": "Campo 'trecho' é obrigatório"}), 400
+        if not data.trecho:
+            raise HTTPException(status_code=400, detail="Campo 'trecho' é obrigatório")
 
         custo = 5
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
-        dados_extras = json.dumps({"trecho": trecho, "nivel": nivel})
+        dados_extras = json.dumps({"trecho": data.trecho, "nivel": data.nivel})
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
-            (user["id"], "explicar", "processing", texto_artigo, custo, dados_extras)
+            (user["id"], "explicar", "processing", data.texto_artigo, custo, dados_extras)
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_explicar,
-            args=(job_id, texto_artigo, trecho, nivel),
+            args=(job_id, data.texto_artigo, data.trecho, data.nivel),
             daemon=True
         ).start()
 
         log_t("FIM REQUEST")
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /explicar")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/critica", methods=["POST", "OPTIONS"])
-@api_bp.route("/critical_analysis", methods=["POST", "OPTIONS"])
+@app.post("/critica")
+@app.post("/critical_analysis")
 @limiter.limit("10 per minute")
-def rota_critica():
+def rota_critica(data: InputCritica, user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputCritica(**request.json)
-            texto_artigo = data.texto_artigo
-            foco_analise = data.foco_analise or "geral"
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
+        foco_analise = data.foco_analise or "geral"
         custo = 7
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
-            (user["id"], "critica", "processing", texto_artigo, custo, json.dumps({"foco_analise": foco_analise}))
+            (user["id"], "critica", "processing", data.texto_artigo, custo, json.dumps({"foco_analise": foco_analise}))
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_critica,
-            args=(job_id, texto_artigo, foco_analise),
+            args=(job_id, data.texto_artigo, foco_analise),
             daemon=True
         ).start()
 
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /critica")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/fatos", methods=["POST", "OPTIONS"])
-@api_bp.route("/fact_checker", methods=["POST", "OPTIONS"])
+@app.post("/fatos")
+@app.post("/fact_checker")
 @limiter.limit("10 per minute")
-def rota_fatos():
+def rota_fatos(data: InputFatos, user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputFatos(**request.json)
-            texto_artigo = data.texto_artigo
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
         custo = 5
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
-            (user["id"], "fatos", "processing", texto_artigo, custo)
+            (user["id"], "fatos", "processing", data.texto_artigo, custo)
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_fatos,
-            args=(job_id, texto_artigo),
+            args=(job_id, data.texto_artigo),
             daemon=True
         ).start()
 
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /fatos")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/perspectiva", methods=["POST", "OPTIONS"])
-@api_bp.route("/perspective_research", methods=["POST", "OPTIONS"])
+@app.post("/perspectiva")
+@app.post("/perspective_research")
 @limiter.limit("10 per minute")
-def rota_perspectiva():
+def rota_perspectiva(data: InputPerspectiva, user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputPerspectiva(**request.json)
-            texto_artigo = data.texto_artigo
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
         custo = 10
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
-            (user["id"], "perspectiva", "processing", texto_artigo, custo)
+            (user["id"], "perspectiva", "processing", data.texto_artigo, custo)
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_perspectiva,
-            args=(job_id, texto_artigo),
+            args=(job_id, data.texto_artigo),
             daemon=True
         ).start()
 
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /perspectiva")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/mapa", methods=["POST", "OPTIONS"])
-@api_bp.route("/structure_visualizer", methods=["POST", "OPTIONS"])
+@app.post("/mapa")
+@app.post("/structure_visualizer")
 @limiter.limit("10 per minute")
-def rota_mapa():
+def rota_mapa(data: InputMapa, user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputMapa(**request.json)
-            texto_artigo = data.texto_artigo
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
         custo = 8
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
-            (user["id"], "mapa", "processing", texto_artigo, custo)
+            (user["id"], "mapa", "processing", data.texto_artigo, custo)
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_mapa,
-            args=(job_id, texto_artigo),
+            args=(job_id, data.texto_artigo),
             daemon=True
         ).start()
 
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /mapa")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/structure_mapper", methods=["POST", "OPTIONS"])
+@app.post("/structure_mapper")
 @limiter.limit("10 per minute")
-def rota_structure_mapper():
+def rota_structure_mapper(data: InputMapa, user = Depends(require_api_key)):
     try:
-        user = autenticar(request)
-        if not user:
-            return jsonify({"erro": "Não autorizado"}), 401
-
-        try:
-            data = InputMapa(**request.json)
-            texto_artigo = data.texto_artigo
-        except Exception as e:
-            return jsonify({"erro": "Dados inválidos", "detalhes": str(e)}), 400
-
         custo = 6
         if not debitar_creditos(user["id"], custo):
-            return jsonify({"erro": "Créditos insuficientes"}), 402
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
-            (user["id"], "structure_mapper", "processing", texto_artigo, custo)
+            (user["id"], "structure_mapper", "processing", data.texto_artigo, custo)
         )
 
         # Iniciar processamento em background
         threading.Thread(
             target=processar_job_structure_mapper,
-            args=(job_id, texto_artigo),
+            args=(job_id, data.texto_artigo),
             daemon=True
         ).start()
 
-        return jsonify({
-            "request_id": job_id,
-            "status": "processing"
-        }), 202
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing"
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /structure_mapper")
         traceback.print_exc()
-        return jsonify({"erro": "Erro interno do servidor", "detalhes": str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_bp.route("/pdf", methods=["POST", "OPTIONS"])
+@app.post("/pdf")
 @limiter.limit("10 per minute")
-def rota_pdf():
-    user = autenticar(request)
-    if not user:
-        return jsonify({"erro": "Não autorizado"}), 401
-
-    if "file" not in request.files:
-        return jsonify({"erro": "Arquivo não enviado", "detalhes": "Campo 'file' não encontrado"}), 400
-
-    arquivo = request.files["file"]
-
-    if arquivo.filename == '':
-        return jsonify({"erro": "Nenhum arquivo selecionado"}), 400
-
-    if not arquivo.filename or not arquivo.filename.lower().endswith((".pdf", ".docx")):
-        return jsonify({"erro": "Formato inválido", "detalhes": "Apenas PDF e DOCX"}), 400
-
-    extensao = arquivo.filename.lower().split('.')[-1]
-    
-    temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}.{extensao}")
-    arquivo.save(temp_path)
-
+async def rota_pdf(file: UploadFile = File(...), user = Depends(require_api_key), request: Request = None):
     try:
-        if extensao == 'pdf':
-            texto_extraido = extrair_texto_pdf(temp_path)
-        elif extensao == 'docx':
-            texto_extraido = read_docx(temp_path)
-        else:
-            return jsonify({"erro": "Formato não suportado"}), 400
+        if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
+            raise HTTPException(status_code=400, detail="Formato inválido. Apenas PDF e DOCX são suportados.")
+
+        extensao = file.filename.lower().split('.')[-1]
         
-        if isinstance(texto_extraido, list):
-            texto_extraido = "\n\n".join(texto_extraido)
+        temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}.{extensao}")
+        
+        # Salvar arquivo
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
 
-        texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
-        registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, 0)
+        try:
+            if extensao == 'pdf':
+                texto_extraido = extrair_texto_pdf(temp_path)
+            elif extensao == 'docx':
+                texto_extraido = read_docx(temp_path)
+            else:
+                raise HTTPException(status_code=400, detail="Formato não suportado")
+            
+            if isinstance(texto_extraido, list):
+                texto_extraido = "\n\n".join(texto_extraido)
 
-        return jsonify({"resultado": texto_extraido})
+            texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
+            registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, 0, request)
 
+            return {"resultado": texto_extraido}
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Falha ao processar arquivo: {str(e)}")
+
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"erro": "Falha ao processar arquivo", "detalhes": str(e)}), 500
-
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-# ============================================
-# ✅ REGISTRAR BLUEPRINT COM PREFIXO /genapi
-# ============================================
-app.register_blueprint(api_bp)
+        raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
 
 # ============================================
 # ✅ EXECUÇÃO LOCAL (para desenvolvimento)
 # ============================================
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
