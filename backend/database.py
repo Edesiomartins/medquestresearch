@@ -1,9 +1,7 @@
 import psycopg2  # pyright: ignore[reportMissingModuleSource]
-import psycopg2.extras  # pyright: ignore[reportMissingModuleSource]
 import os
 from urllib.parse import urlparse
 from dotenv import load_dotenv
-
 # Carregar variáveis de ambiente
 load_dotenv()
 
