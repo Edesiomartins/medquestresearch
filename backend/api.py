@@ -693,19 +693,23 @@ def db_test():
 # ============================================
 
 @app.post("/cadastro")
-def cadastro(data: CadastroRequest):
+def cadastro(request: Request, data: CadastroInput):
+    nome = data.nome
+    email = data.email
+    senha = data.senha
+    
     try:
-        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,)):
+        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,)):
             raise HTTPException(status_code=400, detail="Email já cadastrado")
 
-        senha_hash = hash_senha(data.senha)
+        senha_hash = hash_senha(senha)
         token = gerar_token()
 
         # Inserir usuário e obter o ID
         usuario_id = db_insert_return_id("""
             INSERT INTO usuarios (nome, email, senha_hash, creditos)
             VALUES (%s, %s, %s, 10)
-        """, (data.nome, data.email, senha_hash))
+        """, (nome, email, senha_hash))
         
         if not usuario_id:
             raise HTTPException(status_code=500, detail="Erro ao criar usuário no banco de dados")
