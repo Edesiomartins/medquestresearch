@@ -8,10 +8,10 @@ load_dotenv()
 # ============================================================
 # ✅ CONFIGURAÇÃO DO BANCO (via variáveis de ambiente)
 # ============================================================
-# IMPORTANTE: O Render fornece DATABASE_URL automaticamente
-# ou configure manualmente no Render Dashboard
+# IMPORTANTE: O Railway fornece DATABASE_URL automaticamente
+# ou configure manualmente no Railway Dashboard
 
-# Tentar usar DATABASE_URL primeiro (formato do Render)
+# Tentar usar DATABASE_URL primeiro (formato do Railway)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
@@ -43,11 +43,11 @@ if not DATABASE_URL and not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
     if not DB_NAME:
         missing.append("DB_NAME")
     
-    raise ValueError(
-        f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
-        f"Configure DATABASE_URL no Render Dashboard: Settings > Environment Variables\n"
-        f"Ou configure individualmente: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
-    )
+        raise ValueError(
+            f"❌ Variáveis de ambiente do banco de dados não configuradas: {', '.join(missing)}\n"
+            f"Configure DATABASE_URL no Railway Dashboard: Variables\n"
+            f"Ou configure individualmente: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
+        )
 
 
 # ============================================================
