@@ -762,7 +762,7 @@ def creditos(user = Depends(require_api_key)):
 
 @app.get("/jobs")
 @limiter.limit("30 per minute")
-def listar_jobs(user = Depends(require_api_key)):
+def listar_jobs(request: Request, user = Depends(require_api_key)):
     """Lista todos os jobs do usuário."""
     try:
         jobs = db_select(
@@ -788,7 +788,7 @@ def listar_jobs(user = Depends(require_api_key)):
 @app.get("/job/{job_id}")
 @app.get("/status/{job_id}")
 @limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
-def status_job(job_id: int, user = Depends(require_api_key)):
+def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
     """Verifica o status de um job de processamento assíncrono."""
     try:
         job = db_select_one(
@@ -829,7 +829,7 @@ def status_job(job_id: int, user = Depends(require_api_key)):
 @app.post("/explicar")
 @app.post("/explain_concept")
 @limiter.limit("10 per minute")
-def rota_explicar(data: InputTexto, request: Request, user = Depends(require_api_key)):
+def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api_key)):
     log_t("INICIO REQUEST")
     print(">>> ENTROU NA ROTA /explicar")
     try:
@@ -873,7 +873,7 @@ def rota_explicar(data: InputTexto, request: Request, user = Depends(require_api
 @app.post("/critica")
 @app.post("/critical_analysis")
 @limiter.limit("10 per minute")
-def rota_critica(data: InputCritica, user = Depends(require_api_key)):
+def rota_critica(request: Request, data: InputCritica, user = Depends(require_api_key)):
     try:
         foco_analise = data.foco_analise or "geral"
         custo = 7
@@ -911,7 +911,7 @@ def rota_critica(data: InputCritica, user = Depends(require_api_key)):
 @app.post("/fatos")
 @app.post("/fact_checker")
 @limiter.limit("10 per minute")
-def rota_fatos(data: InputFatos, user = Depends(require_api_key)):
+def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_key)):
     try:
         custo = 5
         if not debitar_creditos(user["id"], custo):
@@ -948,7 +948,7 @@ def rota_fatos(data: InputFatos, user = Depends(require_api_key)):
 @app.post("/perspectiva")
 @app.post("/perspective_research")
 @limiter.limit("10 per minute")
-def rota_perspectiva(data: InputPerspectiva, user = Depends(require_api_key)):
+def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(require_api_key)):
     try:
         custo = 10
         if not debitar_creditos(user["id"], custo):
@@ -985,7 +985,7 @@ def rota_perspectiva(data: InputPerspectiva, user = Depends(require_api_key)):
 @app.post("/mapa")
 @app.post("/structure_visualizer")
 @limiter.limit("10 per minute")
-def rota_mapa(data: InputMapa, user = Depends(require_api_key)):
+def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
         custo = 8
         if not debitar_creditos(user["id"], custo):
@@ -1021,7 +1021,7 @@ def rota_mapa(data: InputMapa, user = Depends(require_api_key)):
 
 @app.post("/structure_mapper")
 @limiter.limit("10 per minute")
-def rota_structure_mapper(data: InputMapa, user = Depends(require_api_key)):
+def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
         custo = 6
         if not debitar_creditos(user["id"], custo):
@@ -1057,7 +1057,7 @@ def rota_structure_mapper(data: InputMapa, user = Depends(require_api_key)):
 
 @app.post("/pdf")
 @limiter.limit("10 per minute")
-async def rota_pdf(file: UploadFile = File(...), user = Depends(require_api_key), request: Request = None):
+async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depends(require_api_key)):
     try:
         if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
             raise HTTPException(status_code=400, detail="Formato inválido. Apenas PDF e DOCX são suportados.")
