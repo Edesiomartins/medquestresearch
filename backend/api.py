@@ -701,12 +701,17 @@ def cadastro(data: CadastroRequest):
         senha_hash = hash_senha(data.senha)
         token = gerar_token()
 
-        db_execute("""
+        # Inserir usuário e obter o ID
+        usuario_id = db_insert_return_id("""
             INSERT INTO usuarios (nome, email, senha_hash, creditos)
             VALUES (%s, %s, %s, 10)
         """, (data.nome, data.email, senha_hash))
+        
+        if not usuario_id:
+            raise HTTPException(status_code=500, detail="Erro ao criar usuário no banco de dados")
 
-        db_execute("UPDATE usuarios SET token=%s WHERE email=%s", (token, data.email))
+        # Atualizar token usando o ID
+        db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, usuario_id))
 
         return {"status": "Usuário criado", "token": token}
     
