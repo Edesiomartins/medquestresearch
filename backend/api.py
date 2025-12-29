@@ -696,6 +696,14 @@ def ping():
 def health():
     return {"status": "healthy", "timestamp": datetime.datetime.now().isoformat()}
 
+@app.get("/db-test")
+def db_test():
+    try:
+        r = db_select_one("SELECT count(*) AS total FROM usuarios")
+        return {"ok": True, "usuarios": r["total"]}
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
+
 # ============================================
 # ✅ ROTAS DE USUÁRIO
 # ============================================
