@@ -158,7 +158,7 @@ app.add_middleware(SlowAPIMiddleware)
 # ✅ MODELOS PYDANTIC
 # ============================================
 
-class CadastroRequest(BaseModel):
+class CadastroInput(BaseModel):
     nome: str
     email: str
     senha: str
