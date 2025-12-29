@@ -715,7 +715,7 @@ def cadastro(data: CadastroRequest):
 
 @app.post("/login")
 @limiter.limit("5 per minute")
-def login(data: LoginRequest):
+def login(request: Request, data: LoginRequest):
     try:
         row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,))
         if not row:
