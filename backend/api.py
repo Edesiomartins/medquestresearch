@@ -656,28 +656,10 @@ class InputMapa(BaseModel):
 # ============================================
 
 @app.exception_handler(Exception)
-async def handle_exception(request: Request, exc: Exception):
-    """Handler global para capturar erros e retornar JSON."""
-    import traceback
-    
-    # Log do erro
-    print(f"❌ Erro capturado: {str(exc)}")
-    print(traceback.format_exc())
-    
-    # Determinar status code
-    status_code = 500
-    if hasattr(exc, 'code'):
-        status_code = exc.code
-    elif hasattr(exc, 'status_code'):
-        status_code = exc.status_code
-    
-    # Retornar resposta JSON
+async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
-        status_code=status_code,
-        content={
-            "erro": "Erro interno do servidor",
-            "detalhes": str(exc)
-        }
+        status_code=500,
+        content={"erro": str(exc)}
     )
 
 # ============================================
