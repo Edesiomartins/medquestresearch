@@ -13,14 +13,15 @@ import threading
 import traceback
 import json
 from functools import wraps
+from psycopg2 import IntegrityError
 
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, File, UploadFile, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler  # pyright: ignore[reportMissingImports]
+from slowapi.util import get_remote_address  # pyright: ignore[reportMissingImports]
+from slowapi.errors import RateLimitExceeded  # pyright: ignore[reportMissingImports]  # pyright: ignore[reportMissingImports]
+from slowapi.middleware import SlowAPIMiddleware  # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel, validator
 from typing import Optional
 
@@ -196,6 +197,12 @@ def gerar_token():
 
 def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
+
+def gerar_hash_senha(senha):
+    return hash_senha(senha)
+
+def gerar_hash_senha(senha):
+    return hash_senha(senha)
 
 def autenticar(authorization: Optional[str] = Header(None)):
     """Função de autenticação para FastAPI."""
@@ -694,35 +701,33 @@ def db_test():
 
 @app.post("/cadastro")
 def cadastro(request: Request, data: CadastroInput):
-    nome = data.nome
-    email = data.email
-    senha = data.senha
-    
     try:
-        if db_select_one("SELECT * FROM usuarios WHERE email=%s", (email,)):
-            raise HTTPException(status_code=400, detail="Email já cadastrado")
+        senha_hash = gerar_hash_senha(data.senha)
 
-        senha_hash = hash_senha(senha)
-        token = gerar_token()
+        db_execute(
+            """
+            INSERT INTO usuarios (nome, email, senha_hash)
+            VALUES (%s, %s, %s)
+            """,
+            (data.nome, data.email, senha_hash)
+        )
 
-        # Inserir usuário e obter o ID
-        usuario_id = db_insert_return_id("""
-            INSERT INTO usuarios (nome, email, senha_hash, creditos)
-            VALUES (%s, %s, %s, 10)
-        """, (nome, email, senha_hash))
-        
-        if not usuario_id:
-            raise HTTPException(status_code=500, detail="Erro ao criar usuário no banco de dados")
+        return {"mensagem": "Usuário criado com sucesso"}
 
-        # Atualizar token usando o ID
-        db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, usuario_id))
+    except IntegrityError:
+        return JSONResponse(
+            status_code=400,
+            content={"erro": "Email já cadastrado"}
+        )
 
-        return {"status": "Usuário criado", "token": token}
-    
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao criar usuário: {str(e)}")
+        print("❌ ERRO NO CADASTRO:")
+        print(traceback.format_exc())  # 🔥 ISSO MOSTRA O ERRO NO LOG
+
+        return JSONResponse(
+            status_code=500,
+            content={"erro": str(e)}
+        )
 
 @app.post("/login")
 @limiter.limit("5 per minute")
