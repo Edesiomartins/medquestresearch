@@ -13,6 +13,10 @@ RUN pip install --upgrade pip && \
 # Copiar o diretório backend
 COPY backend/ /app/backend/
 
+# Criar um symlink ou copiar requirements.txt para backend/ também
+# Isso garante que se o Railway tentar instalar de backend/requirements.txt, funcionará
+RUN cp /app/requirements.txt /app/backend/requirements.txt || true
+
 # Expor porta (Railway define $PORT automaticamente)
 EXPOSE 8000
 
