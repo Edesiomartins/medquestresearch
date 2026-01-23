@@ -4,10 +4,10 @@ nixPkgs = ["python312"]
 [phases.install]
 cmds = [
   "pip install --upgrade pip",
-  "cd backend && pip install -r requirements.txt"
+  "pip install -r requirements.txt"
 ]
 
-# Fase de build vazia
+# Fase de build vazia para evitar que o Railway tente instalar de backend/requirements.txt
 [phases.build]
 cmds = []
 
