@@ -139,10 +139,18 @@ except ImportError:
 app = FastAPI(title="MedQuestResearch API", version="2.0")
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
-# Configurar CORS apenas para o domínio do Vercel
+# Configurar CORS para Vercel e Railway
+# Permite configurar origens via variável de ambiente ALLOWED_ORIGINS (separadas por vírgula)
+# Exemplo: ALLOWED_ORIGINS=https://medquestresearch.vercel.app,https://medquestresearch-production.up.railway.app
+allowed_origins_env = os.getenv(
+    "ALLOWED_ORIGINS", 
+    "https://medquestresearch.vercel.app,https://medquestresearch-production.up.railway.app"
+)
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://medquestresearch.vercel.app"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
@@ -338,7 +346,7 @@ def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: s
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -359,7 +367,7 @@ def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: s
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -385,7 +393,7 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -406,7 +414,7 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -430,7 +438,7 @@ def processar_job_fatos(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -451,7 +459,7 @@ def processar_job_fatos(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -484,7 +492,7 @@ def processar_job_perspectiva(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -505,7 +513,7 @@ def processar_job_perspectiva(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -529,7 +537,7 @@ def processar_job_mapa(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -550,7 +558,7 @@ def processar_job_mapa(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -574,7 +582,7 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -595,7 +603,7 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
-        conn = get_connection(autocommit=False)
+        conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
