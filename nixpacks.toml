@@ -7,9 +7,14 @@ cmds = [
   "pip install -r requirements.txt"
 ]
 
-# Fase de build vazia para evitar que o Railway tente instalar de backend/requirements.txt
+# Na fase de build, garantir que backend/requirements.txt exista
+# Isso resolve o problema do Railway tentar instalar de backend/requirements.txt
 [phases.build]
-cmds = []
+cmds = [
+  "mkdir -p backend || true",
+  "cp requirements.txt backend/requirements.txt || true",
+  "pip install -r backend/requirements.txt || pip install -r requirements.txt"
+]
 
 [start]
 cmd = "cd backend && uvicorn api:app --host 0.0.0.0 --port $PORT"
