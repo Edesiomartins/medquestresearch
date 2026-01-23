@@ -8,11 +8,11 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copiar todo o código
+# Copiar todo o código (incluindo backend/)
 COPY . .
 
 # Expor porta (Railway define $PORT)
-EXPOSE $PORT
+EXPOSE ${PORT:-8000}
 
 # Comando de inicialização
 WORKDIR /app/backend

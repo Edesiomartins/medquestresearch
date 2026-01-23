@@ -139,14 +139,23 @@ except ImportError:
 app = FastAPI(title="MedQuestResearch API", version="2.0")
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
-# Configurar CORS para Vercel e Railway
+# Configurar CORS para Railway
 # Permite configurar origens via variável de ambiente ALLOWED_ORIGINS (separadas por vírgula)
-# Exemplo: ALLOWED_ORIGINS=https://medquestresearch.vercel.app,https://medquestresearch-production.up.railway.app
-allowed_origins_env = os.getenv(
-    "ALLOWED_ORIGINS", 
-    "https://medquestresearch.vercel.app,https://medquestresearch-production.up.railway.app"
-)
-allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+# Exemplo: ALLOWED_ORIGINS=https://medquestresearch.up.railway.app,https://outra-url.com
+default_origins = [
+    "https://medquestresearch.up.railway.app",
+    "http://localhost:3000",  # Desenvolvimento local
+    "http://localhost:3001",  # Desenvolvimento local alternativo
+]
+
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    # Se ALLOWED_ORIGINS estiver configurada, usar ela + defaults
+    env_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+    allowed_origins = list(set(default_origins + env_origins))  # Remove duplicatas
+else:
+    # Se não estiver configurada, usar apenas os defaults
+    allowed_origins = default_origins
 
 app.add_middleware(
     CORSMiddleware,

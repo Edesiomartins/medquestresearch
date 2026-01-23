@@ -1,0 +1,6 @@
+# Arquivos ignorados pelo Railway durante o build
+frontend/
+*.md
+.git/
+.vscode/
+.DS_Store
