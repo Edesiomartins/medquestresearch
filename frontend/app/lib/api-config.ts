@@ -5,19 +5,21 @@
  * baseado no ambiente (desenvolvimento/produção).
  * 
  * PRODUÇÃO (Railway):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api-production.up.railway.app
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api.up.railway.app
  *   → Usa a URL do Railway diretamente
  * 
  * DESENVOLVIMENTO (.env.local):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api-production.up.railway.app
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api.up.railway.app
  *   → Ou use a URL do Railway também em desenvolvimento
+ *   → Ou http://localhost:5000 para desenvolvimento local
  */
 
 // URL base da API - OBRIGATÓRIA (Railway)
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+// Fallback para a URL de produção se não estiver configurada
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://medquest-research-api.up.railway.app';
 
 if (!API_BASE_URL) {
-  console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Railway.');
+  console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Usando URL padrão do Railway.');
 }
 
 // Endpoints da API
@@ -51,12 +53,11 @@ export const API_ENDPOINTS = {
 
 // Função helper para construir URLs completas
 export function getApiUrl(path: string): string {
-  // Usa a URL base do Railway diretamente
-  if (!API_BASE_URL) {
-    throw new Error('NEXT_PUBLIC_API_BASE_URL não configurado. Configure a URL do Railway nas variáveis de ambiente.');
-  }
+  // Remove barra duplicada se houver
+  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
   
-  return `${API_BASE_URL}${path}`;
+  return `${baseUrl}${cleanPath}`;
 }
 
 // Configuração padrão para fetch requests

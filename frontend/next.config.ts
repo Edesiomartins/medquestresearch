@@ -32,8 +32,8 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    // Não usa mais proxy - todas as chamadas vão direto para o Render
-    // Configure NEXT_PUBLIC_API_BASE_URL com a URL do Render
+    // Não usa mais proxy - todas as chamadas vão direto para o Railway
+    // Configure NEXT_PUBLIC_API_BASE_URL com a URL do Railway (medquest-research-api.up.railway.app)
     return [];
   },
 };
