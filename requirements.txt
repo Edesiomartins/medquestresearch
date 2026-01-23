@@ -11,4 +11,7 @@ tiktoken
 PyMuPDF
 python-docx
 slowapi
+google-generativeai
+groq
+requests
 
