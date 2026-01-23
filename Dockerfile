@@ -1,18 +1,16 @@
 # Dockerfile para Railway
-# Este Dockerfile resolve o problema do Railpack tentar instalar de backend/requirements.txt
+# Agora o requirements.txt está dentro do diretório backend/
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copiar requirements.txt da raiz PRIMEIRO e instalar dependências
-# IMPORTANTE: Usa apenas requirements.txt da raiz, não backend/requirements.txt
-# Isso garante que o build funcione mesmo se o Railway tentar usar Railpack
-COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r /app/requirements.txt
-
-# Copiar apenas o diretório backend (não precisa do frontend)
+# Copiar o diretório backend (que contém requirements.txt)
 COPY backend/ /app/backend/
+
+# Instalar dependências do backend/requirements.txt
+WORKDIR /app/backend
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Expor porta (Railway define $PORT automaticamente)
 EXPOSE 8000
