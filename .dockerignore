@@ -1,0 +1,14 @@
+# Arquivos ignorados pelo Docker durante o build
+frontend/
+.git/
+.vscode/
+*.md
+.DS_Store
+.railwayignore
+railway.json
+railway.toml
+nixpacks.toml
+Procfile
+runtime.txt
+setup.py
+*.log

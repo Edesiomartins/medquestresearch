@@ -4,14 +4,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copiar requirements.txt da raiz e instalar dependências
+# Copiar requirements.txt da raiz PRIMEIRO e instalar dependências
 # IMPORTANTE: Usa apenas requirements.txt da raiz, não backend/requirements.txt
-COPY requirements.txt .
+# Isso garante que o build funcione mesmo se o Railway tentar usar Railpack
+COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r /app/requirements.txt
 
-# Copiar todo o código (incluindo backend/)
-COPY . .
+# Copiar apenas o diretório backend (não precisa do frontend)
+COPY backend/ /app/backend/
 
 # Expor porta (Railway define $PORT automaticamente)
 EXPOSE 8000
