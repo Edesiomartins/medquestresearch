@@ -160,9 +160,10 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+    expose_headers=["*"],
     max_age=3600,
 )
 
@@ -729,7 +730,19 @@ def cadastro(request: Request, data: CadastroInput):
             (data.nome, data.email, senha_hash)
         )
 
-        return {"mensagem": "Usuário criado com sucesso"}
+        # Buscar usuário criado, gerar token e retornar (login automático pós-cadastro)
+        row = db_select_one("SELECT id, nome, email FROM usuarios WHERE email=%s", (data.email,))
+        if not row:
+            return JSONResponse(status_code=500, content={"erro": "Erro ao criar usuário"})
+
+        token = gerar_token()
+        db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
+
+        return {
+            "token": token,
+            "usuario": {"id": row["id"], "nome": row["nome"], "email": row["email"]},
+            "mensagem": "Usuário criado com sucesso"
+        }
 
     except IntegrityError:
         return JSONResponse(
@@ -760,8 +773,12 @@ def login(request: Request, data: LoginRequest):
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
 
-        return {"token": token, "status": "Login realizado com sucesso"}
-    
+        return {
+            "token": token,
+            "usuario": {"id": row["id"], "nome": row["nome"], "email": row["email"]},
+            "status": "Login realizado com sucesso"
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -780,7 +797,8 @@ def creditos(user = Depends(require_api_key)):
         return {
             "creditos": user.get("creditos", 0),
             "creditos_usados": user.get("creditos_usados", 0),
-            "creditos_disponiveis": disponiveis
+            "creditos_disponiveis": disponiveis,
+            "usuario": {"id": user.get("id"), "nome": user.get("nome"), "email": user.get("email")}
         }
     except HTTPException:
         raise
