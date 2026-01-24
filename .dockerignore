@@ -1,4 +1,5 @@
 # Arquivos ignorados pelo Docker durante o build
+# NÃO ignorar backend/ - o Dockerfile precisa dele
 frontend/
 .git/
 .vscode/
@@ -12,3 +13,5 @@ Procfile
 runtime.txt
 setup.py
 *.log
+build.sh
+railpack.json

@@ -13,4 +13,5 @@ COPY backend/ ./backend/
 EXPOSE 8000
 
 WORKDIR /app/backend
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}"]
+# Usar shell para expandir $PORT (Railway injeta PORT). Exec form não expande ${PORT:-8000}.
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
