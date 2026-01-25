@@ -26,12 +26,16 @@ def _check_research_env():
 client = None
 
 def _get_client():
-    """Retorna o cliente OpenAI, criando se necessário."""
+    """Retorna o cliente OpenAI, criando se necessário. Se OPENAI_API_BASE estiver definida (ex.: OpenRouter), usa como base_url."""
     global client
     if client is None:
         _check_research_env()
         api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
-        client = OpenAI(api_key=api_key)
+        base_url = os.getenv("OPENAI_API_BASE")  # ex.: https://openrouter.ai/api/v1
+        if base_url:
+            client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            client = OpenAI(api_key=api_key)
     return client
 
 def _chamar_nova_api(modelo, prompt, temperatura=None):

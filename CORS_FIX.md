@@ -54,11 +54,16 @@ Após fazer commit e push:
 
 Se a requisição retorna **404** e o navegador acusa CORS, em muitos casos o **backend não está respondendo** (container não subiu ou deploy falhou). Respostas 404/502 da infra do Railway **não** passam pelo FastAPI, então **não recebem cabeçalhos CORS**.
 
+**Alteração recente:** o `database.py` **não** quebra mais no import se `DATABASE_URL` estiver vazio. A API sobe e **`/` e `/health` passam a responder**. Assim você consegue distinguir:
+- **404/502 em `/` ou `/health`** → backend não subiu (veja logs, `railway.json`, Start Command, etc.).
+- **200 em `/` ou `/health`** → backend no ar; se `/login` der 404 ou 500 **com** aviso de CORS, a resposta já vem do FastAPI (com CORS). Se ainda "falta Access-Control-Allow-Origin" em `/login`, confira a origem do frontend (precisa bater com `ALLOWED_ORIGINS` ou o regex `*.up.railway.app`).
+
 **O que fazer:**
 1. No Railway, verificar se o **deploy do backend** está **sucesso** (verde) e o container está rodando.
-2. Testar `https://medquest-research-api.up.railway.app/` ou `/health` no navegador. Se der 404/502, o backend não está no ar.
-3. Conferir logs do serviço no Railway (erro de `cd`, import, variável de ambiente, etc.) e corrigir o deploy.
-4. Depois que `/` ou `/health` responder, o `/login` e as demais rotas também devem responder e o CORS passará a funcionar.
+2. Abrir `https://medquest-research-api.up.railway.app/` ou `https://medquest-research-api.up.railway.app/health` no navegador. Se der 404/502, o backend não está no ar.
+3. Conferir **Variables**: `DATABASE_URL` (vínculo com Postgres ou URL) e `API_OPENAI_KEY_RESEARCH`. Conferir **Start Command** vazio para usar o `CMD` do Dockerfile.
+4. Ver os **logs** do serviço (erro de import, `cd`, conexão com o banco, etc.) e corrigir.
+5. Depois que `/` ou `/health` responder 200, testar `/login` de novo; as respostas do FastAPI (incluindo 401, 404, 500) já vêm com CORS.
 
 ## ⚠️ Importante
 
