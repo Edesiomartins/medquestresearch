@@ -1,22 +1,16 @@
 /**
  * Configuração centralizada da API do MedQuestResearch
- * 
- * Esta configuração garante que todas as chamadas de API usem a URL correta
- * baseado no ambiente (desenvolvimento/produção).
- * 
+ *
  * PRODUÇÃO (Railway):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api.up.railway.app
- *   → Usa a URL do Railway diretamente
- * 
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch-api.up.railway.app
+ *
  * DESENVOLVIMENTO (.env.local):
- *   NEXT_PUBLIC_API_BASE_URL=https://medquest-research-api.up.railway.app
- *   → Ou use a URL do Railway também em desenvolvimento
+ *   NEXT_PUBLIC_API_BASE_URL=https://medquestresearch-api.up.railway.app
  *   → Ou http://localhost:5000 para desenvolvimento local
  */
 
-// URL base da API - OBRIGATÓRIA (Railway)
-// Fallback para a URL de produção se não estiver configurada
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://medquest-research-api.up.railway.app';
+// URL base da API (Railway)
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://medquestresearch-api.up.railway.app';
 
 if (!API_BASE_URL) {
   console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Usando URL padrão do Railway.');

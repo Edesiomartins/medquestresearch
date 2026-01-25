@@ -96,9 +96,13 @@ No **serviço do frontend**, em **Variables**:
 
 | Variável | Descrição | Exemplo |
 |----------|-----------|---------|
-| `NEXT_PUBLIC_API_BASE_URL` | URL base da API (backend). | `https://medquest-research-api.up.railway.app` |
+| `NEXT_PUBLIC_API_BASE_URL` | URL base da API (backend). | `https://medquestresearch-api.up.railway.app` |
 
-Use a URL real do seu backend (domínio do Railway ou custom).
+**URLs do projeto:**
+- **API (correta):** `https://medquestresearch-api.up.railway.app`
+- **Não use:** `https://medquest-research-api.up.railway.app` (com hífen; URL antiga).
+
+**Importante:** `NEXT_PUBLIC_*` é embutido no **build** do Next.js. Se `NEXT_PUBLIC_API_BASE_URL` estiver errada no Railway (frontend), é preciso **corrigir a variável e fazer um novo deploy** (novo build) do frontend.
 
 ---
 

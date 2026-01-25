@@ -43,7 +43,8 @@ Após fazer commit e push:
 
 ## 📝 URLs Incluídas por Padrão
 
-- ✅ `https://medquestresearch.up.railway.app`
+- ✅ `https://medquestresearch.up.railway.app` (frontend)
+- ✅ `https://medquestresearch-api.up.railway.app` (API; se o frontend estiver no mesmo subdomínio)
 - ✅ `https://medquest-research.up.railway.app`
 - ✅ `https://medquestresearch-production.up.railway.app`
 - ✅ `http://localhost:3000`, `http://127.0.0.1:3000`
@@ -60,10 +61,30 @@ Se a requisição retorna **404** e o navegador acusa CORS, em muitos casos o **
 
 **O que fazer:**
 1. No Railway, verificar se o **deploy do backend** está **sucesso** (verde) e o container está rodando.
-2. Abrir `https://medquest-research-api.up.railway.app/` ou `https://medquest-research-api.up.railway.app/health` no navegador. Se der 404/502, o backend não está no ar.
+2. Abrir `https://medquestresearch-api.up.railway.app/` ou `https://medquestresearch-api.up.railway.app/health` no navegador. Se der 404/502, o backend não está no ar.
 3. Conferir **Variables**: `DATABASE_URL` (vínculo com Postgres ou URL) e `API_OPENAI_KEY_RESEARCH`. Conferir **Start Command** vazio para usar o `CMD` do Dockerfile.
 4. Ver os **logs** do serviço (erro de import, `cd`, conexão com o banco, etc.) e corrigir.
 5. Depois que `/` ou `/health` responder 200, testar `/login` de novo; as respostas do FastAPI (incluindo 401, 404, 500) já vêm com CORS.
+
+## 🔴 Frontend chamando a URL **errada** (medquest-**r**esearch-api)
+
+Se o navegador mostra requisições para **`https://medquest-research-api.up.railway.app`** (com hífen: *medquest-**r**esearch-api*) e 404 + CORS, o frontend está usando a **URL antiga**. A API que está no ar é:
+
+- **`https://medquestresearch-api.up.railway.app`** (sem hífen: *medquestresearch-api*)
+
+O Next.js grava `NEXT_PUBLIC_API_BASE_URL` no **build**. Se no Railway a variável do **frontend** estiver com a URL antiga, o build fica errado.
+
+**O que fazer:**
+
+1. No Railway, abra o **serviço do frontend** (não o da API).
+2. Vá em **Variables**.
+3. Ajuste **`NEXT_PUBLIC_API_BASE_URL`** para:  
+   `https://medquestresearch-api.up.railway.app`  
+   (remova ou corrija se estiver `medquest-research-api`).
+4. Faça **Redeploy** do frontend (ou um novo **Deploy** com push) para rodar um **build novo**. Só redeploy sem rebuild pode manter a URL antiga.
+5. Confira no navegador (DevTools → Network) que as chamadas vão para `medquestresearch-api.up.railway.app`.
+
+---
 
 ## ⚠️ Importante
 

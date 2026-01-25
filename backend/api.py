@@ -143,6 +143,8 @@ app = FastAPI(title="MedQuestResearch API", version="2.0")
 # ALLOWED_ORIGINS (opcional): origens extras separadas por vírgula.
 default_origins = [
     "https://medquestresearch.up.railway.app",
+    "https://medquestresearch-api.up.railway.app",
+    "https://medquest-research-api.up.railway.app",  # URL antiga; a correta é medquestresearch-api
     "https://medquest-research.up.railway.app",
     "https://medquestresearch-production.up.railway.app",
     "http://localhost:3000",
