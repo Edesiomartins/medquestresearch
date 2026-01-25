@@ -66,8 +66,16 @@ export default function LoginForm() {
     >
       {/* Mensagem de erro geral da API */}
       {erro && (
-        <div className="p-3 bg-red-50 border border-red-300 text-red-700 rounded-lg text-sm animate-shake">
+        <div className="p-3 bg-red-50 border border-red-300 text-red-700 rounded-lg text-sm">
           ❌ {erro}
+          {((erro || "").toLowerCase().includes("conexão") ||
+            (erro || "").toLowerCase().includes("cross-origin") ||
+            (erro || "").toLowerCase().includes("network") ||
+            (erro || "").toLowerCase().includes("fetch")) && (
+            <p className="mt-2 text-xs">
+              A API pode estar indisponível. Verifique se o backend está no ar (/, /health no domínio da API).
+            </p>
+          )}
         </div>
       )}
 

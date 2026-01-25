@@ -30,11 +30,22 @@ export default function RegisterForm() {
     }
   }
 
+  const isApiDown =
+    (erro || "").toLowerCase().includes("conexão") ||
+    (erro || "").toLowerCase().includes("cross-origin") ||
+    (erro || "").toLowerCase().includes("network") ||
+    (erro || "").toLowerCase().includes("fetch");
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {(erro || erroLocal) && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
           {erro || erroLocal}
+          {isApiDown && (
+            <p className="mt-2 text-xs text-red-700">
+              A API pode estar indisponível. Verifique se o backend está no ar (/, /health no domínio da API).
+            </p>
+          )}
         </div>
       )}
 
