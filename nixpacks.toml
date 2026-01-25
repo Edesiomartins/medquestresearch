@@ -16,5 +16,5 @@ cmds = [
   "pip install -r backend/requirements.txt || pip install -r requirements.txt"
 ]
 
-[start]
-cmd = "cd backend && uvicorn api:app --host 0.0.0.0 --port $PORT"
+# [start] removido: o Dockerfile já define CMD. O cmd com "cd" quebra no Railway
+# porque "cd" não é executável. Usar builder DOCKERFILE e CMD do Dockerfile.

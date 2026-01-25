@@ -4,7 +4,13 @@
 
 Erro ao subir o container: **"The executable `cd` could not be found"**.
 
-O **Start Command** configurado no **painel do Railway** está sobrescrevendo o `CMD` do Dockerfile. Algo como `cd backend && uvicorn ...` faz o Railway tentar rodar `cd` como programa, e `cd` não é um executável (é comando do shell).
+Alguma configuração está passando um comando com `cd` (ex.: `cd backend && uvicorn ...`). O Railway tenta rodar `cd` como executável; `cd` é comando do shell, não um binário.
+
+**Origens possíveis do `cd`:**
+
+1. **Start Command** no **painel do Railway** (Settings → Deploy/Service)
+2. **Procfile** na raiz — se existir `web: cd backend && ...`, o Railway pode usá‑lo e sobrescrever o `CMD` do Dockerfile. **Solução:** remover o `Procfile` quando se usa Dockerfile.
+3. **nixpacks.toml** — `[start] cmd = "cd backend && ..."` pode ser lido em alguns fluxos. **Solução:** remover o bloco `[start]` ao usar o builder DOCKERFILE.
 
 ## O que fazer
 
