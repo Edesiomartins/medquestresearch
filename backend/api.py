@@ -139,27 +139,32 @@ except ImportError:
 app = FastAPI(title="MedQuestResearch API", version="2.0")
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
-# Configurar CORS para Railway
-# Permite configurar origens via variável de ambiente ALLOWED_ORIGINS (separadas por vírgula)
-# Exemplo: ALLOWED_ORIGINS=https://medquestresearch.up.railway.app,https://outra-url.com
+# Configurar CORS para Railway e desenvolvimento local.
+# ALLOWED_ORIGINS (opcional): origens extras separadas por vírgula.
 default_origins = [
     "https://medquestresearch.up.railway.app",
-    "http://localhost:3000",  # Desenvolvimento local
-    "http://localhost:3001",  # Desenvolvimento local alternativo
+    "https://medquest-research.up.railway.app",
+    "https://medquestresearch-production.up.railway.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
 ]
 
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
 if allowed_origins_env:
-    # Se ALLOWED_ORIGINS estiver configurada, usar ela + defaults
-    env_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
-    allowed_origins = list(set(default_origins + env_origins))  # Remove duplicatas
+    env_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+    allowed_origins = list(set(default_origins + env_origins))
 else:
-    # Se não estiver configurada, usar apenas os defaults
     allowed_origins = default_origins
+
+# Regex para qualquer *.up.railway.app (deploys Railway com URL gerada)
+allow_origin_regex = r"https://[a-z0-9-]+\.up\.railway\.app"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
