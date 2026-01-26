@@ -82,8 +82,17 @@ export default function CriticaModal({ isOpen, onClose, onConfirm }: CriticaModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+      onClick={onClose}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto select-text"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ userSelect: 'text' }}
+      >
         <div className="p-6">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">
             Escolha o Método de Análise Crítica

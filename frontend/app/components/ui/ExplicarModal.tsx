@@ -24,8 +24,17 @@ export default function ExplicarModal({ isOpen, onClose, onConfirm }: ExplicarMo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+      onClick={onClose}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div 
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 select-text"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ userSelect: 'text' }}
+      >
         <h2 className="text-2xl font-bold text-mq-slate-800 mb-4">
           Explicar Conteúdo
         </h2>
