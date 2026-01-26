@@ -10,7 +10,22 @@
  */
 
 // URL base da API (Railway)
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://medquestresearch-api.up.railway.app';
+// IMPORTANTE: Corrigir URL antiga se estiver configurada incorretamente
+let apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://medquestresearch-api.up.railway.app';
+
+// Correção automática: substituir URL antiga pela correta
+if (apiBaseUrl.includes('medquest-research-api')) {
+  console.error('🚨 ERRO: URL antiga detectada! Corrigindo automaticamente...');
+  console.error('❌ URL antiga:', apiBaseUrl);
+  apiBaseUrl = apiBaseUrl.replace('medquest-research-api', 'medquestresearch-api');
+  console.warn('✅ URL corrigida para:', apiBaseUrl);
+  console.warn('⚠️ ATENÇÃO: Corrija a variável NEXT_PUBLIC_API_BASE_URL no Railway e faça um novo build!');
+}
+
+export const API_BASE_URL = apiBaseUrl;
+
+// Log da URL sendo usada (sempre, para debug)
+console.log('🔗 API Base URL configurada:', API_BASE_URL);
 
 if (!API_BASE_URL) {
   console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Usando URL padrão do Railway.');
