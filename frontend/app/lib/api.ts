@@ -300,13 +300,13 @@ export async function structureMapper(
   token: string,
   texto_artigo: string
 ): Promise<ApiResponse> {
-  return callAsyncApi('/structure_mapper', token, { texto_artigo }, 300000);
+  return callAsyncApi('/genapi/structure_mapper', token, { texto_artigo }, 300000);
 }
 
 export async function structureVisualizer(
   token: string,
   texto_artigo: string
 ): Promise<ApiResponse> {
-  return callAsyncApi('/structure_visualizer', token, { texto_artigo }, 300000);
+  return callAsyncApi('/genapi/structure_visualizer', token, { texto_artigo }, 300000);
 }
 

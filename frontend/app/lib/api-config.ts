@@ -22,27 +22,27 @@ export const API_ENDPOINTS = {
   PING: '/ping',
   
   // Rotas de usuário
-  CADASTRO: '/cadastro',
-  LOGIN: '/login',
-  CREDITOS: '/creditos',
+  CADASTRO: '/genapi/cadastro',
+  LOGIN: '/genapi/login',
+  CREDITOS: '/genapi/creditos',
   
   // Rotas de IA (versões antigas - mantidas para compatibilidade)
-  EXPLICAR: '/explicar',
-  CRITICA: '/critica',
-  FATOS: '/fatos',
-  PERSPECTIVA: '/perspectiva',
-  MAPA: '/mapa',
-  PDF: '/pdf',
+  EXPLICAR: '/genapi/explicar',
+  CRITICA: '/genapi/critica',
+  FATOS: '/genapi/fatos',
+  PERSPECTIVA: '/genapi/perspectiva',
+  MAPA: '/genapi/mapa',
+  PDF: '/genapi/pdf',
   
   // Rotas Research (novas - recomendadas)
-  CRITICAL_ANALYSIS: '/critical_analysis',
-  EXPLAIN_CONCEPT: '/explain_concept',
-  FACT_CHECKER: '/fact_checker',
-  PERSPECTIVE_RESEARCH: '/perspective_research',
+  CRITICAL_ANALYSIS: '/genapi/critical_analysis',
+  EXPLAIN_CONCEPT: '/genapi/explain_concept',
+  FACT_CHECKER: '/genapi/fact_checker',
+  PERSPECTIVE_RESEARCH: '/genapi/perspective_research',
   
   // Rotas de status de jobs assíncronos
-  JOB_STATUS: '/job',
-  JOBS: '/jobs',
+  JOB_STATUS: '/genapi/job',
+  JOBS: '/genapi/jobs',
 } as const;
 
 // Função helper para construir URLs completas

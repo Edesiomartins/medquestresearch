@@ -15,7 +15,7 @@ import json
 from functools import wraps
 from psycopg2 import IntegrityError
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Header, File, UploadFile, status
+from fastapi import FastAPI, Request, HTTPException, Depends, Header, File, UploadFile, status, APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler  # pyright: ignore[reportMissingImports]
@@ -137,6 +137,9 @@ except ImportError:
 # ============================================
 
 app = FastAPI(title="MedQuestResearch API", version="2.0")
+
+# ✅ ROUTER COM PREFIXO /genapi PARA TODAS AS ROTAS DE API
+api_router = APIRouter(prefix="/genapi")
 
 # ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
 # Configurar CORS para Railway e desenvolvimento local.
@@ -724,7 +727,7 @@ def db_test():
 # ✅ ROTAS DE USUÁRIO
 # ============================================
 
-@app.post("/cadastro")
+@api_router.post("/cadastro")
 def cadastro(request: Request, data: CadastroInput):
     try:
         senha_hash = gerar_hash_senha(data.senha)
@@ -766,7 +769,7 @@ def cadastro(request: Request, data: CadastroInput):
             content={"erro": str(e)}
         )
 
-@app.post("/login")
+@api_router.post("/login")
 @limiter.limit("5 per minute")
 def login(request: Request, data: LoginRequest):
     try:
@@ -791,7 +794,7 @@ def login(request: Request, data: LoginRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao fazer login: {str(e)}")
 
-@app.get("/creditos")
+@api_router.get("/creditos")
 def creditos(user = Depends(require_api_key)):
     try:
         # Verificar se user tem as chaves necessárias
@@ -818,7 +821,7 @@ def creditos(user = Depends(require_api_key)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Erro ao buscar créditos: {str(e)}")
 
-@app.get("/jobs")
+@api_router.get("/jobs")
 @limiter.limit("30 per minute")
 def listar_jobs(request: Request, user = Depends(require_api_key)):
     """Lista todos os jobs do usuário."""
@@ -843,8 +846,8 @@ def listar_jobs(request: Request, user = Depends(require_api_key)):
         logging.error(f"Erro em listar_jobs: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.get("/job/{job_id}")
-@app.get("/status/{job_id}")
+@api_router.get("/job/{job_id}")
+@api_router.get("/status/{job_id}")
 @limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
 def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
     """Verifica o status de um job de processamento assíncrono."""
@@ -884,8 +887,8 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
 # ✅ ROTAS DE IA
 # ============================================
 
-@app.post("/explicar")
-@app.post("/explain_concept")
+@api_router.post("/explicar")
+@api_router.post("/explain_concept")
 @limiter.limit("10 per minute")
 def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api_key)):
     log_t("INICIO REQUEST")
@@ -928,8 +931,8 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/critica")
-@app.post("/critical_analysis")
+@api_router.post("/critica")
+@api_router.post("/critical_analysis")
 @limiter.limit("10 per minute")
 def rota_critica(request: Request, data: InputCritica, user = Depends(require_api_key)):
     try:
@@ -966,8 +969,8 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/fatos")
-@app.post("/fact_checker")
+@api_router.post("/fatos")
+@api_router.post("/fact_checker")
 @limiter.limit("10 per minute")
 def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_key)):
     try:
@@ -1003,8 +1006,8 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/perspectiva")
-@app.post("/perspective_research")
+@api_router.post("/perspectiva")
+@api_router.post("/perspective_research")
 @limiter.limit("10 per minute")
 def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(require_api_key)):
     try:
@@ -1040,8 +1043,8 @@ def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(re
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/mapa")
-@app.post("/structure_visualizer")
+@api_router.post("/mapa")
+@api_router.post("/structure_visualizer")
 @limiter.limit("10 per minute")
 def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
@@ -1077,7 +1080,7 @@ def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/structure_mapper")
+@api_router.post("/structure_mapper")
 @limiter.limit("10 per minute")
 def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
@@ -1113,7 +1116,7 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@app.post("/pdf")
+@api_router.post("/pdf")
 @limiter.limit("10 per minute")
 async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depends(require_api_key)):
     try:
@@ -1159,6 +1162,12 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
+
+# ============================================
+# ✅ INCLUIR ROUTER NA APLICAÇÃO
+# ============================================
+
+app.include_router(api_router)
 
 # ============================================
 # ✅ EXECUÇÃO LOCAL (para desenvolvimento)
