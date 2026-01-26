@@ -38,16 +38,48 @@ def _get_client():
             client = OpenAI(api_key=api_key)
     return client
 
-def _chamar_nova_api(modelo, prompt, temperatura=None):
+def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
+    """
+    Chama a API do OpenRouter usando responses.create.
+    
+    Args:
+        modelo: Nome do modelo
+        prompt: Texto do prompt
+        temperatura: Temperatura para geração (0-2)
+        max_output_tokens: Máximo de tokens de saída (padrão: 4000 para evitar erro 402)
+    """
     cliente = _get_client()
-    response = cliente.responses.create(
-        model=modelo,
-        input=prompt
-    )
+    
+    # Configurar max_output_tokens (padrão: 4000 para evitar erro de créditos)
+    # Pode ser configurado via variável de ambiente
+    if max_output_tokens is None:
+        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "4000"))
+    
+    # Limitar a 8000 tokens máximo para evitar erros de créditos
+    max_output_tokens = min(max_output_tokens, 8000)
+    
+    params = {
+        "model": modelo,
+        "input": prompt,
+        "max_output_tokens": max_output_tokens
+    }
+    
+    # Adicionar temperatura se fornecida
+    if temperatura is not None:
+        params["temperature"] = temperatura
+    
+    response = cliente.responses.create(**params)
     return response.output_text
 
-def gerar_resposta(prompt, temperatura=1):
-    """Gera resposta usando modelo configurado (padrão: gpt-5-mini para velocidade)."""
+def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
+    """
+    Gera resposta usando modelo configurado (padrão: gpt-5-mini para velocidade).
+    
+    Args:
+        prompt: Texto do prompt
+        temperatura: Temperatura para geração (0-2, padrão: 1)
+        max_output_tokens: Máximo de tokens de saída (padrão: 4000)
+    """
     _check_research_env()
     try:
         cliente = _get_client()
@@ -59,7 +91,8 @@ def gerar_resposta(prompt, temperatura=1):
         
         try:
             # Nova chamada da API que retorna diretamente o texto
-            resposta = _chamar_nova_api(modelo, prompt, temperatura)
+            # max_output_tokens padrão: 4000 para evitar erro 402 (créditos insuficientes)
+            resposta = _chamar_nova_api(modelo, prompt, temperatura, max_output_tokens)
             return resposta
         except Exception as e:
             # Log completo do erro incluindo a classe

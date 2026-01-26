@@ -308,6 +308,24 @@ def autenticar(authorization: Optional[str] = Header(None)):
 def creditos_disponiveis(usuario):
     return max(0, usuario["creditos"] - usuario["creditos_usados"])
 
+def adicionar_creditos_usuario(usuario_id, qtd):
+    """Adiciona créditos a um usuário."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                UPDATE usuarios
+                SET creditos = creditos + %s
+                WHERE id = %s
+            """, (qtd, usuario_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"❌ ERRO ao adicionar créditos: {e}")
+        return False
+    finally:
+        conn.close()
+
 def debitar_creditos(usuario_id, qtd):
     """Debita créditos apenas se houver créditos disponíveis suficientes."""
     conn = get_connection()
@@ -899,6 +917,78 @@ def db_test():
         return {"ok": True, "usuarios": r["total"]}
     except Exception as e:
         return {"ok": False, "erro": str(e)}
+
+# ============================================
+# ✅ ROTAS DE ADMINISTRAÇÃO (CRÉDITOS)
+# ============================================
+
+class AdicionarCreditosInput(BaseModel):
+    usuario_id: Optional[int] = None
+    email: Optional[str] = None
+    quantidade: int
+
+    @validator('quantidade')
+    def validate_quantidade(cls, v):
+        if v <= 0:
+            raise ValueError("Quantidade deve ser maior que zero")
+        return v
+
+    @validator('email')
+    def validate_email_ou_id(cls, v, values):
+        if not values.get('usuario_id') and not v:
+            raise ValueError("Deve fornecer usuario_id ou email")
+        return v
+
+@api_router.post("/admin/adicionar-creditos")
+@limiter.limit("20 per minute")
+def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = Depends(require_api_key)):
+    """
+    Adiciona créditos a um usuário.
+    Pode ser identificado por ID ou email.
+    """
+    try:
+        # Buscar usuário por ID ou email
+        if data.usuario_id:
+            usuario = db_select_one("SELECT id, nome, email, creditos FROM usuarios WHERE id = %s", (data.usuario_id,))
+        elif data.email:
+            usuario = db_select_one("SELECT id, nome, email, creditos FROM usuarios WHERE email = %s", (data.email,))
+        else:
+            raise HTTPException(status_code=400, detail="Deve fornecer usuario_id ou email")
+
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+        # Adicionar créditos usando função auxiliar
+        if not adicionar_creditos_usuario(usuario["id"], data.quantidade):
+            raise HTTPException(status_code=500, detail="Erro ao atualizar créditos no banco de dados")
+
+        # Buscar dados atualizados
+        usuario_atualizado = db_select_one(
+            "SELECT id, nome, email, creditos, creditos_usados FROM usuarios WHERE id = %s",
+            (usuario["id"],)
+        )
+
+        return {
+            "mensagem": f"Créditos adicionados com sucesso",
+            "usuario": {
+                "id": usuario_atualizado["id"],
+                "nome": usuario_atualizado["nome"],
+                "email": usuario_atualizado["email"],
+                "creditos_anteriores": usuario["creditos"],
+                "creditos_adicionados": data.quantidade,
+                "creditos_atuais": usuario_atualizado["creditos"],
+                "creditos_usados": usuario_atualizado.get("creditos_usados", 0),
+                "creditos_disponiveis": usuario_atualizado["creditos"] - usuario_atualizado.get("creditos_usados", 0)
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro ao adicionar créditos: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar créditos: {str(e)}")
 
 @app.get("/routes")
 def list_routes():

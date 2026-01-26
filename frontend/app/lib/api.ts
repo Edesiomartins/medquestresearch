@@ -84,6 +84,23 @@ export async function getCreditos(token: string): Promise<ApiResponse> {
 }
 
 // ============================================
+// Funções de Administração
+// ============================================
+
+export interface AdicionarCreditosParams {
+  usuario_id?: number;
+  email?: string;
+  quantidade: number;
+}
+
+export async function adicionarCreditos(
+  token: string,
+  params: AdicionarCreditosParams
+): Promise<ApiResponse> {
+  return apiCall(API_ENDPOINTS.ADICIONAR_CREDITOS, 'POST', params, token);
+}
+
+// ============================================
 // Função de Polling para Jobs Assíncronos
 // ============================================
 

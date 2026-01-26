@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
   CADASTRO: '/genapi/cadastro',
   LOGIN: '/genapi/login',
   CREDITOS: '/genapi/creditos',
+  ADICIONAR_CREDITOS: '/genapi/admin/adicionar-creditos',
   
   // Rotas de IA (versões antigas - mantidas para compatibilidade)
   EXPLICAR: '/genapi/explicar',
