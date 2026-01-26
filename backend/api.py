@@ -132,6 +132,16 @@ except ImportError:
         import backend.pdf_processor as pdf_processor  # type: ignore[reportMissingImports]
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
 
+try:
+    from .meta_analysis import gerar_meta_analise
+except ImportError:
+    try:
+        import meta_analysis
+        gerar_meta_analise = meta_analysis.gerar_meta_analise
+    except ImportError:
+        import backend.meta_analysis as meta_analysis  # type: ignore[reportMissingImports]
+        gerar_meta_analise = meta_analysis.gerar_meta_analise
+
 # ============================================
 # ✅ APLICAÇÃO FASTAPI
 # ============================================
@@ -636,6 +646,50 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
         finally:
             conn.close()
 
+def processar_job_meta_analise(job_id: int, texto_artigo: str, etapa: str = "1", dados_extras: dict = None):
+    """Processa job de meta-análise em background."""
+    try:
+        logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa})")
+        
+        # Limitar texto para reduzir tempo de processamento
+        texto_artigo = texto_artigo[:6000]
+        
+        # Chamar função de meta-análise
+        resultado = gerar_meta_analise(texto_artigo, etapa=etapa, dados_extras=dados_extras)
+        
+        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                    ("done", resultado, job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+        
+        logging.warning(f"[RESEARCH JOB {job_id}] concluído - meta_analise")
+        
+    except Exception:
+        erro = traceback.format_exc()
+        logging.error(f"[RESEARCH JOB {job_id}] erro - meta_analise\n{erro}")
+        
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                    ("failed", erro[:1000], job_id)
+                )
+                rowcount = cursor.rowcount
+            conn.commit()
+            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
+        finally:
+            conn.close()
+
 # ============================================
 # ✅ MODELOS PYDANTIC PARA VALIDAÇÃO
 # ============================================
@@ -681,6 +735,20 @@ class InputPerspectiva(BaseModel):
 
 class InputMapa(BaseModel):
     texto_artigo: str
+
+    @validator('texto_artigo')
+    def validate_texto(cls, v):
+        if not v or not v.strip():
+            raise ValueError("texto_artigo não pode estar vazio")
+        return v
+
+class InputMetaAnalise(BaseModel):
+    texto_artigo: str
+    etapa: Optional[str] = "1"  # 1=PICO, 2=Extração, 3=Redação, 4=Verificação
+    tema: Optional[str] = None
+    json_extracao: Optional[str] = None
+    estilo: Optional[str] = "Vancouver"  # Vancouver ou ABNT
+    manuscrito: Optional[str] = None
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
@@ -1113,6 +1181,59 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /structure_mapper")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
+
+@api_router.post("/meta_analise")
+@api_router.post("/meta_analysis")
+@limiter.limit("10 per minute")
+def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(require_api_key)):
+    try:
+        custo = 12  # Custo maior devido à complexidade da meta-análise
+        if not debitar_creditos(user["id"], custo):
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+
+        # Preparar dados extras para o processamento
+        dados_extras = {}
+        if data.tema:
+            dados_extras["tema"] = data.tema
+        if data.json_extracao:
+            try:
+                dados_extras["json_extracao"] = json.loads(data.json_extracao) if isinstance(data.json_extracao, str) else data.json_extracao
+            except:
+                dados_extras["json_extracao"] = data.json_extracao
+        if data.estilo:
+            dados_extras["estilo"] = data.estilo
+        if data.manuscrito:
+            dados_extras["manuscrito"] = data.manuscrito
+
+        # Criar job assíncrono
+        dados_extras_json = json.dumps(dados_extras) if dados_extras else None
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
+            (user["id"], "meta_analise", "processing", data.texto_artigo, custo, dados_extras_json)
+        )
+
+        # Iniciar processamento em background
+        threading.Thread(
+            target=processar_job_meta_analise,
+            args=(job_id, data.texto_artigo, data.etapa, dados_extras),
+            daemon=True
+        ).start()
+
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "status": "processing",
+                "etapa": data.etapa
+            },
+            status_code=202
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print("ERRO NA ROTA /meta_analise")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
