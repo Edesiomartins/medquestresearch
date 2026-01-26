@@ -16,8 +16,8 @@ export default function ResultWindowsManager({
   onCloseWindow,
 }: ResultWindowsManagerProps) {
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
-  const [minimizedWindows, setMinimizedWindows] = useState<Set<string>>(new Set());
-  const [windowZIndices, setWindowZIndices] = useState<Map<string, number>>(new Map());
+  const [minimizedWindows, setMinimizedWindows] = useState<Set<string>>(() => new Set());
+  const [windowZIndices, setWindowZIndices] = useState<Map<string, number>>(() => new Map());
 
   // Calcular z-index baseado na ordem de criação e janela ativa
   const getZIndex = useCallback((windowId: string) => {

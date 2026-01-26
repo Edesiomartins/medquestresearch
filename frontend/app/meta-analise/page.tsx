@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
-import { metaAnalysis, pollJobStatus } from '@/app/lib/api';
+import { metaAnalysis } from '@/app/lib/api';
 import Sidebar from '@/app/components/ui/sidebar';
 import ResultWindowsManager from '@/app/components/ui/ResultWindowsManager';
 import { ResultWindowData } from '@/app/components/ui/ResultWindow';
@@ -13,11 +13,23 @@ export default function MetaAnalisePage() {
   const { token, usuario, creditos, loading, logout } = useAuth();
   const [tema, setTema] = useState('');
   const [etapaAtual, setEtapaAtual] = useState<string | null>(null);
-  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map());
+  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(() => new Map());
   const [executando, setExecutando] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Redirecionar se não autenticado
-  if (loading || !token) {
+  useEffect(() => {
+    if (!loading && !token && mounted) {
+      router.replace('/login');
+    }
+  }, [loading, token, router, mounted]);
+
+  if (!mounted || loading || !token) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-mq-blue-900 text-white">
         <div className="animate-pulse-blue text-2xl">⏳ MedquestResearch carregando...</div>
@@ -54,9 +66,9 @@ export default function MetaAnalisePage() {
 
     try {
       const res = await metaAnalysis(token, {
-        texto_artigo: '', // Não necessário para etapa 1
+        tema: temaTexto, // Tema é obrigatório
         etapa,
-        tema: temaTexto,
+        texto_artigo: '', // Opcional - não necessário para etapa 1
         estilo,
       });
 
@@ -250,12 +262,14 @@ export default function MetaAnalisePage() {
         </div>
       </div>
 
-      {/* Sistema de Janelas */}
-      <ResultWindowsManager
-        windows={resultWindows}
-        onUpdateWindow={handleUpdateWindow}
-        onCloseWindow={handleCloseWindow}
-      />
+      {/* Sistema de Janelas - apenas renderizar se houver janelas */}
+      {mounted && resultWindows.size > 0 && (
+        <ResultWindowsManager
+          windows={resultWindows}
+          onUpdateWindow={handleUpdateWindow}
+          onCloseWindow={handleCloseWindow}
+        />
+      )}
     </div>
   );
 }

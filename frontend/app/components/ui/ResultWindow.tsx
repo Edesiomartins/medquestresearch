@@ -38,7 +38,7 @@ export default function ResultWindow({
   windowIndex = 0,
 }: ResultWindowProps) {
   // Calcular posição inicial em cascata se não fornecida
-  const getInitialPosition = () => {
+  const getInitialPosition = useCallback(() => {
     if (initialPosition) return initialPosition;
     // Efeito cascata: cada janela deslocada 30px para direita e baixo
     const offset = windowIndex * 30;
@@ -49,10 +49,23 @@ export default function ResultWindow({
       };
     }
     return { x: 0, y: 0 };
-  };
+  }, [initialPosition, windowIndex]);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState(getInitialPosition());
+  const [position, setPosition] = useState(() => {
+    // Inicializar apenas no cliente
+    if (typeof window !== 'undefined') {
+      return getInitialPosition();
+    }
+    return { x: 0, y: 0 };
+  });
+  
+  // Atualizar posição quando montar no cliente
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !initialPosition) {
+      setPosition(getInitialPosition());
+    }
+  }, [getInitialPosition, initialPosition]);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {

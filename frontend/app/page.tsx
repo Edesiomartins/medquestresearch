@@ -34,7 +34,7 @@ export default function Home() {
   const [showExplicarModal, setShowExplicarModal] = useState(false); // Para controlar o modal de explicar
   const [showCriticaModal, setShowCriticaModal] = useState(false); // Para controlar o modal de análise crítica
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
-  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map()); // Sistema de janelas
+  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(() => new Map()); // Sistema de janelas
 
   // 2. useRouter
   const router = useRouter();
