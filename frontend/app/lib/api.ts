@@ -315,9 +315,9 @@ export async function structureVisualizer(
 // ============================================
 
 export interface MetaAnaliseParams {
-  texto_artigo: string;
-  etapa?: string; // 1=PICO, 2=Extração, 3=Redação, 4=Verificação
-  tema?: string;
+  tema: string; // Tema é obrigatório agora
+  etapa?: string; // 1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação
+  texto_artigo?: string; // Opcional - usado apenas nas etapas 2-4
   json_extracao?: string | object;
   estilo?: string; // 'Vancouver' ou 'ABNT'
   manuscrito?: string;
@@ -329,9 +329,9 @@ export async function metaAnalysis(
 ): Promise<ApiResponse> {
   // Converter json_extracao para string se for objeto
   const body = {
-    texto_artigo: params.texto_artigo,
+    tema: params.tema, // Tema é obrigatório
     etapa: params.etapa || '1',
-    tema: params.tema,
+    texto_artigo: params.texto_artigo || null, // Opcional
     json_extracao: typeof params.json_extracao === 'object' 
       ? JSON.stringify(params.json_extracao) 
       : params.json_extracao,

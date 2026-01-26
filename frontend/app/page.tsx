@@ -12,7 +12,6 @@ import {
   pesquisarPerspectiva,
   analisarCritica,
   uploadPdf,
-  metaAnalysis,
 } from '@/app/lib/api';
 import ToolCard from '@/app/components/ui/ToolCard';
 import ResultPanel from '@/app/components/ui/ResultPanel';
@@ -21,7 +20,6 @@ import { ResultWindowData } from '@/app/components/ui/ResultWindow';
 import Sidebar from '@/app/components/ui/sidebar';
 import ExplicarModal from '@/app/components/ui/ExplicarModal';
 import CriticaModal from '@/app/components/ui/CriticaModal';
-import MetaAnaliseModal from '@/app/components/ui/MetaAnaliseModal';
 import Image from 'next/image'; // Para a logo na seção de upload
 
 export default function Home() {
@@ -35,7 +33,6 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null); // Para erros de upload
   const [showExplicarModal, setShowExplicarModal] = useState(false); // Para controlar o modal de explicar
   const [showCriticaModal, setShowCriticaModal] = useState(false); // Para controlar o modal de análise crítica
-  const [showMetaAnaliseModal, setShowMetaAnaliseModal] = useState(false); // Para controlar o modal de meta-análise
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
   const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map()); // Sistema de janelas
 
@@ -151,8 +148,6 @@ export default function Home() {
         return 'Aplicando leitura crítica aprofundada…';
       case 'explicar':
         return 'Explicando conceitos e trechos específicos…';
-      case 'meta_analise':
-        return 'Processando meta-análise conforme protocolo PRISMA…';
       default:
         return 'Processando análise…';
     }
@@ -178,7 +173,6 @@ export default function Home() {
       fatos: 'Verificação de Fatos',
       perspectiva: 'Perspectivas Científicas',
       critica: 'Análise Crítica',
-      meta_analise: 'Meta-Análise PRISMA',
     };
 
     const textoContextual = textoProcessando(tipo);
@@ -227,16 +221,6 @@ export default function Home() {
         case 'critica':
           // Mostrar modal para escolher método de análise
           setShowCriticaModal(true);
-          setResultWindows(prev => {
-            const next = new Map(prev);
-            next.delete(windowId);
-            return next;
-          });
-          setCardAtivo(null);
-          return;
-        case 'meta_analise':
-          // Mostrar modal para configurar meta-análise
-          setShowMetaAnaliseModal(true);
           setResultWindows(prev => {
             const next = new Map(prev);
             next.delete(windowId);
@@ -318,85 +302,6 @@ export default function Home() {
   const handleExplicarConfirm = useCallback((trecho: string, nivel: string) => {
     runAnalise('explicar', trecho, nivel);
   }, [runAnalise]);
-
-  // Callback para quando o usuário confirmar no modal de meta-análise
-  const handleMetaAnaliseConfirm = useCallback(async (etapa: string, tema?: string, estilo?: string) => {
-    if (!textoArtigo || !token) {
-      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
-      setTituloResultado('Aviso');
-      return;
-    }
-
-    const nomesEtapa: Record<string, string> = {
-      '1': 'Estruturação PICO e Protocolo',
-      '2': 'Extração de Dados',
-      '3': 'Redação Técnica (PRISMA)',
-      '4': 'Verificação Final'
-    };
-
-    // Criar janela para meta-análise
-    const windowId = `meta_analise_${Date.now()}`;
-    const textoProcessandoCompleto = `⏳ Meta-Análise em andamento\n\nEtapa: ${nomesEtapa[etapa] || 'Meta-Análise'}…\n\nEstamos processando conforme protocolo PRISMA.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`;
-
-    const novaJanela: ResultWindowData = {
-      id: windowId,
-      tipo: 'meta_analise',
-      titulo: `Meta-Análise - ${nomesEtapa[etapa] || 'PRISMA'}`,
-      resultado: textoProcessandoCompleto,
-      loading: true,
-      timestamp: Date.now(),
-    };
-
-    setResultWindows(prev => new Map(prev).set(windowId, novaJanela));
-    setCardAtivo('meta_analise');
-    setShowMetaAnaliseModal(false);
-
-    try {
-      const res = await metaAnalysis(token, {
-        texto_artigo: textoArtigo,
-        etapa,
-        tema,
-        estilo: estilo || 'Vancouver',
-      });
-
-      // Atualizar janela com resultado
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janela = next.get(windowId);
-        if (janela) {
-          if (res.erro) {
-            next.set(windowId, {
-              ...janela,
-              resultado: `❌ Ocorreu um erro durante a meta-análise.\n\nDetalhes técnicos:\n${res.erro}`,
-              loading: false,
-            });
-          } else {
-            next.set(windowId, {
-              ...janela,
-              resultado: res.resultado || 'Meta-análise concluída',
-              loading: false,
-            });
-          }
-        }
-        return next;
-      });
-      setCardAtivo(null);
-    } catch (error: any) {
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janela = next.get(windowId);
-        if (janela) {
-          next.set(windowId, {
-            ...janela,
-            resultado: `❌ Erro: ${error.message || 'Erro desconhecido'}`,
-            loading: false,
-          });
-        }
-        return next;
-      });
-      setCardAtivo(null);
-    }
-  }, [textoArtigo, token]);
 
   // Callback para quando o usuário confirmar no modal de análise crítica
   const handleCriticaConfirm = useCallback(async (focoAnalise: string) => {
@@ -635,16 +540,27 @@ export default function Home() {
               active={cardAtivo === "critica"}
               onClick={() => runAnalise("critica")}
             />
+          </div>
 
-            {/* 7️⃣ Meta-Análise */}
-            <ToolCard
-              title="Meta-Análise PRISMA"
-              description="Crie e analise revisões sistemáticas e meta-análises seguindo protocolo PRISMA"
-              icon="📑"
-              disabled={!textoArtigo}
-              active={cardAtivo === "meta_analise"}
-              onClick={() => runAnalise("meta_analise")}
-            />
+          {/* Link para Meta-Análise */}
+          <div className="mt-6 card-elevated p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-[#0c3d66] mb-2">
+                  📑 Meta-Análise PRISMA
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Crie revisões sistemáticas e meta-análises completas. O sistema realiza buscas automáticas 
+                  na literatura (PubMed, LILACS, Cochrane) e executa todas as etapas do protocolo PRISMA.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/meta-analise')}
+                className="px-6 py-3 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] transition-colors font-medium ml-4"
+              >
+                Acessar Meta-Análise
+              </button>
+            </div>
           </div>
         </div>
 
@@ -677,13 +593,6 @@ export default function Home() {
         isOpen={showCriticaModal}
         onClose={() => setShowCriticaModal(false)}
         onConfirm={handleCriticaConfirm}
-      />
-
-      {/* Modal para Meta-Análise */}
-      <MetaAnaliseModal
-        isOpen={showMetaAnaliseModal}
-        onClose={() => setShowMetaAnaliseModal(false)}
-        onConfirm={handleMetaAnaliseConfirm}
       />
     </div>
   );

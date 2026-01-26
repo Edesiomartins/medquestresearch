@@ -12,24 +12,28 @@ except ImportError:
         gerar_resposta = gpt_engine.gerar_resposta
         estimate_tokens = chunker.estimate_tokens
 
-def gerar_meta_analise(texto_artigo: str, etapa: str = "1", dados_extras: dict = None) -> str:
+def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> str:
     """
     Gera análise e criação de artigos de Meta-Análises seguindo protocolo PRISMA.
     
     Args:
-        texto_artigo: Texto do(s) artigo(s) científico(s) para análise
-        etapa: Etapa do workflow (1=PICO, 2=Extração, 3=Redação, 4=Verificação)
-        dados_extras: Dicionário com dados adicionais (tema, json_extração, etc.)
+        tema: Tema da revisão sistemática (obrigatório)
+        etapa: Etapa do workflow (1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação)
+        dados_extras: Dicionário com dados adicionais (json_extração, estilo, etc.)
+        texto_artigo: Texto do(s) artigo(s) científico(s) - opcional, usado apenas nas etapas 2-4
     
     Returns:
         Resposta formatada da IA seguindo o protocolo PRISMA
     """
-    # Limitar texto para evitar chamadas muito longas
-    texto_artigo = texto_artigo[:6000] if len(texto_artigo) > 6000 else texto_artigo
+    # Limitar texto se fornecido
+    if texto_artigo:
+        texto_artigo = texto_artigo[:6000] if len(texto_artigo) > 6000 else texto_artigo
+    else:
+        texto_artigo = ""
     
     # Determinar qual prompt usar baseado na etapa
     if etapa == "1" or etapa == "pico":
-        prompt = _criar_prompt_etapa1(texto_artigo, dados_extras)
+        prompt = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     elif etapa == "2" or etapa == "extracao":
         prompt = _criar_prompt_etapa2(texto_artigo, dados_extras)
     elif etapa == "3" or etapa == "redacao":
@@ -37,12 +41,84 @@ def gerar_meta_analise(texto_artigo: str, etapa: str = "1", dados_extras: dict =
     elif etapa == "4" or etapa == "verificacao":
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
     else:
-        # Etapa padrão: iniciar com pergunta sobre o estágio
-        prompt = _criar_prompt_inicial(texto_artigo, dados_extras)
+        # Etapa padrão: iniciar com busca e PICO
+        prompt = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     
     # Gerar resposta com temperatura adequada para análise científica
     resposta = gerar_resposta(prompt, temperatura=0.7)
     return resposta
+
+def _criar_prompt_etapa1_com_busca(tema: str, dados_extras: dict = None) -> str:
+    """Prompt para Etapa 1: Estruturação PICO, Protocolo e Busca na Literatura."""
+    try:
+        from .literature_search import buscar_literatura, gerar_resumo_busca
+    except ImportError:
+        try:
+            from literature_search import buscar_literatura, gerar_resumo_busca
+        except ImportError:
+            import backend.literature_search as literature_search
+            buscar_literatura = literature_search.buscar_literatura
+            gerar_resumo_busca = literature_search.gerar_resumo_busca
+    
+    # Realizar busca na literatura
+    resultados_busca = buscar_literatura(tema)
+    resumo_busca = gerar_resumo_busca(resultados_busca, tema)
+    
+    prompt = f"""
+# PERSONA
+Atue como um Especialista em Metodologia Científica especializado em Revisões Sistemáticas e Metanálises seguindo protocolo PRISMA.
+
+# ETAPA 1: MAPEAMENTO PICO, PROTOCOLO E BUSCA NA LITERATURA
+
+Tema da revisão: {tema}
+
+# RESULTADOS DA BUSCA BIBLIOGRÁFICA
+
+## Busca Realizada
+Foram realizadas buscas nas seguintes bases de dados:
+- PubMed: {resultados_busca.get('pubmed', {}).get('total', 0)} artigos encontrados
+- LILACS: {resultados_busca.get('lilacs', {}).get('total', 0)} artigos encontrados
+- Cochrane: Estratégia de busca gerada
+
+## Resumo da Busca
+{resumo_busca}
+
+# TAREFA
+Com base no tema fornecido e nos resultados da busca bibliográfica, você deve:
+
+1. **Gerar a pergunta estruturada PICO:**
+   - P (Paciente/População): Quem?
+   - I (Intervenção): O quê?
+   - C (Comparação): Comparado com quê?
+   - O (Outcome/Desfecho): Qual o resultado esperado?
+
+2. **Definir critérios de inclusão/exclusão:**
+   - Critérios de inclusão claros e objetivos
+   - Critérios de exclusão específicos
+   - Tipo de estudo (RCT, coorte, etc.)
+
+3. **Criar estratégia de busca detalhada:**
+   - Termos MeSH/DeCS para PubMed
+   - Termos MeSH/DeCS para LILACS
+   - Estratégia para Cochrane Library
+   - Combinações booleanas (AND, OR, NOT)
+   - Filtros de data, idioma, tipo de estudo
+
+4. **Estabelecer protocolo de seleção:**
+   - Processo de triagem (título/resumo, texto completo)
+   - Critérios de elegibilidade
+   - Resolução de conflitos entre revisores
+
+# FORMATO DA RESPOSTA
+Organize a resposta em seções claras:
+- Pergunta PICO
+- Critérios de Elegibilidade
+- Estratégia de Busca (por base de dados)
+- Protocolo de Seleção
+
+IMPORTANTE: Responda SEMPRE em português brasileiro.
+"""
+    return prompt
 
 def _criar_prompt_inicial(texto_artigo: str, dados_extras: dict = None) -> str:
     """Prompt inicial que pergunta sobre o estágio da pesquisa."""

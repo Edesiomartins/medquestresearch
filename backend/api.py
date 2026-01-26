@@ -699,16 +699,17 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
         finally:
             conn.close()
 
-def processar_job_meta_analise(job_id: int, texto_artigo: str, etapa: str = "1", dados_extras: dict = None):
+def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_artigo: str = None, dados_extras: dict = None):
     """Processa job de meta-análise em background."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa})")
+        logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa}, tema: {tema})")
         
-        # Limitar texto para reduzir tempo de processamento
-        texto_artigo = texto_artigo[:6000]
+        # Limitar texto se fornecido
+        if texto_artigo:
+            texto_artigo = texto_artigo[:6000]
         
-        # Chamar função de meta-análise
-        resultado = gerar_meta_analise(texto_artigo, etapa=etapa, dados_extras=dados_extras)
+        # Chamar função de meta-análise (agora com tema como parâmetro principal)
+        resultado = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         conn = get_connection()
@@ -796,17 +797,17 @@ class InputMapa(BaseModel):
         return v
 
 class InputMetaAnalise(BaseModel):
-    texto_artigo: str
-    etapa: Optional[str] = "1"  # 1=PICO, 2=Extração, 3=Redação, 4=Verificação
-    tema: Optional[str] = None
+    tema: str  # Tema é obrigatório agora
+    etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação
+    texto_artigo: Optional[str] = None  # Opcional - usado apenas nas etapas 2-4
     json_extracao: Optional[str] = None
     estilo: Optional[str] = "Vancouver"  # Vancouver ou ABNT
     manuscrito: Optional[str] = None
 
-    @validator('texto_artigo')
-    def validate_texto(cls, v):
+    @validator('tema')
+    def validate_tema(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("tema não pode estar vazio")
         return v
 
 # ============================================
@@ -1325,8 +1326,6 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
 
         # Preparar dados extras para o processamento
         dados_extras = {}
-        if data.tema:
-            dados_extras["tema"] = data.tema
         if data.json_extracao:
             try:
                 dados_extras["json_extracao"] = json.loads(data.json_extracao) if isinstance(data.json_extracao, str) else data.json_extracao
@@ -1337,17 +1336,18 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
         if data.manuscrito:
             dados_extras["manuscrito"] = data.manuscrito
 
-        # Criar job assíncrono
+        # Criar job assíncrono (tema é o campo principal agora)
         dados_extras_json = json.dumps(dados_extras) if dados_extras else None
+        entrada_texto = data.texto_artigo if data.texto_artigo else data.tema
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
-            (user["id"], "meta_analise", "processing", data.texto_artigo, custo, dados_extras_json)
+            (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json)
         )
 
-        # Iniciar processamento em background
+        # Iniciar processamento em background (tema primeiro, depois texto_artigo)
         threading.Thread(
             target=processar_job_meta_analise,
-            args=(job_id, data.texto_artigo, data.etapa, dados_extras),
+            args=(job_id, data.tema, data.etapa, data.texto_artigo, dados_extras),
             daemon=True
         ).start()
 
