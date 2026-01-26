@@ -12,6 +12,7 @@ import logging
 import threading
 import traceback
 import json
+import re
 from functools import wraps
 from psycopg2 import IntegrityError
 
@@ -175,16 +176,69 @@ else:
 # Aceita qualquer subdomínio do Railway (com ou sem hífens)
 allow_origin_regex = r"https://[a-z0-9-]+\.up\.railway\.app"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_origin_regex=allow_origin_regex,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin", "X-CSRFToken"],
-    expose_headers=["*"],
-    max_age=3600,
-)
+# CORS: Temporariamente mais permissivo para debug
+# Em produção, pode restringir para allowed_origins específicas
+DEBUG_CORS = os.getenv("DEBUG_CORS", "false").lower() == "true"
+
+if DEBUG_CORS:
+    # Modo debug: aceita todas as origens
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,  # Não pode ser True com allow_origins=["*"]
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,
+    )
+else:
+    # Modo produção: origens específicas
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_origin_regex=allow_origin_regex,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+        allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin", "X-CSRFToken"],
+        expose_headers=["*"],
+        max_age=3600,
+    )
+
+# ✅ Middleware para garantir CORS em todas as respostas (incluindo erros)
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    """Middleware para adicionar headers CORS em todas as respostas."""
+    response = await call_next(request)
+    
+    # Obter origem da requisição
+    origin = request.headers.get("origin")
+    
+    # Verificar se a origem é permitida
+    if DEBUG_CORS:
+        # Modo debug: aceita qualquer origem
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "false"
+    else:
+        # Modo produção: verificar origem
+        if origin:
+            if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+            else:
+                # Se origem não permitida, usar primeira origem permitida como fallback
+                response.headers["Access-Control-Allow-Origin"] = allowed_origins[0] if allowed_origins else "*"
+                response.headers["Access-Control-Allow-Credentials"] = "false"
+        else:
+            # Sem origem (requisição same-origin), usar primeira origem permitida
+            response.headers["Access-Control-Allow-Origin"] = allowed_origins[0] if allowed_origins else "*"
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    
+    return response
 
 # ✅ Configuração de rate limiting
 limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
@@ -798,14 +852,29 @@ async def not_found_handler(request: Request, exc: Exception):
 # ============================================
 
 @app.options("/{full_path:path}")
-async def options_handler(full_path: str):
+async def options_handler(request: Request, full_path: str):
     """Handler para requisições OPTIONS (CORS preflight)."""
+    origin = request.headers.get("origin", "*")
+    
+    # Verificar origem permitida
+    if DEBUG_CORS:
+        allow_origin = "*"
+        allow_credentials = "false"
+    else:
+        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
+            allow_origin = origin
+            allow_credentials = "true"
+        else:
+            allow_origin = allowed_origins[0] if allowed_origins else "*"
+            allow_credentials = "false"
+    
     return JSONResponse(
         content={},
         headers={
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": allow_origin,
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken",
+            "Access-Control-Allow-Credentials": allow_credentials,
             "Access-Control-Max-Age": "3600",
         }
     )
@@ -829,6 +898,23 @@ def db_test():
         return {"ok": True, "usuarios": r["total"]}
     except Exception as e:
         return {"ok": False, "erro": str(e)}
+
+@app.get("/routes")
+def list_routes():
+    """Lista todas as rotas registradas para debug."""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "methods") and hasattr(route, "path"):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else [],
+                "name": getattr(route, "name", "N/A")
+            })
+    return {
+        "total_routes": len(routes),
+        "routes": routes,
+        "api_router_included": any("/genapi" in r["path"] for r in routes)
+    }
 
 # ============================================
 # ✅ ROTAS DE USUÁRIO
@@ -1333,6 +1419,10 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
 # ============================================
 
 app.include_router(api_router)
+
+# Log para debug: verificar se o router foi incluído
+logging.warning(f"[DEBUG] Router incluído com prefixo: /genapi")
+logging.warning(f"[DEBUG] Total de rotas após incluir router: {len(app.routes)}")
 
 # ============================================
 # ✅ EXECUÇÃO LOCAL (para desenvolvimento)
