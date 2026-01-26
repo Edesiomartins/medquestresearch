@@ -310,3 +310,35 @@ export async function structureVisualizer(
   return callAsyncApi('/genapi/structure_visualizer', token, { texto_artigo }, 300000);
 }
 
+// ============================================
+// Função Meta-Análise (PRISMA Compliance)
+// ============================================
+
+export interface MetaAnaliseParams {
+  texto_artigo: string;
+  etapa?: string; // 1=PICO, 2=Extração, 3=Redação, 4=Verificação
+  tema?: string;
+  json_extracao?: string | object;
+  estilo?: string; // 'Vancouver' ou 'ABNT'
+  manuscrito?: string;
+}
+
+export async function metaAnalysis(
+  token: string,
+  params: MetaAnaliseParams
+): Promise<ApiResponse> {
+  // Converter json_extracao para string se for objeto
+  const body = {
+    texto_artigo: params.texto_artigo,
+    etapa: params.etapa || '1',
+    tema: params.tema,
+    json_extracao: typeof params.json_extracao === 'object' 
+      ? JSON.stringify(params.json_extracao) 
+      : params.json_extracao,
+    estilo: params.estilo || 'Vancouver',
+    manuscrito: params.manuscrito,
+  };
+
+  return callAsyncApi(API_ENDPOINTS.META_ANALYSIS, token, body, 300000);
+}
+

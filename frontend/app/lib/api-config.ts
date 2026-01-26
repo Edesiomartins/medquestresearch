@@ -39,6 +39,8 @@ export const API_ENDPOINTS = {
   EXPLAIN_CONCEPT: '/genapi/explain_concept',
   FACT_CHECKER: '/genapi/fact_checker',
   PERSPECTIVE_RESEARCH: '/genapi/perspective_research',
+  META_ANALYSIS: '/genapi/meta_analise',
+  META_ANALYSE: '/genapi/meta_analysis', // Alias
   
   // Rotas de status de jobs assíncronos
   JOB_STATUS: '/genapi/job',

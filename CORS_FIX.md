@@ -44,8 +44,7 @@ Após fazer commit e push:
 ## 📝 URLs Incluídas por Padrão
 
 - ✅ `https://medquestresearch.up.railway.app` (frontend)
-- ✅ `https://medquestresearch-api.up.railway.app` (API; se o frontend estiver no mesmo subdomínio)
-- ✅ `https://medquest-research.up.railway.app`
+- ✅ `https://medquestresearch-api.up.railway.app` (API)
 - ✅ `https://medquestresearch-production.up.railway.app`
 - ✅ `http://localhost:3000`, `http://127.0.0.1:3000`
 - ✅ `http://localhost:3001`, `http://127.0.0.1:3001`

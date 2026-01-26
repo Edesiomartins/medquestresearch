@@ -155,10 +155,8 @@ api_router = APIRouter(prefix="/genapi")
 # Configurar CORS para Railway e desenvolvimento local.
 # ALLOWED_ORIGINS (opcional): origens extras separadas por vírgula.
 default_origins = [
-    "https://medquestresearch.up.railway.app",
-    "https://medquestresearch-api.up.railway.app",
-    "https://medquest-research-api.up.railway.app",  # URL antiga; a correta é medquestresearch-api
-    "https://medquest-research.up.railway.app",
+    "https://medquestresearch.up.railway.app",  # Frontend
+    "https://medquestresearch-api.up.railway.app",  # API
     "https://medquestresearch-production.up.railway.app",
     "http://localhost:3000",
     "http://localhost:3001",
@@ -174,6 +172,7 @@ else:
     allowed_origins = default_origins
 
 # Regex para qualquer *.up.railway.app (deploys Railway com URL gerada)
+# Aceita qualquer subdomínio do Railway (com ou sem hífens)
 allow_origin_regex = r"https://[a-z0-9-]+\.up\.railway\.app"
 
 app.add_middleware(
@@ -181,8 +180,8 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin", "X-CSRFToken"],
     expose_headers=["*"],
     max_age=3600,
 )
@@ -762,14 +761,54 @@ class InputMetaAnalise(BaseModel):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """Handler global de exceções com suporte a CORS."""
+    import traceback
+    error_detail = str(exc)
+    logging.error(f"Erro global: {error_detail}\n{traceback.format_exc()}")
+    
     return JSONResponse(
         status_code=500,
-        content={"erro": str(exc)}
+        content={"erro": error_detail},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        }
+    )
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc: Exception):
+    """Handler para erros 404 com suporte a CORS."""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "erro": "Rota não encontrada",
+            "path": str(request.url.path),
+            "message": "Verifique se a rota está correta e se o servidor está rodando"
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        }
     )
 
 # ============================================
 # ✅ ROTAS BÁSICAS
 # ============================================
+
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handler para requisições OPTIONS (CORS preflight)."""
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 @app.get("/")
 def index():
@@ -794,6 +833,11 @@ def db_test():
 # ============================================
 # ✅ ROTAS DE USUÁRIO
 # ============================================
+
+@api_router.get("/test")
+def test_router():
+    """Rota de teste para verificar se o router está funcionando."""
+    return {"status": "Router funcionando", "prefix": "/genapi"}
 
 @api_router.post("/cadastro")
 def cadastro(request: Request, data: CadastroInput):
