@@ -24,8 +24,10 @@ if (apiBaseUrl.includes('medquest-research-api')) {
 
 export const API_BASE_URL = apiBaseUrl;
 
-// Log da URL sendo usada (sempre, para debug)
-console.log('🔗 API Base URL configurada:', API_BASE_URL);
+// Log da URL sendo usada (apenas em desenvolvimento)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔗 API Base URL configurada:', API_BASE_URL);
+}
 
 if (!API_BASE_URL) {
   console.warn('⚠️ NEXT_PUBLIC_API_BASE_URL não configurado. Usando URL padrão do Railway.');
