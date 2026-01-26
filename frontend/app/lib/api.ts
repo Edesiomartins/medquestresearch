@@ -359,3 +359,21 @@ export async function metaAnalysis(
   return callAsyncApi(API_ENDPOINTS.META_ANALYSIS, token, body, 300000);
 }
 
+// ============================================
+// Função Chat Follow-up (Interação com respostas)
+// ============================================
+
+export interface ChatFollowUpParams {
+  tipo_analise: string;
+  texto_artigo?: string;
+  mensagem: string;
+  historico?: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+export async function chatFollowUp(
+  token: string,
+  params: ChatFollowUpParams
+): Promise<ApiResponse> {
+  return apiCall('/genapi/chat-followup', 'POST', params, token, 300000);
+}
+

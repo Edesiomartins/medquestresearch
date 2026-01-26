@@ -143,6 +143,18 @@ except ImportError:
         import backend.meta_analysis as meta_analysis  # type: ignore[reportMissingImports]
         gerar_meta_analise = meta_analysis.gerar_meta_analise
 
+try:
+    from .credit_costs import get_credit_cost, get_all_costs
+except ImportError:
+    try:
+        import credit_costs
+        get_credit_cost = credit_costs.get_credit_cost
+        get_all_costs = credit_costs.get_all_costs
+    except ImportError:
+        import backend.credit_costs as credit_costs  # type: ignore[reportMissingImports]
+        get_credit_cost = credit_costs.get_credit_cost
+        get_all_costs = credit_costs.get_all_costs
+
 # ============================================
 # ✅ APLICAÇÃO FASTAPI
 # ============================================
@@ -939,6 +951,30 @@ class AdicionarCreditosInput(BaseModel):
             raise ValueError("Deve fornecer usuario_id ou email")
         return v
 
+class ChatFollowUpInput(BaseModel):
+    tipo_analise: str
+    texto_artigo: Optional[str] = None
+    mensagem: str
+    historico: Optional[list] = None
+
+@api_router.get("/admin/custos")
+@limiter.limit("20 per minute")
+def listar_custos(request: Request, user = Depends(require_api_key)):
+    """
+    Lista todos os custos configurados para cada tipo de requisição.
+    Requer autenticação de administrador.
+    """
+    try:
+        custos = get_all_costs()
+        return {
+            "custos": custos,
+            "total_modulos": len(custos),
+            "observacao": "Valores podem ser ajustados via variáveis de ambiente CREDIT_COST_<MODULO>"
+        }
+    except Exception as e:
+        logging.error(f"Erro ao listar custos: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao listar custos: {str(e)}")
+
 @api_router.post("/admin/adicionar-creditos")
 @limiter.limit("20 per minute")
 def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = Depends(require_api_key)):
@@ -1186,7 +1222,7 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
         if not data.trecho:
             raise HTTPException(status_code=400, detail="Campo 'trecho' é obrigatório")
 
-        custo = 5
+        custo = get_credit_cost("explicar")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1226,7 +1262,7 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
 def rota_critica(request: Request, data: InputCritica, user = Depends(require_api_key)):
     try:
         foco_analise = data.foco_analise or "geral"
-        custo = 7
+        custo = get_credit_cost("critica")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1263,7 +1299,7 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
 @limiter.limit("10 per minute")
 def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_key)):
     try:
-        custo = 5
+        custo = get_credit_cost("fatos")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1300,7 +1336,7 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
 @limiter.limit("10 per minute")
 def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(require_api_key)):
     try:
-        custo = 10
+        custo = get_credit_cost("perspectiva")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1337,7 +1373,7 @@ def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(re
 @limiter.limit("10 per minute")
 def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
-        custo = 8
+        custo = get_credit_cost("mapa")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1373,7 +1409,7 @@ def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)
 @limiter.limit("10 per minute")
 def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
-        custo = 6
+        custo = get_credit_cost("structure_mapper")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1410,7 +1446,7 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
 @limiter.limit("10 per minute")
 def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(require_api_key)):
     try:
-        custo = 12  # Custo maior devido à complexidade da meta-análise
+        custo = get_credit_cost("meta_analise")
         if not debitar_creditos(user["id"], custo):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
 
@@ -1464,6 +1500,11 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
         if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
             raise HTTPException(status_code=400, detail="Formato inválido. Apenas PDF e DOCX são suportados.")
 
+        # Cobrar créditos antes de processar
+        custo = get_credit_cost("pdf")
+        if not debitar_creditos(user["id"], custo):
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+
         extensao = file.filename.lower().split('.')[-1]
         
         temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
@@ -1487,7 +1528,7 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
                 texto_extraido = "\n\n".join(texto_extraido)
 
             texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
-            registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, 0, request)
+            registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, custo, request)
 
             return {"resultado": texto_extraido}
 
@@ -1503,6 +1544,91 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
+
+@api_router.post("/chat-followup")
+@limiter.limit("20 per minute")
+def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends(require_api_key)):
+    """
+    Processa mensagens de follow-up do chat, permitindo interação com respostas da IA.
+    """
+    try:
+        if not data.mensagem or not data.mensagem.strip():
+            raise HTTPException(status_code=400, detail="Mensagem não pode estar vazia")
+
+        # Custo menor para mensagens de follow-up (1 crédito)
+        custo = 1
+        if not debitar_creditos(user["id"], custo):
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+
+        # Construir contexto do histórico
+        contexto_historico = ""
+        if data.historico:
+            for msg in data.historico[-5:]:  # Últimas 5 mensagens para contexto
+                role = "Usuário" if msg.get("role") == "user" else "Assistente"
+                contexto_historico += f"{role}: {msg.get('content', '')}\n\n"
+
+        # Construir prompt contextualizado baseado no tipo de análise
+        tipo_analise_nomes = {
+            "explicar": "Explicação de Conceito",
+            "critica": "Análise Crítica",
+            "fatos": "Verificação de Fatos",
+            "perspectiva": "Pesquisa de Perspectivas",
+            "mapa": "Mapa Conceitual",
+            "structure_mapper": "Mapeamento de Estrutura",
+            "meta_analise": "Meta-Análise",
+        }
+        
+        nome_analise = tipo_analise_nomes.get(data.tipo_analise, data.tipo_analise)
+
+        prompt = f"""Você é um assistente especializado em análise científica. O usuário está interagindo com uma análise do tipo: {nome_analise}.
+
+Contexto da análise anterior:
+{contexto_historico if contexto_historico else "Esta é a primeira interação após a análise inicial."}
+
+Texto do artigo (referência):
+{data.texto_artigo[:2000] if data.texto_artigo else "Não disponível"}
+
+Mensagem do usuário:
+{data.mensagem}
+
+Responda de forma clara, objetiva e útil. Se o usuário pedir melhorias, sugestões ou esclarecimentos, forneça respostas práticas e acionáveis. Mantenha o foco no contexto científico e na análise realizada."""
+
+        # Gerar resposta usando gpt_engine
+        try:
+            from .gpt_engine import gerar_resposta
+        except ImportError:
+            try:
+                import gpt_engine
+                gerar_resposta = gpt_engine.gerar_resposta
+            except ImportError:
+                import backend.gpt_engine as gpt_engine
+                gerar_resposta = gpt_engine.gerar_resposta
+
+        resposta = gerar_resposta(prompt, temperatura=0.7, max_output_tokens=2000)
+
+        # Registrar log
+        registrar_log(
+            user["id"],
+            f"chat_{data.tipo_analise}",
+            data.mensagem[:500],
+            resposta[:500] if resposta else "",
+            custo,
+            request
+        )
+
+        return {
+            "resultado": resposta,
+            "resposta": resposta,  # Alias para compatibilidade
+            "creditos_gastos": custo
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Erro em chat-followup: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao processar mensagem: {str(e)}")
 
 # ============================================
 # ✅ INCLUIR ROUTER NA APLICAÇÃO

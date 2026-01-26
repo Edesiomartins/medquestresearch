@@ -43,6 +43,7 @@ export const API_ENDPOINTS = {
   LOGIN: '/genapi/login',
   CREDITOS: '/genapi/creditos',
   ADICIONAR_CREDITOS: '/genapi/admin/adicionar-creditos',
+  LISTAR_CUSTOS: '/genapi/admin/custos',
   
   // Rotas de IA (versões antigas - mantidas para compatibilidade)
   EXPLICAR: '/genapi/explicar',
@@ -63,6 +64,9 @@ export const API_ENDPOINTS = {
   // Rotas de status de jobs assíncronos
   JOB_STATUS: '/genapi/job',
   JOBS: '/genapi/jobs',
+  
+  // Chat e interação
+  CHAT_FOLLOWUP: '/genapi/chat-followup',
 } as const;
 
 // Função helper para construir URLs completas

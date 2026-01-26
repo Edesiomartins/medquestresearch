@@ -8,12 +8,14 @@ interface ResultWindowsManagerProps {
   windows: Map<string, ResultWindowData>;
   onUpdateWindow: (id: string, updates: Partial<ResultWindowData>) => void;
   onCloseWindow: (id: string) => void;
+  token?: string; // Token para autenticação no chat
 }
 
 export default function ResultWindowsManager({
   windows,
   onUpdateWindow,
   onCloseWindow,
+  token,
 }: ResultWindowsManagerProps) {
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
   const [minimizedWindows, setMinimizedWindows] = useState<Set<string>>(() => new Set());
@@ -90,6 +92,10 @@ export default function ResultWindowsManager({
           onMaximize={() => handleMaximize(windowId)}
           isMinimized={minimizedWindows.has(windowId)}
           windowIndex={index}
+          token={token}
+          onUpdateResult={(newResult) => {
+            onUpdateWindow(windowId, { resultado: newResult });
+          }}
         />
       ))}
     </>

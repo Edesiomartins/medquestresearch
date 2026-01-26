@@ -186,6 +186,7 @@ export default function Home() {
       resultado: textoProcessandoCompleto,
       loading: true,
       timestamp: Date.now(),
+      textoArtigo: textoArtigo || undefined, // Adicionar texto do artigo para contexto do chat
     };
 
     setResultWindows(prev => new Map(prev).set(windowId, novaJanela));
@@ -335,6 +336,7 @@ export default function Home() {
       resultado: textoProcessandoCompleto,
       loading: true,
       timestamp: Date.now(),
+      textoArtigo: textoArtigo || undefined, // Adicionar texto do artigo para contexto do chat
     };
 
     setResultWindows(prev => new Map(prev).set(windowId, novaJanela));
@@ -579,6 +581,7 @@ export default function Home() {
         windows={resultWindows}
         onUpdateWindow={handleUpdateWindow}
         onCloseWindow={handleCloseWindow}
+        token={token || undefined}
       />
 
       {/* Modal para Explicar Conteúdo */}

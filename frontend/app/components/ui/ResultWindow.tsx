@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import ChatInterface from './ChatInterface';
 
 export interface ResultWindowData {
   id: string;
@@ -10,6 +11,7 @@ export interface ResultWindowData {
   resultado: string | null;
   loading: boolean;
   timestamp: number;
+  textoArtigo?: string; // Para contexto do chat
 }
 
 interface ResultWindowProps {
@@ -23,6 +25,8 @@ interface ResultWindowProps {
   isMinimized: boolean;
   initialPosition?: { x: number; y: number };
   windowIndex?: number;
+  token?: string; // Token para autenticação no chat
+  onUpdateResult?: (newResult: string) => void; // Callback para atualizar resultado
 }
 
 export default function ResultWindow({
@@ -36,7 +40,10 @@ export default function ResultWindow({
   isMinimized,
   initialPosition,
   windowIndex = 0,
+  token,
+  onUpdateResult,
 }: ResultWindowProps) {
+  const [showChat, setShowChat] = useState(false);
   // Calcular posição inicial em cascata se não fornecida
   const getInitialPosition = useCallback(() => {
     if (initialPosition) return initialPosition;
@@ -121,6 +128,9 @@ export default function ResultWindow({
   
   // Estado: error
   const isError = windowData.resultado && windowData.resultado.startsWith('❌');
+  
+  // Verificar se resultado está completo (não está processando e não é erro)
+  const resultadoCompleto = !windowData.loading && windowData.resultado && !isError && !isProcessing;
 
   if (isMinimized) {
     return (
@@ -183,6 +193,25 @@ export default function ResultWindow({
           </h3>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* Botão de Chat (apenas quando resultado está completo) */}
+          {resultadoCompleto && token && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowChat(!showChat);
+              }}
+              className={`p-1 transition-colors ${
+                showChat 
+                  ? 'text-[#2563eb] bg-blue-50 rounded' 
+                  : 'text-slate-400 hover:text-[#2563eb]'
+              }`}
+              title="Abrir/Fechar Chat"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={onMinimize}
             className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
@@ -212,29 +241,51 @@ export default function ResultWindow({
       </div>
 
       {/* Conteúdo da janela */}
-      <div className="overflow-y-auto max-h-[calc(80vh-60px)] p-4">
-        {isProcessing ? (
-          <div className="text-center py-8">
-            <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
-            <div className="whitespace-pre-wrap text-base text-slate-700 font-sans leading-relaxed">
-              {windowData.resultado}
-            </div>
-          </div>
-        ) : isError ? (
-          <div className="prose max-w-none">
-            <div className="whitespace-pre-wrap text-sm text-red-700 bg-red-50 p-4 rounded-lg border border-red-200 overflow-x-auto font-sans leading-relaxed">
-              {windowData.resultado}
-            </div>
-          </div>
-        ) : windowData.resultado ? (
-          <div className="prose max-w-none">
-            <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed break-words">
-              {windowData.resultado}
-            </div>
+      <div className="flex flex-col" style={{ maxHeight: 'calc(80vh - 60px)' }}>
+        {!showChat ? (
+          // Modo de visualização de resultado
+          <div className="overflow-y-auto flex-1 p-4">
+            {isProcessing ? (
+              <div className="text-center py-8">
+                <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
+                <div className="whitespace-pre-wrap text-base text-slate-700 font-sans leading-relaxed">
+                  {windowData.resultado}
+                </div>
+              </div>
+            ) : isError ? (
+              <div className="prose max-w-none">
+                <div className="whitespace-pre-wrap text-sm text-red-700 bg-red-50 p-4 rounded-lg border border-red-200 overflow-x-auto font-sans leading-relaxed">
+                  {windowData.resultado}
+                </div>
+              </div>
+            ) : windowData.resultado ? (
+              <div className="prose max-w-none">
+                <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed break-words">
+                  {windowData.resultado}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-500">
+                <p className="text-sm">Aguardando resultado...</p>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="text-center py-8 text-slate-500">
-            <p className="text-sm">Aguardando resultado...</p>
+          // Modo de chat
+          <div className="flex-1" style={{ minHeight: '400px', maxHeight: 'calc(80vh - 60px)' }}>
+            <ChatInterface
+              initialMessage={windowData.resultado || undefined}
+              tipoAnalise={windowData.tipo}
+              textoArtigo={windowData.textoArtigo}
+              token={token || ''}
+              onNewResponse={(newResponse) => {
+                // Atualizar resultado quando houver nova resposta do chat
+                if (onUpdateResult) {
+                  onUpdateResult(newResponse);
+                }
+              }}
+              disabled={!token}
+            />
           </div>
         )}
       </div>
