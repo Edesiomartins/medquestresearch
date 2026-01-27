@@ -13,10 +13,9 @@ import {
   analisarCritica,
   uploadPdf,
 } from '@/app/lib/api';
-import ToolCard from '@/app/components/ui/ToolCard';
 import ResultPanel from '@/app/components/ui/ResultPanel';
+import TextWindow from '@/app/components/ui/TextWindow';
 import Sidebar from '@/app/components/ui/sidebar';
-import Image from 'next/image'; // Para a logo na seção de upload
 
 export default function Home() {
   // 1. Todos os useState
@@ -88,18 +87,15 @@ export default function Home() {
 
       if (res.erro) {
         setUploadError(res.erro);
-        setResultadoAtual(res.erro);
         setTituloResultado('Erro ao processar arquivo');
       } else {
         setTextoArtigo(res.resultado || '');
-        setResultadoAtual(res.resultado || 'Arquivo processado com sucesso!');
-      setTituloResultado('Texto extraído do arquivo');
+        // Não atualizar resultadoAtual aqui - o texto será mostrado na janela esquerda (TextWindow)
         setUploadProgress(100); // Simula conclusão
       }
     } catch (err: any) {
       console.error("Erro no upload:", err);
       setUploadError(`Falha ao enviar arquivo: ${err.message || 'Erro desconhecido'}`);
-      setResultadoAtual(`Falha ao enviar arquivo: ${err.message || 'Erro desconhecido'}`);
       setTituloResultado('Erro');
     } finally {
       setLoadingResultado(false);
@@ -334,175 +330,24 @@ export default function Home() {
       {/* Componente Sidebar */}
       <Sidebar usuario={usuario} creditos={creditos} onLogout={logout} />
 
-      {/* Estrutura principal da dashboard */}
-      <div className="ml-64 flex-1 flex"> {/* ml-64 para compensar a largura da sidebar */}
-        {/* COLUNA AÇÕES */}
-        <div className="w-1/2 p-8 space-y-8 overflow-y-auto border-r border-mq-slate-200">
-          {/* COMECE AGORA - Seção de Upload */}
-          <div className="card-elevated p-6">
-            <h2 className="text-2xl font-bold text-mq-slate-800 mb-4">Comece agora</h2>
-            <p className="text-base text-mq-slate-600 mb-6">
-              Envie um artigo científico (PDF ou DOCX) e escolha o tipo de análise.
-            </p>
-
-            {/* Área de Drag & Drop */}
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`
-                relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl
-                transition-all duration-300
-                ${isDragging ? 'border-mq-blue-500 bg-mq-blue-50' : 'border-mq-slate-300 hover:border-mq-blue-400 bg-white'}
-              `}
-            >
-              <input
-                id="file-upload"
-                type="file"
-                accept=".pdf,.docx"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUpload(file);
-                }}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-              />
-               <div className="text-center">
-                 <div className="flex justify-center mb-3">
-                   <Image 
-                     src="/logo-medquestresearch.png" 
-                     alt="Upload" 
-                     width={64} 
-                     height={64} 
-                     className="opacity-70"
-                   />
-                 </div>
-                 <p className="text-lg font-semibold text-mq-slate-700">
-                   Arraste e solte seu arquivo aqui
-                 </p>
-                <p className="text-sm text-mq-slate-500 mt-1">
-                  ou <span className="text-mq-blue-600 font-medium cursor-pointer hover:underline">clique para selecionar</span>
-                </p>
-                <p className="text-xs text-mq-slate-400 mt-2">
-                  (PDF, DOCX - máximo 10MB)
-                </p>
-              </div>
-
-              {/* Progresso de Upload */}
-              {uploadProgress > 0 && uploadProgress < 100 && (
-                <div className="absolute bottom-0 left-0 w-full h-2 bg-mq-blue-200 rounded-b-xl overflow-hidden">
-                  <div
-                    className="h-full bg-mq-blue-500 transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
-                  ></div>
-                </div>
-              )}
-              {uploadProgress === 100 && (
-                <div className="absolute bottom-0 left-0 w-full h-2 bg-green-500 rounded-b-xl"></div>
-              )}
-            </div>
-
-            {/* Feedback de Upload */}
-            {uploadError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-300 rounded-lg flex items-center gap-2">
-                <span className="text-red-600 text-xl">❌</span>
-                <p className="text-red-700 text-sm">{uploadError}</p>
-              </div>
-            )}
-            {uploadProgress === 100 && !uploadError && (
-              <div className="mt-4 p-3 bg-green-50 border border-green-300 rounded-lg flex items-center gap-2">
-                <span className="text-green-600 text-xl">✅</span>
-                <p className="text-green-700 text-sm">Arquivo enviado com sucesso!</p>
-              </div>
-            )}
-          </div>
-
-          {/* GRID FINAL — FERRAMENTAS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* 1️⃣ Visualizar estrutura */}
-            <ToolCard
-              title="Visualizar estrutura"
-              description="Visualize a estrutura do artigo em formato de mapa"
-              icon="🗺️"
-              disabled={!textoArtigo}
-              active={cardAtivo === "structure_visualizer"}
-              onClick={() => runAnalise("structure_visualizer")}
-            />
-
-            {/* 2️⃣ Mapear estrutura */}
-            <ToolCard
-              title="Mapear estrutura"
-              description="Identifique seções, organização lógica e tipo de estudo do artigo"
-              icon="🧠"
-              disabled={!textoArtigo}
-              active={cardAtivo === "structure_mapper"}
-              onClick={() => runAnalise("structure_mapper")}
-            />
-
-            {/* 3️⃣ Verificar fatos */}
-            <ToolCard
-              title="Verificar fatos"
-              description="Cheque afirmações e evidências apresentadas no artigo"
-              icon="✓"
-              disabled={!textoArtigo}
-              active={cardAtivo === "fatos"}
-              onClick={() => runAnalise("fatos")}
-            />
-
-            {/* 4️⃣ Explicar conteúdo */}
-            <ToolCard
-              title="Explicar conteúdo"
-              description="Compreenda conceitos e trechos específicos do artigo com explicações claras"
-              icon="📚"
-              disabled={!textoArtigo}
-              active={cardAtivo === "explicar"}
-              onClick={() => runAnalise("explicar")}
-            />
-
-            {/* 5️⃣ Perspectivas científicas */}
-            <ToolCard
-              title="Perspectivas científicas"
-              description="Compare o artigo com outras evidências e estudos relacionados"
-              icon="🌍"
-              disabled={!textoArtigo}
-              active={cardAtivo === "perspectiva"}
-              onClick={() => runAnalise("perspectiva")}
-            />
-
-            {/* 6️⃣ Análise crítica */}
-            <ToolCard
-              title="Análise crítica"
-              description="Aplique leitura crítica usando 9 métodos científicos de análise"
-              icon="🔬"
-              disabled={!textoArtigo}
-              active={cardAtivo === "critica"}
-              onClick={() => runAnalise("critica")}
-            />
-          </div>
-
-          {/* Link para Metanálise */}
-          <div className="mt-6 card-elevated p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-[#0c3d66] mb-2">
-                  📑 Metanálise PRISMA
-                </h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  Crie revisões sistemáticas e metanálises completas. O sistema realiza buscas automáticas 
-                  na literatura (PubMed, LILACS, Cochrane) e executa todas as etapas do protocolo PRISMA.
-                </p>
-              </div>
-              <button
-                onClick={() => router.push('/meta-analise')}
-                className="px-6 py-3 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] transition-colors font-medium ml-4"
-              >
-                Acessar Metanálise
-              </button>
-            </div>
-          </div>
+      {/* Estrutura principal da dashboard - Duas janelas */}
+      <div className="ml-64 flex-1 flex h-screen"> {/* ml-64 para compensar a largura da sidebar */}
+        {/* JANELA ESQUERDA - Texto Extraído */}
+        <div className="w-1/2 p-6 border-r border-mq-slate-200 overflow-hidden flex flex-col">
+          <TextWindow
+            texto={textoArtigo}
+            loading={loadingResultado && uploadProgress > 0 && uploadProgress < 100}
+            uploadProgress={uploadProgress}
+            uploadError={uploadError}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onFileSelect={handleUpload}
+          />
         </div>
 
-        {/* COLUNA RESULTADO - Mostra texto do PDF e resultados de análises */}
-        <div className="w-1/2 p-8 overflow-y-auto">
+        {/* JANELA DIREITA - Resultados + Chat */}
+        <div className="w-1/2 p-6 overflow-hidden flex flex-col">
           <ResultPanel
             loading={loadingResultado}
             titulo={tituloResultado}
