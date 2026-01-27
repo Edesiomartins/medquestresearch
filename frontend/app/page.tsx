@@ -216,6 +216,16 @@ export default function Home() {
     setTituloResultado(titulos[tipo] || 'Processando...');
     setLoadingResultado(true);
 
+    // Garantir que textoArtigo não é null (já verificado acima, mas TypeScript precisa de confirmação)
+    if (!textoArtigo) {
+      setModoConfiguracao(false);
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      setLoadingResultado(false);
+      setCardAtivo(null);
+      return;
+    }
+
     try {
       let res;
       switch (tipo) {
@@ -391,6 +401,15 @@ export default function Home() {
       return;
     }
 
+    // Garantir que textoArtigo não é null para tipos que precisam dele
+    if ((tipo === 'explicar' || tipo === 'critica') && !textoArtigo) {
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      setModoConfiguracao(false);
+      setCardAtivo(null);
+      return;
+    }
+
     // Mostrar estado de processamento
     let textoProcessando = '⏳ Análise em andamento\n\n';
     if (tipo === 'explicar' && parametros.trecho) {
@@ -407,10 +426,10 @@ export default function Home() {
 
     try {
       let res;
-      if (tipo === 'explicar' && parametros.trecho) {
-        res = await explicarConceito(token, textoArtigo!, parametros.trecho, parametros.nivel || 'graduação');
-      } else if (tipo === 'critica' && parametros.focoAnalise) {
-        res = await analisarCritica(token, textoArtigo!, parametros.focoAnalise);
+      if (tipo === 'explicar' && parametros.trecho && textoArtigo) {
+        res = await explicarConceito(token, textoArtigo, parametros.trecho, parametros.nivel || 'graduação');
+      } else if (tipo === 'critica' && parametros.focoAnalise && textoArtigo) {
+        res = await analisarCritica(token, textoArtigo, parametros.focoAnalise);
       } else {
         return;
       }
