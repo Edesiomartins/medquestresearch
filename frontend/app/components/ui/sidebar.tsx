@@ -3,6 +3,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface Usuario {
   id?: string;
@@ -17,8 +18,28 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
+  const pathname = usePathname();
+  
+  const modulos = [
+    { href: '/', icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
+    { href: '/', icon: '🧠', label: 'Mapear estrutura', tipo: 'structure_mapper' },
+    { href: '/', icon: '✓', label: 'Verificar fatos', tipo: 'fatos' },
+    { href: '/', icon: '📚', label: 'Explicar conteúdo', tipo: 'explicar' },
+    { href: '/', icon: '🌍', label: 'Perspectivas científicas', tipo: 'perspectiva' },
+    { href: '/', icon: '🔬', label: 'Análise crítica', tipo: 'critica' },
+    { href: '/meta-analise', icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
+  ];
+
+  // Determinar módulo ativo baseado na rota
+  const isModuloAtivo = (modulo: typeof modulos[0]) => {
+    if (modulo.href === '/meta-analise') {
+      return pathname === '/meta-analise';
+    }
+    return pathname === '/';
+  };
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-linear-to-br from-[#0c3d66] to-[#0ea5e9] text-white flex flex-col justify-between shadow-lg">
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-linear-to-br from-[#0c3d66] to-[#0ea5e9] text-white flex flex-col shadow-lg">
       {/* TOPO - Logo e Título */}
       <div className="p-6 border-b border-[#0369a1]/50 flex flex-col items-center gap-4">
         <Image
@@ -33,30 +54,45 @@ export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
       </div>
       
       {/* INFO USUÁRIO */}
-      <div className="p-6 space-y-4 grow">
+      <div className="p-6">
         <div>
           <p className="text-blue-200 text-sm">Usuário</p>
           <p className="font-medium text-white">{usuario?.nome || usuario?.email}</p>
         </div>
-        <div>
-          <p className="text-blue-200 text-sm">Créditos</p>
-          <p className="font-bold text-2xl text-white">{creditos}</p>
-        </div>
-        {/* Links de Navegação */}
-        <nav className="mt-8 space-y-2">
-          <Link href="/" className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#0369a1] transition-colors text-white">
-            <span className="text-xl">🏠</span>
-            <span className="font-medium">Dashboard</span>
-          </Link>
-          <Link href="/meta-analise" className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#0369a1] transition-colors text-white">
-            <span className="text-xl">📑</span>
-            <span className="font-medium">Metanálise PRISMA</span>
-          </Link>
-        </nav>
       </div>
       
-      {/* LOGOUT */}
-      <div className="p-6 border-t border-[#0369a1]/50">
+      {/* NAVEGAÇÃO - MÓDULOS */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-4">
+        <div className="space-y-1">
+          {modulos.map((modulo) => {
+            const isActive = isModuloAtivo(modulo);
+            return (
+              <Link
+                key={modulo.tipo}
+                href={modulo.href}
+                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                  isActive 
+                    ? 'bg-[#0369a1] text-white shadow-md' 
+                    : 'hover:bg-[#0369a1]/50 text-white'
+                }`}
+              >
+                <span className="text-xl">{modulo.icon}</span>
+                <span className="font-medium text-sm">{modulo.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+      
+      {/* RODAPÉ - Créditos e Logout */}
+      <div className="p-6 border-t border-[#0369a1]/50 space-y-4">
+        {/* Créditos */}
+        <div className="bg-[#0369a1]/30 rounded-lg p-4">
+          <p className="text-blue-200 text-xs mb-1">Créditos Disponíveis</p>
+          <p className="font-bold text-2xl text-white">{creditos}</p>
+        </div>
+        
+        {/* Logout */}
         <button
           onClick={onLogout}
           className="w-full bg-[#0369a1] hover:bg-[#075985] transition-colors py-3 rounded-lg text-sm font-medium text-white shadow-md"

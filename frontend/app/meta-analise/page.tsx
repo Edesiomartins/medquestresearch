@@ -13,7 +13,7 @@ export default function MetaAnalisePage() {
   const { token, usuario, creditos, loading, logout } = useAuth();
   const [tema, setTema] = useState('');
   const [etapaAtual, setEtapaAtual] = useState<string | null>(null);
-  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(() => new Map());
+  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map);
   const [executando, setExecutando] = useState(false);
   const [mounted, setMounted] = useState(false);
 
