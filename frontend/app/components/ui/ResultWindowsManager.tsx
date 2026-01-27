@@ -1,15 +1,14 @@
-// app/components/ui/ResultWindowsManager.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
-import ResultWindow, { ResultWindowData } from './ResultWindow';
+import { useEffect, useState } from 'react';
+import ResultWindow from './ResultWindow';
+import { ResultWindowData } from './ResultWindow';
 
 interface ResultWindowsManagerProps {
   windows: Map<string, ResultWindowData>;
   onUpdateWindow: (id: string, updates: Partial<ResultWindowData>) => void;
   onCloseWindow: (id: string) => void;
-  token?: string; // Token para autenticação no chat
-  onExecute?: (windowId: string, parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => void; // Callback para executar análise
+  token?: string;
 }
 
 export default function ResultWindowsManager({
@@ -17,95 +16,39 @@ export default function ResultWindowsManager({
   onUpdateWindow,
   onCloseWindow,
   token,
-  onExecute,
 }: ResultWindowsManagerProps) {
-  const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
-  const [minimizedWindows, setMinimizedWindows] = useState<Set<string>>(new Set);
-  const [windowZIndices, setWindowZIndices] = useState<Map<string, number>>(new Map);
+  // ✅ Garantir que só renderiza no cliente
+  const [mounted, setMounted] = useState(false);
 
-  // Calcular z-index baseado na ordem de criação e janela ativa
-  const getZIndex = useCallback((windowId: string) => {
-    if (!windowZIndices.has(windowId)) {
-      // Primeira vez: atribuir z-index baseado na ordem
-      const baseZIndex = 1000 + Array.from(windows.keys()).indexOf(windowId);
-      setWindowZIndices(prev => new Map(prev).set(windowId, baseZIndex));
-      return baseZIndex;
-    }
-    return windowZIndices.get(windowId) || 1000;
-  }, [windows, windowZIndices]);
-
-  const handleActivate = useCallback((windowId: string) => {
-    setActiveWindowId(windowId);
-    // Trazer para frente: aumentar z-index
-    const currentZIndex = getZIndex(windowId);
-    const maxZIndex = Math.max(...Array.from(windowZIndices.values()), 1000);
-    const newZIndex = maxZIndex + 1;
-    setWindowZIndices(prev => new Map(prev).set(windowId, newZIndex));
-  }, [getZIndex, windowZIndices]);
-
-  const handleMinimize = useCallback((windowId: string) => {
-    setMinimizedWindows(prev => new Set(prev).add(windowId));
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
-  const handleMaximize = useCallback((windowId: string) => {
-    setMinimizedWindows(prev => {
-      const next = new Set(prev);
-      next.delete(windowId);
-      return next;
-    });
-    handleActivate(windowId);
-  }, [handleActivate]);
+  if (!mounted) {
+    return null;
+  }
 
-  const handleClose = useCallback((windowId: string) => {
-    onCloseWindow(windowId);
-    setMinimizedWindows(prev => {
-      const next = new Set(prev);
-      next.delete(windowId);
-      return next;
-    });
-    setWindowZIndices(prev => {
-      const next = new Map(prev);
-      next.delete(windowId);
-      return next;
-    });
-    if (activeWindowId === windowId) {
-      setActiveWindowId(null);
-    }
-  }, [onCloseWindow, activeWindowId]);
+  // ✅ Converter Map para array para renderização
+  const windowsArray = Array.from(windows.entries()).map(([id, data]) => ({
+    id,
+    ...data,
+  }));
 
-  // Ordenar janelas por z-index (maior primeiro = no topo)
-  const sortedWindows = Array.from(windows.entries()).sort((a, b) => {
-    const zA = getZIndex(a[0]);
-    const zB = getZIndex(b[0]);
-    return zB - zA;
-  });
+  if (windowsArray.length === 0) {
+    return null;
+  }
 
   return (
-    <>
-      {sortedWindows.map(([windowId, windowData], index) => (
+    <div className="fixed bottom-0 right-0 p-4 space-y-4 max-h-screen overflow-y-auto">
+      {windowsArray.map((window) => (
         <ResultWindow
-          key={windowId}
-          window={windowData}
-          zIndex={getZIndex(windowId)}
-          isActive={activeWindowId === windowId}
-          onActivate={() => handleActivate(windowId)}
-          onClose={() => handleClose(windowId)}
-          onMinimize={() => handleMinimize(windowId)}
-          onMaximize={() => handleMaximize(windowId)}
-          isMinimized={minimizedWindows.has(windowId)}
-          windowIndex={index}
+          key={window.id}
+          window={window}
+          onUpdate={(updates) => onUpdateWindow(window.id, updates)}
+          onClose={() => onCloseWindow(window.id)}
           token={token}
-          onUpdateResult={(newResult) => {
-            onUpdateWindow(windowId, { resultado: newResult });
-          }}
-          onExecute={(parametros) => {
-            if (onExecute) {
-              onExecute(windowId, parametros);
-            }
-          }}
         />
       ))}
-    </>
+    </div>
   );
 }
-

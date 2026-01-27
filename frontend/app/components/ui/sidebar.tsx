@@ -1,10 +1,9 @@
-// app/components/ui/Sidebar.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Image from 'next/image';
 
 interface Usuario {
   id?: string;
@@ -16,19 +15,36 @@ interface SidebarProps {
   usuario: Usuario | null;
   creditos: number;
   onLogout: () => void;
-  onModuleClick?: (tipo: string) => void; // Callback para executar análises
+  onModuleClick?: (tipo: string) => void;
 }
 
-export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: SidebarProps) {
+export default function Sidebar({
+  usuario,
+  creditos,
+  onLogout,
+  onModuleClick,
+}: SidebarProps) {
+  // ✅ Garantir que só renderiza no cliente
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  
-  // Garantir que o componente está montado no cliente
+
   useEffect(() => {
     setMounted(true);
   }, []);
-  
+
+  if (!mounted) {
+    // ✅ Renderizar placeholder com mesma altura para evitar layout shift
+    return (
+      <aside className="fixed left-0 top-0 h-screen w-64 bg-linear-to-br from-[#0c3d66] to-[#0ea5e9] text-white flex flex-col shadow-lg">
+        <div className="p-6 border-b border-[#0369a1]/50 flex flex-col items-center gap-4">
+          <div className="w-20 h-20 bg-white/10 rounded" />
+          <div className="h-6 w-32 bg-white/10 rounded" />
+        </div>
+      </aside>
+    );
+  }
+
   const modulos = [
     { href: '/', icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
     { href: '/', icon: '🧠', label: 'Mapear estrutura', tipo: 'structure_mapper' },
@@ -41,7 +57,6 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
 
   // Determinar módulo ativo baseado na rota (apenas no cliente)
   const isModuloAtivo = (modulo: typeof modulos[0]) => {
-    if (!mounted) return false;
     if (modulo.href === '/meta-analise') {
       return pathname === '/meta-analise';
     }
@@ -54,31 +69,23 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
     e.stopPropagation();
     
     if (modulo.tipo === 'meta-analise') {
-      // Metanálise navega para página dedicada
       router.push('/meta-analise');
       return;
     }
 
-    // Outros módulos executam análise
     if (!onModuleClick) {
-      console.warn('onModuleClick não está disponível');
-      // Se não temos a função, pelo menos navegar para a página principal
       if (pathname !== '/') {
         router.push('/');
       }
       return;
     }
     
-    // Se não estiver na página principal, navegar primeiro
     if (pathname !== '/') {
       router.push('/');
-      // Usar um pequeno delay para garantir que a navegação aconteceu
-      // e o componente foi montado antes de executar a análise
       setTimeout(() => {
         onModuleClick(modulo.tipo);
       }, 300);
     } else {
-      // Já está na página principal, executar diretamente
       onModuleClick(modulo.tipo);
     }
   };
@@ -109,9 +116,8 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
       {/* NAVEGAÇÃO - MÓDULOS */}
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         <div className="space-y-1">
-          {mounted && modulos.map((modulo) => {
+          {modulos.map((modulo) => {
             const isActive = isModuloAtivo(modulo);
-            // Metanálise usa Link, outros usam button
             if (modulo.tipo === 'meta-analise') {
               return (
                 <Link
@@ -129,7 +135,6 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
               );
             }
             
-            // Outros módulos são botões que executam análises
             return (
               <button
                 key={modulo.tipo}
@@ -145,19 +150,6 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
               </button>
             );
           })}
-          {!mounted && (
-            <div className="space-y-1">
-              {modulos.map((modulo) => (
-                <div
-                  key={modulo.tipo}
-                  className="flex items-center gap-3 p-3 rounded-lg text-white opacity-50"
-                >
-                  <span className="text-xl">{modulo.icon}</span>
-                  <span className="font-medium text-sm">{modulo.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </nav>
       

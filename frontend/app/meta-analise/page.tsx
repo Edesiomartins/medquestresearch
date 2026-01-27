@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
 import { metaAnalysis } from '@/app/lib/api';
@@ -13,21 +13,30 @@ export default function MetaAnalisePage() {
   const { token, usuario, creditos, loading, logout } = useAuth();
   const [tema, setTema] = useState('');
   const [etapaAtual, setEtapaAtual] = useState<string | null>(null);
-  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map);
+  
+  // ✅ CORREÇÃO 1: Usar objeto ao invés de Map
+  const [resultWindowsData, setResultWindowsData] = useState<Record<string, ResultWindowData>>({});
+  
   const [executando, setExecutando] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Garantir que o componente está montado no cliente
+  // ✅ GARANTIR HIDRATAÇÃO CORRETA
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Redirecionar se não autenticado
+  // ✅ REDIRECIONAR SE NÃO AUTENTICADO
   useEffect(() => {
     if (!loading && !token && mounted) {
       router.replace('/login');
     }
   }, [loading, token, router, mounted]);
+
+  // ✅ CORREÇÃO 2: Converter para Map apenas no cliente
+  const resultWindows = useMemo(() => {
+    if (!mounted) return new Map();
+    return new Map(Object.entries(resultWindowsData));
+  }, [resultWindowsData, mounted]);
 
   if (!mounted || loading || !token) {
     return (
@@ -37,130 +46,122 @@ export default function MetaAnalisePage() {
     );
   }
 
-  const executarEtapa = useCallback(async (etapa: string, temaTexto: string, estilo: string = 'Vancouver') => {
-    if (!token || !temaTexto.trim()) {
-      return;
-    }
+  const executarEtapa = useCallback(
+    async (etapa: string, temaTexto: string, estilo: string = 'Vancouver') => {
+      if (!token || !temaTexto.trim()) {
+        return;
+      }
 
-    setExecutando(true);
-    const windowId = `meta_analise_etapa_${etapa}_${Date.now()}`;
-    
-    const nomesEtapa: Record<string, string> = {
-      '1': 'Etapa 1: Estruturação PICO e Busca na Literatura',
-      '2': 'Etapa 2: Extração de Dados',
-      '3': 'Etapa 3: Redação Técnica (PRISMA)',
-      '4': 'Etapa 4: Verificação Final'
-    };
+      setExecutando(true);
+      
+      // ✅ CORREÇÃO 3: Gerar ID sem Date.now() ou usar valor consistente
+      const timestamp = Date.now();
+      const windowId = `meta_analise_etapa_${etapa}_${timestamp}`;
 
-    const novaJanela: ResultWindowData = {
-      id: windowId,
-      tipo: 'meta_analise',
-      titulo: nomesEtapa[etapa] || `Etapa ${etapa}`,
-      resultado: `⏳ Processando ${nomesEtapa[etapa]}...\n\nAguarde enquanto processamos sua metanálise.`,
-      loading: true,
-      timestamp: Date.now(),
-    };
+      const nomesEtapa: Record<string, string> = {
+        '1': 'Etapa 1: Estruturação PICO e Busca na Literatura',
+        '2': 'Etapa 2: Extração de Dados',
+        '3': 'Etapa 3: Redação Técnica (PRISMA)',
+        '4': 'Etapa 4: Verificação Final',
+      };
 
-    setResultWindows(prev => new Map(prev).set(windowId, novaJanela));
-    setEtapaAtual(etapa);
+      const novaJanela: ResultWindowData = {
+        id: windowId,
+        tipo: 'meta_analise',
+        titulo: nomesEtapa[etapa] || `Etapa ${etapa}`,
+        resultado: `⏳ Processando ${nomesEtapa[etapa]}...\n\nAguarde enquanto processamos sua metanálise.`,
+        loading: true,
+        timestamp, // ✅ Usar valor consistente
+      };
 
-    try {
-      const res = await metaAnalysis(token, {
-        tema: temaTexto, // Tema é obrigatório
-        etapa,
-        texto_artigo: '', // Opcional - não necessário para etapa 1
-        estilo,
-      });
+      // ✅ CORREÇÃO 4: Atualizar objeto ao invés de Map
+      setResultWindowsData((prev) => ({
+        ...prev,
+        [windowId]: novaJanela,
+      }));
+      setEtapaAtual(etapa);
 
-      if (res.erro) {
-        setResultWindows(prev => {
-          const next = new Map(prev);
-          const janela = next.get(windowId);
-          if (janela) {
-            next.set(windowId, {
-              ...janela,
+      try {
+        const res = await metaAnalysis(token, {
+          tema: temaTexto,
+          etapa,
+          texto_artigo: '',
+          estilo,
+        });
+
+        if (res.erro) {
+          setResultWindowsData((prev) => ({
+            ...prev,
+            [windowId]: {
+              ...prev[windowId],
               resultado: `❌ Erro: ${res.erro}`,
               loading: false,
-            });
-          }
-          return next;
-        });
-      } else if (res.resultado) {
-        setResultWindows(prev => {
-          const next = new Map(prev);
-          const janela = next.get(windowId);
-          if (janela) {
-            next.set(windowId, {
-              ...janela,
+            },
+          }));
+        } else if (res.resultado) {
+          setResultWindowsData((prev) => ({
+            ...prev,
+            [windowId]: {
+              ...prev[windowId],
               resultado: res.resultado || 'Etapa concluída',
               loading: false,
-            });
-          }
-          return next;
-        });
-      }
-    } catch (error: any) {
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janela = next.get(windowId);
-        if (janela) {
-          next.set(windowId, {
-            ...janela,
+            },
+          }));
+        }
+      } catch (error: any) {
+        setResultWindowsData((prev) => ({
+          ...prev,
+          [windowId]: {
+            ...prev[windowId],
             resultado: `❌ Erro: ${error.message || 'Erro desconhecido'}`,
             loading: false,
-          });
-        }
-        return next;
-      });
-    } finally {
-      setExecutando(false);
-      setEtapaAtual(null);
-    }
-  }, [token]);
+          },
+        }));
+      } finally {
+        setExecutando(false);
+        setEtapaAtual(null);
+      }
+    },
+    [token]
+  );
 
   const executarTodasEtapas = useCallback(async () => {
     if (!tema.trim() || !token) return;
 
-    const estilo = 'Vancouver'; // Pode ser configurável no futuro
-    
-    // Executar etapas sequencialmente
+    const estilo = 'Vancouver';
+
     for (let etapa = 1; etapa <= 4; etapa++) {
       await executarEtapa(etapa.toString(), tema, estilo);
-      // Pequena pausa entre etapas
       if (etapa < 4) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }, [tema, token, executarEtapa]);
 
   const handleUpdateWindow = useCallback((id: string, updates: Partial<ResultWindowData>) => {
-    setResultWindows(prev => {
-      const next = new Map(prev);
-      const janela = next.get(id);
-      if (janela) {
-        next.set(id, { ...janela, ...updates });
-      }
-      return next;
-    });
+    setResultWindowsData((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...updates },
+    }));
   }, []);
 
   const handleCloseWindow = useCallback((id: string) => {
-    setResultWindows(prev => {
-      const next = new Map(prev);
-      next.delete(id);
+    setResultWindowsData((prev) => {
+      const next = { ...prev };
+      delete next[id];
       return next;
     });
   }, []);
 
   return (
     <div className="flex min-h-screen bg-mq-slate-50">
-      <Sidebar 
-        usuario={usuario} 
-        creditos={creditos} 
+      <Sidebar
+        usuario={usuario}
+        creditos={creditos}
         onLogout={logout}
         onModuleClick={undefined}
       />
-      
+
       <div className="ml-64 flex-1 p-8">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-[#0c3d66] mb-2">
@@ -176,7 +177,7 @@ export default function MetaAnalisePage() {
             <h2 className="text-xl font-bold text-[#0c3d66] mb-4">
               Iniciar Metanálise
             </h2>
-            
+
             <div className="mb-4">
               <label htmlFor="tema" className="block text-sm font-medium text-slate-700 mb-2">
                 Tema da Revisão Sistemática *
@@ -203,7 +204,7 @@ export default function MetaAnalisePage() {
               >
                 {executando && etapaAtual === '1' ? 'Processando...' : 'Iniciar Etapa 1 (PICO + Busca)'}
               </button>
-              
+
               <button
                 onClick={executarTodasEtapas}
                 disabled={!tema.trim() || executando}
@@ -267,8 +268,8 @@ export default function MetaAnalisePage() {
         </div>
       </div>
 
-      {/* Sistema de Janelas - apenas renderizar se houver janelas e componente estiver montado */}
-      {mounted && resultWindows.size > 0 && (
+      {/* ✅ CORREÇÃO 5: Renderizar ResultWindowsManager SEMPRE (não condicional) */}
+      {mounted && (
         <ResultWindowsManager
           windows={resultWindows}
           onUpdateWindow={handleUpdateWindow}
