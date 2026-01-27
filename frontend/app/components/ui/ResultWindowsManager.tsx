@@ -9,6 +9,7 @@ interface ResultWindowsManagerProps {
   onUpdateWindow: (id: string, updates: Partial<ResultWindowData>) => void;
   onCloseWindow: (id: string) => void;
   token?: string; // Token para autenticação no chat
+  onExecute?: (windowId: string, parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => void; // Callback para executar análise
 }
 
 export default function ResultWindowsManager({
@@ -16,6 +17,7 @@ export default function ResultWindowsManager({
   onUpdateWindow,
   onCloseWindow,
   token,
+  onExecute,
 }: ResultWindowsManagerProps) {
   const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
   const [minimizedWindows, setMinimizedWindows] = useState<Set<string>>(() => new Set());
@@ -95,6 +97,11 @@ export default function ResultWindowsManager({
           token={token}
           onUpdateResult={(newResult) => {
             onUpdateWindow(windowId, { resultado: newResult });
+          }}
+          onExecute={(parametros) => {
+            if (onExecute) {
+              onExecute(windowId, parametros);
+            }
           }}
         />
       ))}

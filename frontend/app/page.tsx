@@ -18,8 +18,6 @@ import ResultPanel from '@/app/components/ui/ResultPanel';
 import ResultWindowsManager from '@/app/components/ui/ResultWindowsManager';
 import { ResultWindowData } from '@/app/components/ui/ResultWindow';
 import Sidebar from '@/app/components/ui/sidebar';
-import ExplicarModal from '@/app/components/ui/ExplicarModal';
-import CriticaModal from '@/app/components/ui/CriticaModal';
 import Image from 'next/image'; // Para a logo na seção de upload
 
 export default function Home() {
@@ -31,8 +29,6 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false); // Para feedback visual de drag & drop
   const [uploadProgress, setUploadProgress] = useState(0); // Para barra de progresso de upload
   const [uploadError, setUploadError] = useState<string | null>(null); // Para erros de upload
-  const [showExplicarModal, setShowExplicarModal] = useState(false); // Para controlar o modal de explicar
-  const [showCriticaModal, setShowCriticaModal] = useState(false); // Para controlar o modal de análise crítica
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
   const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(() => new Map()); // Sistema de janelas
 
@@ -195,14 +191,21 @@ export default function Home() {
       let res;
       switch (tipo) {
         case 'explicar':
+          // Abrir janela em modo de configuração se não tiver trecho
           if (!trecho) {
-            setShowExplicarModal(true);
             setResultWindows(prev => {
               const next = new Map(prev);
-              next.delete(windowId);
+              const janela = next.get(windowId);
+              if (janela) {
+                next.set(windowId, {
+                  ...janela,
+                  modoConfiguracao: true,
+                  resultado: null,
+                  loading: false,
+                });
+              }
               return next;
             });
-            setCardAtivo(null);
             return;
           }
           res = await explicarConceito(token, textoArtigo, trecho, nivel || 'graduação');
@@ -220,14 +223,20 @@ export default function Home() {
           res = await pesquisarPerspectiva(token, textoArtigo);
           break;
         case 'critica':
-          // Mostrar modal para escolher método de análise
-          setShowCriticaModal(true);
+          // Abrir janela em modo de configuração
           setResultWindows(prev => {
             const next = new Map(prev);
-            next.delete(windowId);
+            const janela = next.get(windowId);
+            if (janela) {
+              next.set(windowId, {
+                ...janela,
+                modoConfiguracao: true,
+                resultado: null,
+                loading: false,
+              });
+            }
             return next;
           });
-          setCardAtivo(null);
           return;
         default:
           throw new Error('Tipo de análise não reconhecido');
@@ -299,12 +308,124 @@ export default function Home() {
     });
   }, []);
 
-  // Callback para quando o usuário confirmar no modal de explicar
-  const handleExplicarConfirm = useCallback((trecho: string, nivel: string) => {
-    runAnalise('explicar', trecho, nivel);
-  }, [runAnalise]);
+  // Callback para executar análise a partir do formulário inline
+  const handleExecute = useCallback(async (windowId: string, parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => {
+    if (!textoArtigo || !token) {
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      return;
+    }
 
-  // Callback para quando o usuário confirmar no modal de análise crítica
+    const janela = resultWindows.get(windowId);
+    if (!janela) return;
+
+    // Atualizar janela para modo de processamento
+    setResultWindows(prev => {
+      const next = new Map(prev);
+      const janelaAtual = next.get(windowId);
+      if (janelaAtual) {
+        const nomesFoco: Record<string, string> = {
+          metodologia: 'Metodologia',
+          validade: 'Validade Interna e Externa',
+          confiabilidade: 'Confiabilidade',
+          vieses: 'Vieses e Limitações',
+          amostra: 'Amostragem e Tamanho Amostral',
+          estatistica: 'Análise Estatística',
+          etico: 'Aspectos Éticos',
+          relevancia: 'Relevância Clínica/Científica',
+          geral: 'Análise Geral'
+        };
+
+        let textoProcessando = '⏳ Análise em andamento\n\n';
+        if (janelaAtual.tipo === 'explicar') {
+          textoProcessando += `Explicando: "${parametros.trecho}"\n\n`;
+        } else if (janelaAtual.tipo === 'critica') {
+          textoProcessando += `Aplicando análise crítica: ${nomesFoco[parametros.focoAnalise || 'geral'] || 'Análise Crítica'}…\n\n`;
+        }
+        textoProcessando += 'Estamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.';
+
+        next.set(windowId, {
+          ...janelaAtual,
+          modoConfiguracao: false,
+          loading: true,
+          resultado: textoProcessando,
+          parametrosConfiguracao: parametros,
+        });
+      }
+      return next;
+    });
+
+    try {
+      let res;
+      if (janela.tipo === 'explicar' && parametros.trecho) {
+        res = await explicarConceito(token, textoArtigo, parametros.trecho, parametros.nivel || 'graduação');
+      } else if (janela.tipo === 'critica' && parametros.focoAnalise) {
+        res = await analisarCritica(token, textoArtigo, parametros.focoAnalise);
+      } else {
+        return;
+      }
+
+      // Atualizar janela com resultado
+      setResultWindows(prev => {
+        const next = new Map(prev);
+        const janelaAtual = next.get(windowId);
+        if (janelaAtual) {
+          if (res.erro) {
+            next.set(windowId, {
+              ...janelaAtual,
+              resultado: `❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`,
+              loading: false,
+              modoConfiguracao: false,
+            });
+          } else {
+            const nomesFoco: Record<string, string> = {
+              metodologia: 'Metodologia',
+              validade: 'Validade Interna e Externa',
+              confiabilidade: 'Confiabilidade',
+              vieses: 'Vieses e Limitações',
+              amostra: 'Amostragem e Tamanho Amostral',
+              estatistica: 'Análise Estatística',
+              etico: 'Aspectos Éticos',
+              relevancia: 'Relevância Clínica/Científica',
+              geral: 'Análise Geral'
+            };
+
+            let titulo = janelaAtual.titulo;
+            if (janelaAtual.tipo === 'critica' && parametros.focoAnalise) {
+              titulo = `Análise Crítica - ${nomesFoco[parametros.focoAnalise] || 'Geral'}`;
+            }
+
+            next.set(windowId, {
+              ...janelaAtual,
+              titulo,
+              resultado: res.resultado || 'Análise concluída',
+              loading: false,
+              modoConfiguracao: false,
+            });
+          }
+        }
+        return next;
+      });
+      setCardAtivo(null);
+    } catch (error: any) {
+      setResultWindows(prev => {
+        const next = new Map(prev);
+        const janelaAtual = next.get(windowId);
+        if (janelaAtual) {
+          next.set(windowId, {
+            ...janelaAtual,
+            resultado: `❌ Erro: ${error.message || 'Erro desconhecido'}`,
+            loading: false,
+            modoConfiguracao: false,
+          });
+        }
+        return next;
+      });
+      setCardAtivo(null);
+    }
+  }, [textoArtigo, token, resultWindows]);
+
+  // Callback para quando o usuário confirmar no modal de análise crítica (mantido para compatibilidade, mas não será usado)
   const handleCriticaConfirm = useCallback(async (focoAnalise: string) => {
     if (!textoArtigo || !token) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
@@ -582,20 +703,7 @@ export default function Home() {
         onUpdateWindow={handleUpdateWindow}
         onCloseWindow={handleCloseWindow}
         token={token || undefined}
-      />
-
-      {/* Modal para Explicar Conteúdo */}
-      <ExplicarModal
-        isOpen={showExplicarModal}
-        onClose={() => setShowExplicarModal(false)}
-        onConfirm={handleExplicarConfirm}
-      />
-
-      {/* Modal para Análise Crítica */}
-      <CriticaModal
-        isOpen={showCriticaModal}
-        onClose={() => setShowCriticaModal(false)}
-        onConfirm={handleCriticaConfirm}
+        onExecute={handleExecute}
       />
     </div>
   );

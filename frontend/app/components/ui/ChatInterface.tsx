@@ -99,7 +99,7 @@ export default function ChatInterface({
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: response.resultado || response.resposta || 'Resposta recebida',
+        content: response.resultado || 'Resposta recebida',
         timestamp: Date.now(),
       };
 
