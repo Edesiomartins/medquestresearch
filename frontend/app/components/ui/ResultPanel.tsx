@@ -32,13 +32,16 @@ export default function ResultPanel({
   const [nivel, setNivel] = useState('graduação');
   const [focoAnalise, setFocoAnalise] = useState('geral');
 
-  // Modo de configuração - mostrar formulário inline
+  // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
     if (tipoAnalise === 'explicar') {
       return (
         <div className="card-elevated flex flex-col h-full">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Explicar Conteúdo</h2>
-          <div className="space-y-4 flex-1 overflow-y-auto">
+          <p className="text-sm text-slate-600 mb-4">
+            Digite o termo, conceito ou trecho específico que deseja que seja explicado.
+          </p>
+          <div className="space-y-4 mb-6">
             <div>
               <label htmlFor="trecho" className="block text-sm font-medium text-slate-700 mb-2">
                 Termo ou conteúdo a explicar *
@@ -92,13 +95,25 @@ export default function ResultPanel({
               </button>
             </div>
           </div>
+          {/* Mostrar texto do PDF abaixo do formulário se existir */}
+          {resultado && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">Texto do Artigo (Referência)</h3>
+              <div className="whitespace-pre-wrap text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 overflow-y-auto max-h-[300px] font-sans leading-relaxed">
+                {resultado}
+              </div>
+            </div>
+          )}
         </div>
       );
     } else if (tipoAnalise === 'critica') {
       return (
         <div className="card-elevated flex flex-col h-full">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Análise Crítica</h2>
-          <div className="space-y-4 flex-1 overflow-y-auto">
+          <p className="text-sm text-slate-600 mb-4">
+            Selecione um dos 9 métodos científicos de análise crítica para aplicar ao artigo.
+          </p>
+          <div className="space-y-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-3">
                 Escolha o Método de Análise Crítica *
@@ -169,6 +184,15 @@ export default function ResultPanel({
               </button>
             </div>
           </div>
+          {/* Mostrar texto do PDF abaixo do formulário se existir */}
+          {resultado && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">Texto do Artigo (Referência)</h3>
+              <div className="whitespace-pre-wrap text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 overflow-y-auto max-h-[300px] font-sans leading-relaxed">
+                {resultado}
+              </div>
+            </div>
+          )}
         </div>
       );
     }

@@ -158,8 +158,6 @@ export default function Home() {
     // 1. Destacar card
     setCardAtivo(tipo);
 
-    // 2. Criar ou atualizar janela para este tipo de análise
-    const windowId = `${tipo}_${Date.now()}`;
     const titulos: Record<string, string> = {
       explicar: 'Explicação do Conteúdo',
       structure_mapper: 'Mapeamento de Estrutura',
@@ -169,29 +167,38 @@ export default function Home() {
       critica: 'Análise Crítica',
     };
 
+    // 2. Verificar se precisa de configuração ANTES de processar
+    if (tipo === 'explicar' && !trecho) {
+      // Mostrar formulário de configuração no ResultPanel
+      setModoConfiguracao(true);
+      setTituloResultado('Explicar Conteúdo');
+      // NÃO limpar resultadoAtual - manter texto do PDF visível
+      setLoadingResultado(false);
+      return;
+    }
+
+    if (tipo === 'critica') {
+      // Mostrar formulário de configuração no ResultPanel
+      setModoConfiguracao(true);
+      setTituloResultado('Análise Crítica');
+      // NÃO limpar resultadoAtual - manter texto do PDF visível
+      setLoadingResultado(false);
+      return;
+    }
+
+    // 3. Para análises que não requerem configuração, mostrar estado de processamento
+    setModoConfiguracao(false);
     const textoContextual = textoProcessando(tipo);
     const textoProcessandoCompleto = `⏳ Análise em andamento\n\n${textoContextual}\n\nEstamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`;
-
-    // Mostrar estado de processamento no ResultPanel
     setResultadoAtual(textoProcessandoCompleto);
     setTituloResultado(titulos[tipo] || 'Processando...');
     setLoadingResultado(true);
-    setModoConfiguracao(false);
 
     try {
       let res;
       switch (tipo) {
         case 'explicar':
-          // Mostrar formulário de configuração no ResultPanel se não tiver trecho
-          if (!trecho) {
-            setModoConfiguracao(true);
-            setTituloResultado('Explicar Conteúdo');
-            setResultadoAtual(null);
-            setLoadingResultado(false);
-            return;
-          }
-          setModoConfiguracao(false);
-          res = await explicarConceito(token, textoArtigo, trecho, nivel || 'graduação');
+          res = await explicarConceito(token, textoArtigo, trecho!, nivel || 'graduação');
           break;
         case 'structure_mapper':
           res = await structureMapper(token, textoArtigo);
@@ -205,18 +212,11 @@ export default function Home() {
         case 'perspectiva':
           res = await pesquisarPerspectiva(token, textoArtigo);
           break;
-        case 'critica':
-          // Mostrar formulário de configuração no ResultPanel
-          setModoConfiguracao(true);
-          setTituloResultado('Análise Crítica');
-          setResultadoAtual(null);
-          setLoadingResultado(false);
-          return;
         default:
           throw new Error('Tipo de análise não reconhecido');
       }
 
-      // 3. Atualizar ResultPanel com resultado
+      // 4. Atualizar ResultPanel com resultado
       setModoConfiguracao(false);
       if (res.erro) {
         setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
@@ -513,11 +513,16 @@ export default function Home() {
             modoConfiguracao={modoConfiguracao}
             onUpdateResult={(newResult) => {
               if (newResult === null) {
-                // Cancelar configuração
+                // Cancelar configuração - restaurar texto do PDF se existir
                 setModoConfiguracao(false);
                 setCardAtivo(null);
-                setResultadoAtual(null);
-                setTituloResultado('');
+                if (textoArtigo) {
+                  setResultadoAtual(textoArtigo);
+                  setTituloResultado('Texto extraído do arquivo');
+                } else {
+                  setResultadoAtual(null);
+                  setTituloResultado('');
+                }
               } else {
                 setResultadoAtual(newResult);
                 setModoConfiguracao(false);
