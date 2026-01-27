@@ -164,94 +164,24 @@ app = FastAPI(title="MedQuestResearch API", version="2.0")
 # ✅ ROUTER COM PREFIXO /genapi PARA TODAS AS ROTAS DE API
 api_router = APIRouter(prefix="/genapi")
 
-# ✅ CONFIGURAR CORS CORRETAMENTE PARA /genapi/*
-# Configurar CORS para Railway e desenvolvimento local.
-# As origens permitidas devem incluir o frontend e localhost para desenvolvimento.
-default_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://medquestresearch.up.railway.app",
-]
-
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
-if allowed_origins_env:
-    env_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
-    allowed_origins = list(set(default_origins + env_origins))
-else:
-    allowed_origins = default_origins
-
-# Regex para qualquer *.up.railway.app (deploys Railway com URL gerada)
-allow_origin_regex = r"https://[a-z0-9-]+\.up\.railway\.app"
-
-# CORS: Configuração para /genapi/*
-# O CORSMiddleware do FastAPI aplica-se a todas as rotas, incluindo /genapi/*
-DEBUG_CORS = os.getenv("DEBUG_CORS", "false").lower() == "true"
-
-if DEBUG_CORS:
-    # Modo debug: aceita todas as origens
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,  # Não pode ser True com allow_origins=["*"]
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-        max_age=3600,
-    )
-else:
-    # Modo produção: origens específicas com suporte a credenciais
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_origin_regex=allow_origin_regex,
-        allow_credentials=True,  # Suporte a credenciais conforme solicitado
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-        allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin", "X-CSRFToken"],
-        expose_headers=["*"],
-        max_age=3600,
-    )
-
-# ✅ Middleware para garantir CORS em todas as respostas (incluindo erros)
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    """Middleware para adicionar headers CORS em todas as respostas."""
-    response = await call_next(request)
-    
-    # Obter origem da requisição
-    origin = request.headers.get("origin")
-    
-    # Verificar se a origem é permitida
-    if DEBUG_CORS:
-        # Modo debug: aceita qualquer origem
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Credentials"] = "false"
-    else:
-        # Modo produção: verificar origem
-        if origin:
-            if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-            else:
-                # Se origem não permitida, usar primeira origem permitida como fallback
-                response.headers["Access-Control-Allow-Origin"] = allowed_origins[0] if allowed_origins else "*"
-                response.headers["Access-Control-Allow-Credentials"] = "false"
-        else:
-            # Sem origem (requisição same-origin), usar primeira origem permitida
-            response.headers["Access-Control-Allow-Origin"] = allowed_origins[0] if allowed_origins else "*"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-    
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken"
-    response.headers["Access-Control-Expose-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "3600"
-    
-    return response
-
-# ✅ Configuração de rate limiting
+# ✅ Configuração de rate limiting (adicionar primeiro)
 limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# ✅ CONFIGURAÇÃO CORS CORRETA E SIMPLES (adicionar por último para executar primeiro)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://medquestresearch.up.railway.app",
+    ],
+    allow_credentials=False,   # 🔥 IMPORTANTE: você usa token no header, não cookie
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ============================================
 # ✅ MODELOS PYDANTIC
@@ -841,35 +771,25 @@ class InputMetaAnalise(BaseModel):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handler global de exceções com suporte a CORS."""
+    """Handler global de exceções."""
     import traceback
     error_detail = str(exc)
     logging.error(f"Erro global: {error_detail}\n{traceback.format_exc()}")
     
     return JSONResponse(
         status_code=500,
-        content={"erro": error_detail},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        }
+        content={"erro": error_detail}
     )
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc: Exception):
-    """Handler para erros 404 com suporte a CORS."""
+    """Handler para erros 404."""
     return JSONResponse(
         status_code=404,
         content={
             "erro": "Rota não encontrada",
             "path": str(request.url.path),
             "message": "Verifique se a rota está correta e se o servidor está rodando"
-        },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
     )
 
@@ -877,64 +797,6 @@ async def not_found_handler(request: Request, exc: Exception):
 # ✅ ROTAS BÁSICAS
 # ============================================
 
-# Handler OPTIONS genérico para todas as rotas (incluindo /genapi/*)
-# O FastAPI já lida com OPTIONS automaticamente via CORSMiddleware,
-# mas este handler garante compatibilidade adicional
-@app.options("/{full_path:path}")
-async def options_handler(request: Request, full_path: str):
-    """Handler para requisições OPTIONS (CORS preflight) - funciona para todas as rotas incluindo /genapi/*."""
-    origin = request.headers.get("origin", "*")
-    
-    # Verificar origem permitida
-    if DEBUG_CORS:
-        allow_origin = "*"
-        allow_credentials = "false"
-    else:
-        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
-            allow_origin = origin
-            allow_credentials = "true"
-        else:
-            allow_origin = allowed_origins[0] if allowed_origins else "*"
-            allow_credentials = "false"
-    
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken",
-            "Access-Control-Allow-Credentials": allow_credentials,
-            "Access-Control-Max-Age": "3600",
-        }
-    )
-
-# Handler OPTIONS específico para todas as rotas /genapi/*
-@api_router.options("/{full_path:path}")
-async def genapi_options_handler(request: Request, full_path: str):
-    """Handler OPTIONS específico para rotas /genapi/* (CORS preflight)."""
-    origin = request.headers.get("origin", "*")
-    
-    if DEBUG_CORS:
-        allow_origin = "*"
-        allow_credentials = "false"
-    else:
-        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
-            allow_origin = origin
-            allow_credentials = "true"
-        else:
-            allow_origin = allowed_origins[0] if allowed_origins else "*"
-            allow_credentials = "false"
-    
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken",
-            "Access-Control-Allow-Credentials": allow_credentials,
-            "Access-Control-Max-Age": "3600",
-        }
-    )
 
 @app.get("/")
 def index():
@@ -955,6 +817,39 @@ def db_test():
         return {"ok": True, "usuarios": r["total"]}
     except Exception as e:
         return {"ok": False, "erro": str(e)}
+
+@app.get("/cors-test")
+def cors_test():
+    """Rota de teste para verificar se CORS está funcionando"""
+    return {
+        "status": "CORS Test",
+        "message": "Se você vê esta mensagem, CORS está funcionando!",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+@api_router.get("/test-db")
+def test_db():
+    """Rota de teste para verificar se o banco de dados está acessível"""
+    try:
+        if not os.getenv("DATABASE_URL"):
+            return {
+                "ok": False,
+                "erro": "DATABASE_URL não configurada",
+                "dica": "Configure a variável DATABASE_URL no ambiente (Railway ou .env)"
+            }
+        
+        r = db_select_one("SELECT count(*) AS total FROM usuarios")
+        return {
+            "ok": True,
+            "usuarios": r["total"],
+            "message": "Banco de dados está acessível!"
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "tipo": type(e).__name__
+        }
 
 # ============================================
 # ✅ ROTAS DE ADMINISTRAÇÃO (CRÉDITOS)
@@ -1120,37 +1015,18 @@ def cadastro(request: Request, data: CadastroInput):
             content={"erro": str(e)}
         )
 
-@api_router.options("/login")
-async def login_options(request: Request):
-    """Handler OPTIONS para /genapi/login (CORS preflight)."""
-    origin = request.headers.get("origin", "*")
-    
-    if DEBUG_CORS:
-        allow_origin = "*"
-        allow_credentials = "false"
-    else:
-        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
-            allow_origin = origin
-            allow_credentials = "true"
-        else:
-            allow_origin = allowed_origins[0] if allowed_origins else "*"
-            allow_credentials = "false"
-    
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin",
-            "Access-Control-Allow-Credentials": allow_credentials,
-            "Access-Control-Max-Age": "3600",
-        }
-    )
-
 @api_router.post("/login")
 @limiter.limit("5 per minute")
 def login(request: Request, data: LoginRequest):
     try:
+        # Verificar se o banco de dados está configurado
+        if not os.getenv("DATABASE_URL"):
+            logging.error("DATABASE_URL não configurada")
+            raise HTTPException(
+                status_code=503,
+                detail="Banco de dados não configurado. Configure DATABASE_URL no ambiente."
+            )
+        
         row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,))
         if not row:
             raise HTTPException(status_code=404, detail="Email não encontrado")
