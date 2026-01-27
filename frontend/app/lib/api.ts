@@ -328,7 +328,7 @@ export async function structureVisualizer(
 }
 
 // ============================================
-// Função Meta-Análise (PRISMA Compliance)
+// Função Metanálise (PRISMA Compliance)
 // ============================================
 
 export interface MetaAnaliseParams {

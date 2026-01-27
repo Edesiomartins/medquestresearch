@@ -75,10 +75,10 @@ export default function MetaAnaliseModal({ isOpen, onClose, onConfirm }: MetaAna
       >
         <div className="p-6">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">
-            Meta-Análise - Configuração PRISMA
+            Metanálise - Configuração PRISMA
           </h2>
           <p className="text-slate-600 mb-6">
-            Selecione a etapa do workflow de meta-análise que deseja executar:
+            Selecione a etapa do workflow de metanálise que deseja executar:
           </p>
 
           {/* Seleção de Etapa */}
@@ -171,7 +171,7 @@ export default function MetaAnaliseModal({ isOpen, onClose, onConfirm }: MetaAna
               disabled={etapaSelecionada === '1' && !tema.trim()}
               className="px-6 py-2 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Iniciar Meta-Análise
+              Iniciar Metanálise
             </button>
           </div>
         </div>

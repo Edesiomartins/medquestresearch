@@ -50,7 +50,7 @@ export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
           </Link>
           <Link href="/meta-analise" className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#0369a1] transition-colors text-white">
             <span className="text-xl">📑</span>
-            <span className="font-medium">Meta-Análise PRISMA</span>
+            <span className="font-medium">Metanálise PRISMA</span>
           </Link>
         </nav>
       </div>

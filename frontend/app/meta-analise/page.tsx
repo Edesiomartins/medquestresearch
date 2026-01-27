@@ -56,7 +56,7 @@ export default function MetaAnalisePage() {
       id: windowId,
       tipo: 'meta_analise',
       titulo: nomesEtapa[etapa] || `Etapa ${etapa}`,
-      resultado: `⏳ Processando ${nomesEtapa[etapa]}...\n\nAguarde enquanto processamos sua meta-análise.`,
+      resultado: `⏳ Processando ${nomesEtapa[etapa]}...\n\nAguarde enquanto processamos sua metanálise.`,
       loading: true,
       timestamp: Date.now(),
     };
@@ -159,17 +159,17 @@ export default function MetaAnalisePage() {
       <div className="ml-64 flex-1 p-8">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-[#0c3d66] mb-2">
-            Meta-Análise PRISMA
+            Metanálise PRISMA
           </h1>
           <p className="text-slate-600 mb-8">
-            Crie revisões sistemáticas e meta-análises seguindo o protocolo PRISMA 2020.
+            Crie revisões sistemáticas e metanálises seguindo o protocolo PRISMA 2020.
             O sistema executará buscas na literatura (PubMed, LILACS, Cochrane) e guiará você através das etapas.
           </p>
 
           {/* Formulário de Tema */}
           <div className="card-elevated p-6 mb-8">
             <h2 className="text-xl font-bold text-[#0c3d66] mb-4">
-              Iniciar Meta-Análise
+              Iniciar Metanálise
             </h2>
             
             <div className="mb-4">
@@ -262,12 +262,13 @@ export default function MetaAnalisePage() {
         </div>
       </div>
 
-      {/* Sistema de Janelas - apenas renderizar se houver janelas */}
-      {mounted && resultWindows.size > 0 && (
+      {/* Sistema de Janelas - apenas renderizar se houver janelas e componente estiver montado */}
+      {mounted && (
         <ResultWindowsManager
           windows={resultWindows}
           onUpdateWindow={handleUpdateWindow}
           onCloseWindow={handleCloseWindow}
+          token={token || undefined}
         />
       )}
     </div>

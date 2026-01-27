@@ -411,7 +411,7 @@ export default function ResultWindow({
           </div>
         ) : (
           // Modo de chat
-          <div className="flex-1" style={{ minHeight: '400px', maxHeight: 'calc(80vh - 60px)' }}>
+          <div className="flex-1 flex flex-col" style={{ maxHeight: 'calc(80vh - 60px)', minHeight: 0 }}>
             <ChatInterface
               initialMessage={windowData.resultado || undefined}
               tipoAnalise={windowData.tipo}

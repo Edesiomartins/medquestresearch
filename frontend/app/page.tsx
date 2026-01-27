@@ -15,8 +15,6 @@ import {
 } from '@/app/lib/api';
 import ToolCard from '@/app/components/ui/ToolCard';
 import ResultPanel from '@/app/components/ui/ResultPanel';
-import ResultWindowsManager from '@/app/components/ui/ResultWindowsManager';
-import { ResultWindowData } from '@/app/components/ui/ResultWindow';
 import Sidebar from '@/app/components/ui/sidebar';
 import Image from 'next/image'; // Para a logo na seção de upload
 
@@ -30,7 +28,7 @@ export default function Home() {
   const [uploadProgress, setUploadProgress] = useState(0); // Para barra de progresso de upload
   const [uploadError, setUploadError] = useState<string | null>(null); // Para erros de upload
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
-  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(() => new Map()); // Sistema de janelas
+  const [modoConfiguracao, setModoConfiguracao] = useState(false); // Para mostrar formulário de configuração no ResultPanel
 
   // 2. useRouter
   const router = useRouter();
@@ -174,40 +172,25 @@ export default function Home() {
     const textoContextual = textoProcessando(tipo);
     const textoProcessandoCompleto = `⏳ Análise em andamento\n\n${textoContextual}\n\nEstamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`;
 
-    // Criar janela inicial com estado de processamento
-    const novaJanela: ResultWindowData = {
-      id: windowId,
-      tipo,
-      titulo: titulos[tipo] || 'Resultado',
-      resultado: textoProcessandoCompleto,
-      loading: true,
-      timestamp: Date.now(),
-      textoArtigo: textoArtigo || undefined, // Adicionar texto do artigo para contexto do chat
-    };
-
-    setResultWindows(prev => new Map(prev).set(windowId, novaJanela));
+    // Mostrar estado de processamento no ResultPanel
+    setResultadoAtual(textoProcessandoCompleto);
+    setTituloResultado(titulos[tipo] || 'Processando...');
+    setLoadingResultado(true);
+    setModoConfiguracao(false);
 
     try {
       let res;
       switch (tipo) {
         case 'explicar':
-          // Abrir janela em modo de configuração se não tiver trecho
+          // Mostrar formulário de configuração no ResultPanel se não tiver trecho
           if (!trecho) {
-            setResultWindows(prev => {
-              const next = new Map(prev);
-              const janela = next.get(windowId);
-              if (janela) {
-                next.set(windowId, {
-                  ...janela,
-                  modoConfiguracao: true,
-                  resultado: null,
-                  loading: false,
-                });
-              }
-              return next;
-            });
+            setModoConfiguracao(true);
+            setTituloResultado('Explicar Conteúdo');
+            setResultadoAtual(null);
+            setLoadingResultado(false);
             return;
           }
+          setModoConfiguracao(false);
           res = await explicarConceito(token, textoArtigo, trecho, nivel || 'graduação');
           break;
         case 'structure_mapper':
@@ -223,207 +206,118 @@ export default function Home() {
           res = await pesquisarPerspectiva(token, textoArtigo);
           break;
         case 'critica':
-          // Abrir janela em modo de configuração
-          setResultWindows(prev => {
-            const next = new Map(prev);
-            const janela = next.get(windowId);
-            if (janela) {
-              next.set(windowId, {
-                ...janela,
-                modoConfiguracao: true,
-                resultado: null,
-                loading: false,
-              });
-            }
-            return next;
-          });
+          // Mostrar formulário de configuração no ResultPanel
+          setModoConfiguracao(true);
+          setTituloResultado('Análise Crítica');
+          setResultadoAtual(null);
+          setLoadingResultado(false);
           return;
         default:
           throw new Error('Tipo de análise não reconhecido');
       }
 
-      // 3. Atualizar janela com resultado
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janela = next.get(windowId);
-        if (janela) {
+      // 3. Atualizar ResultPanel com resultado
+      setModoConfiguracao(false);
       if (res.erro) {
-            next.set(windowId, {
-              ...janela,
-              resultado: `❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`,
-              loading: false,
-            });
-          } else if (res.resultado) {
-            next.set(windowId, {
-              ...janela,
-              resultado: res.resultado,
-              loading: false,
-            });
+        setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
+        setTituloResultado('Erro na Análise');
+        setLoadingResultado(false);
+      } else if (res.resultado) {
+        setResultadoAtual(res.resultado);
+        setTituloResultado(titulos[tipo] || 'Resultado');
+        setLoadingResultado(false);
       } else {
-            next.set(windowId, {
-              ...janela,
-              resultado: 'Análise concluída com sucesso!',
-              loading: false,
-            });
+        setResultadoAtual('Análise concluída com sucesso!');
+        setTituloResultado(titulos[tipo] || 'Resultado');
+        setLoadingResultado(false);
       }
-        }
-        return next;
-      });
     } catch (error: any) {
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janela = next.get(windowId);
-        if (janela) {
-          next.set(windowId, {
-            ...janela,
-            resultado: `❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`,
-            loading: false,
-          });
-        }
-        return next;
-      });
+      setModoConfiguracao(false);
+      setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`);
+      setTituloResultado('Erro');
+      setLoadingResultado(false);
     } finally {
       setCardAtivo(null);
     }
   }, [token, textoArtigo, textoProcessando]);
 
-  // Callback para atualizar janela
-  const handleUpdateWindow = useCallback((id: string, updates: Partial<ResultWindowData>) => {
-    setResultWindows(prev => {
-      const next = new Map(prev);
-      const janela = next.get(id);
-      if (janela) {
-        next.set(id, { ...janela, ...updates });
-    }
-      return next;
-    });
-  }, []);
-
-  // Callback para fechar janela
-  const handleCloseWindow = useCallback((id: string) => {
-    setResultWindows(prev => {
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Callback para executar análise a partir do formulário inline
-  const handleExecute = useCallback(async (windowId: string, parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => {
-    if (!textoArtigo || !token) {
+  // Callback para executar análise a partir do formulário inline no ResultPanel
+  const handleExecute = useCallback(async (parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => {
+    if (!textoArtigo || !token || !cardAtivo) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
       setTituloResultado('Aviso');
       return;
     }
 
-    const janela = resultWindows.get(windowId);
-    if (!janela) return;
+    const tipo = cardAtivo;
+    const titulos: Record<string, string> = {
+      explicar: 'Explicação do Conteúdo',
+      structure_mapper: 'Mapeamento de Estrutura',
+      structure_visualizer: 'Visualização de Estrutura',
+      fatos: 'Verificação de Fatos',
+      perspectiva: 'Perspectivas Científicas',
+      critica: 'Análise Crítica',
+    };
 
-    // Atualizar janela para modo de processamento
-    setResultWindows(prev => {
-      const next = new Map(prev);
-      const janelaAtual = next.get(windowId);
-      if (janelaAtual) {
-        const nomesFoco: Record<string, string> = {
-          metodologia: 'Metodologia',
-          validade: 'Validade Interna e Externa',
-          confiabilidade: 'Confiabilidade',
-          vieses: 'Vieses e Limitações',
-          amostra: 'Amostragem e Tamanho Amostral',
-          estatistica: 'Análise Estatística',
-          etico: 'Aspectos Éticos',
-          relevancia: 'Relevância Clínica/Científica',
-          geral: 'Análise Geral'
-        };
+    const nomesFoco: Record<string, string> = {
+      metodologia: 'Metodologia',
+      validade: 'Validade Interna e Externa',
+      confiabilidade: 'Confiabilidade',
+      vieses: 'Vieses e Limitações',
+      amostra: 'Amostragem e Tamanho Amostral',
+      estatistica: 'Análise Estatística',
+      etico: 'Aspectos Éticos',
+      relevancia: 'Relevância Clínica/Científica',
+      geral: 'Análise Geral'
+    };
 
-        let textoProcessando = '⏳ Análise em andamento\n\n';
-        if (janelaAtual.tipo === 'explicar') {
-          textoProcessando += `Explicando: "${parametros.trecho}"\n\n`;
-        } else if (janelaAtual.tipo === 'critica') {
-          textoProcessando += `Aplicando análise crítica: ${nomesFoco[parametros.focoAnalise || 'geral'] || 'Análise Crítica'}…\n\n`;
-        }
-        textoProcessando += 'Estamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.';
+    // Mostrar estado de processamento
+    let textoProcessando = '⏳ Análise em andamento\n\n';
+    if (tipo === 'explicar' && parametros.trecho) {
+      textoProcessando += `Explicando: "${parametros.trecho}"\n\n`;
+    } else if (tipo === 'critica' && parametros.focoAnalise) {
+      textoProcessando += `Aplicando análise crítica: ${nomesFoco[parametros.focoAnalise] || 'Análise Crítica'}…\n\n`;
+    }
+    textoProcessando += 'Estamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.';
 
-        next.set(windowId, {
-          ...janelaAtual,
-          modoConfiguracao: false,
-          loading: true,
-          resultado: textoProcessando,
-          parametrosConfiguracao: parametros,
-        });
-      }
-      return next;
-    });
+    setResultadoAtual(textoProcessando);
+    setTituloResultado(titulos[tipo] || 'Processando...');
+    setLoadingResultado(true);
+    setModoConfiguracao(false);
 
     try {
       let res;
-      if (janela.tipo === 'explicar' && parametros.trecho) {
+      if (tipo === 'explicar' && parametros.trecho) {
         res = await explicarConceito(token, textoArtigo, parametros.trecho, parametros.nivel || 'graduação');
-      } else if (janela.tipo === 'critica' && parametros.focoAnalise) {
+      } else if (tipo === 'critica' && parametros.focoAnalise) {
         res = await analisarCritica(token, textoArtigo, parametros.focoAnalise);
       } else {
         return;
       }
 
-      // Atualizar janela com resultado
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janelaAtual = next.get(windowId);
-        if (janelaAtual) {
-          if (res.erro) {
-            next.set(windowId, {
-              ...janelaAtual,
-              resultado: `❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`,
-              loading: false,
-              modoConfiguracao: false,
-            });
-          } else {
-            const nomesFoco: Record<string, string> = {
-              metodologia: 'Metodologia',
-              validade: 'Validade Interna e Externa',
-              confiabilidade: 'Confiabilidade',
-              vieses: 'Vieses e Limitações',
-              amostra: 'Amostragem e Tamanho Amostral',
-              estatistica: 'Análise Estatística',
-              etico: 'Aspectos Éticos',
-              relevancia: 'Relevância Clínica/Científica',
-              geral: 'Análise Geral'
-            };
-
-            let titulo = janelaAtual.titulo;
-            if (janelaAtual.tipo === 'critica' && parametros.focoAnalise) {
-              titulo = `Análise Crítica - ${nomesFoco[parametros.focoAnalise] || 'Geral'}`;
-            }
-
-            next.set(windowId, {
-              ...janelaAtual,
-              titulo,
-              resultado: res.resultado || 'Análise concluída',
-              loading: false,
-              modoConfiguracao: false,
-            });
-          }
+      // Atualizar ResultPanel com resultado
+      if (res.erro) {
+        setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
+        setTituloResultado('Erro na Análise');
+        setLoadingResultado(false);
+      } else {
+        let titulo = titulos[tipo] || 'Resultado';
+        if (tipo === 'critica' && parametros.focoAnalise) {
+          titulo = `Análise Crítica - ${nomesFoco[parametros.focoAnalise] || 'Geral'}`;
         }
-        return next;
-      });
+
+        setResultadoAtual(res.resultado || 'Análise concluída');
+        setTituloResultado(titulo);
+        setLoadingResultado(false);
+      }
       setCardAtivo(null);
     } catch (error: any) {
-      setResultWindows(prev => {
-        const next = new Map(prev);
-        const janelaAtual = next.get(windowId);
-        if (janelaAtual) {
-          next.set(windowId, {
-            ...janelaAtual,
-            resultado: `❌ Erro: ${error.message || 'Erro desconhecido'}`,
-            loading: false,
-            modoConfiguracao: false,
-          });
-        }
-        return next;
-      });
+      setResultadoAtual(`❌ Erro: ${error.message || 'Erro desconhecido'}`);
+      setTituloResultado('Erro');
+      setLoadingResultado(false);
       setCardAtivo(null);
     }
-  }, [textoArtigo, token, resultWindows]);
+  }, [textoArtigo, token, cardAtivo]);
 
 
   // Estado de carregamento inicial da autenticação
@@ -585,15 +479,15 @@ export default function Home() {
             />
           </div>
 
-          {/* Link para Meta-Análise */}
+          {/* Link para Metanálise */}
           <div className="mt-6 card-elevated p-6">
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-[#0c3d66] mb-2">
-                  📑 Meta-Análise PRISMA
+                  📑 Metanálise PRISMA
                 </h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Crie revisões sistemáticas e meta-análises completas. O sistema realiza buscas automáticas 
+                  Crie revisões sistemáticas e metanálises completas. O sistema realiza buscas automáticas 
                   na literatura (PubMed, LILACS, Cochrane) e executa todas as etapas do protocolo PRISMA.
                 </p>
               </div>
@@ -601,30 +495,38 @@ export default function Home() {
                 onClick={() => router.push('/meta-analise')}
                 className="px-6 py-3 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] transition-colors font-medium ml-4"
               >
-                Acessar Meta-Análise
+                Acessar Metanálise
               </button>
             </div>
           </div>
         </div>
 
-        {/* COLUNA RESULTADO - Mostra texto do PDF */}
+        {/* COLUNA RESULTADO - Mostra texto do PDF e resultados de análises */}
         <div className="w-1/2 p-8 overflow-y-auto">
           <ResultPanel
             loading={loadingResultado}
             titulo={tituloResultado}
             resultado={resultadoAtual}
+            tipoAnalise={cardAtivo || undefined}
+            textoArtigo={textoArtigo || undefined}
+            token={token || undefined}
+            modoConfiguracao={modoConfiguracao}
+            onUpdateResult={(newResult) => {
+              if (newResult === null) {
+                // Cancelar configuração
+                setModoConfiguracao(false);
+                setCardAtivo(null);
+                setResultadoAtual(null);
+                setTituloResultado('');
+              } else {
+                setResultadoAtual(newResult);
+                setModoConfiguracao(false);
+              }
+            }}
+            onExecute={handleExecute}
           />
         </div>
       </div>
-
-      {/* Sistema de Janelas em Cascata */}
-      <ResultWindowsManager
-        windows={resultWindows}
-        onUpdateWindow={handleUpdateWindow}
-        onCloseWindow={handleCloseWindow}
-        token={token || undefined}
-        onExecute={handleExecute}
-      />
     </div>
   );
 }

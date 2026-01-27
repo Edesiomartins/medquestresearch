@@ -131,9 +131,9 @@ export default function ChatInterface({
   };
 
   return (
-    <div className="flex flex-col h-full border-t border-slate-200">
+    <div className="flex flex-col h-full border-t border-slate-200 min-h-0">
       {/* Área de mensagens */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 min-h-0">
         {messages.map((message) => (
           <div
             key={message.id}

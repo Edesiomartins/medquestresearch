@@ -14,7 +14,7 @@ except ImportError:
 
 def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> str:
     """
-    Gera análise e criação de artigos de Meta-Análises seguindo protocolo PRISMA.
+    Gera análise e criação de artigos de Metanálises seguindo protocolo PRISMA.
     
     Args:
         tema: Tema da revisão sistemática (obrigatório)

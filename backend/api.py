@@ -730,7 +730,7 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
             conn.close()
 
 def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_artigo: str = None, dados_extras: dict = None):
-    """Processa job de meta-análise em background."""
+    """Processa job de metanálise em background."""
     try:
         logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa}, tema: {tema})")
         
@@ -738,7 +738,7 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
         if texto_artigo:
             texto_artigo = texto_artigo[:6000]
         
-        # Chamar função de meta-análise (agora com tema como parâmetro principal)
+        # Chamar função de metanálise (agora com tema como parâmetro principal)
         resultado = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
@@ -1575,7 +1575,7 @@ def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends
             "perspectiva": "Pesquisa de Perspectivas",
             "mapa": "Mapa Conceitual",
             "structure_mapper": "Mapeamento de Estrutura",
-            "meta_analise": "Meta-Análise",
+            "meta_analise": "Metanálise",
         }
         
         nome_analise = tipo_analise_nomes.get(data.tipo_analise, data.tipo_analise)

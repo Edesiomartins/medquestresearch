@@ -35,8 +35,8 @@ DEFAULT_COSTS: Dict[str, int] = {
     "structure_visualizer": 8,        # Alias para mapa
     "structure_mapper": 6,            # Mapeador de estrutura
     
-    # Meta-análise (mais complexo)
-    "meta_analise": 12,               # Meta-análise completa
+    # Metanálise (mais complexo)
+    "meta_analise": 12,               # Metanálise completa
     "meta_analysis": 12,              # Alias para meta_analise
     
     # Upload de PDF
