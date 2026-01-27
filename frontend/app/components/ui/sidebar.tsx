@@ -33,13 +33,27 @@ export default function Sidebar({
     setMounted(true);
   }, []);
 
+  // Renderizar estrutura básica sempre, mas conteúdo dinâmico apenas quando montado
   if (!mounted) {
-    // ✅ Renderizar placeholder com mesma altura para evitar layout shift
     return (
       <aside className="fixed left-0 top-0 h-screen w-64 bg-linear-to-br from-[#0c3d66] to-[#0ea5e9] text-white flex flex-col shadow-lg">
         <div className="p-6 border-b border-[#0369a1]/50 flex flex-col items-center gap-4">
-          <div className="w-20 h-20 bg-white/10 rounded" />
-          <div className="h-6 w-32 bg-white/10 rounded" />
+          <div className="w-20 h-20 bg-white/10 rounded animate-pulse" />
+          <div className="h-6 w-32 bg-white/10 rounded animate-pulse" />
+        </div>
+        <div className="p-6">
+          <div className="h-4 w-24 bg-white/10 rounded mb-2 animate-pulse" />
+          <div className="h-4 w-32 bg-white/10 rounded animate-pulse" />
+        </div>
+        <nav className="flex-1 px-3 pb-4">
+          <div className="space-y-1">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="h-12 bg-white/10 rounded animate-pulse" />
+            ))}
+          </div>
+        </nav>
+        <div className="p-6 border-t border-[#0369a1]/50">
+          <div className="h-12 bg-white/10 rounded animate-pulse" />
         </div>
       </aside>
     );

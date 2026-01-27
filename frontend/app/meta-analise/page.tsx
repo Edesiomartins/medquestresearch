@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
 import { metaAnalysis } from '@/app/lib/api';
@@ -32,11 +32,16 @@ export default function MetaAnalisePage() {
     }
   }, [loading, token, router, mounted]);
 
-  // ✅ CORREÇÃO 2: Converter para Map apenas no cliente
-  const resultWindows = useMemo(() => {
-    if (!mounted) return new Map();
-    return new Map(Object.entries(resultWindowsData));
-  }, [resultWindowsData, mounted]);
+  // ✅ CORREÇÃO 2: Converter para Map apenas no cliente de forma consistente
+  // Criar Map vazio durante SSR e atualizar apenas no cliente
+  const [resultWindows, setResultWindows] = useState<Map<string, ResultWindowData>>(new Map());
+  
+  // Atualizar Map quando mounted ou quando dados mudarem
+  useEffect(() => {
+    if (mounted) {
+      setResultWindows(new Map(Object.entries(resultWindowsData)));
+    }
+  }, [mounted, resultWindowsData]);
 
   if (!mounted || loading || !token) {
     return (
@@ -268,8 +273,8 @@ export default function MetaAnalisePage() {
         </div>
       </div>
 
-      {/* ✅ CORREÇÃO 5: Renderizar ResultWindowsManager SEMPRE (não condicional) */}
-      {mounted && (
+      {/* ✅ CORREÇÃO 5: Renderizar ResultWindowsManager apenas quando montado E houver janelas */}
+      {mounted && resultWindows.size > 0 && (
         <ResultWindowsManager
           windows={resultWindows}
           onUpdateWindow={handleUpdateWindow}

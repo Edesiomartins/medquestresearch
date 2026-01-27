@@ -31,11 +31,13 @@ export default function ResultWindow({
   useEffect(() => {
     setMounted(true);
     
-    // ✅ Acessar window global apenas no cliente (renomeado para evitar conflito)
+    // ✅ Usar posição fixa baseada no índice para evitar Math.random() que causa problemas de hidratação
+    // Acessar window global apenas no cliente
     if (typeof window !== 'undefined') {
+      // Posição fixa no canto inferior direito para evitar problemas de hidratação
       setPosition({
-        x: Math.random() * (window.innerWidth - 400),
-        y: Math.random() * (window.innerHeight - 300),
+        x: Math.max(0, window.innerWidth - 420),
+        y: Math.max(0, window.innerHeight - 350),
       });
     }
   }, []);
