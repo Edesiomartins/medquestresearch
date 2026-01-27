@@ -19,6 +19,7 @@ import Sidebar from '@/app/components/ui/sidebar';
 
 export default function Home() {
   // 1. Todos os useState
+  const [mounted, setMounted] = useState(false);
   const [textoArtigo, setTextoArtigo] = useState<string | null>(null);
   const [loadingResultado, setLoadingResultado] = useState(false);
   const [tituloResultado, setTituloResultado] = useState('');
@@ -34,6 +35,11 @@ export default function Home() {
 
   // 3. useAuth
   const { token, usuario, creditos, loading, logout } = useAuth();
+
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 4. Todos os useEffect (2 total)
   // Effect 1: Redirecionar se não autenticado
@@ -317,7 +323,7 @@ export default function Home() {
 
 
   // Estado de carregamento inicial da autenticação
-  if (loading || !token) {
+  if (!mounted || loading || !token) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-mq-blue-900 text-white">
         <div className="animate-pulse-blue text-2xl">⏳ MedquestResearch carregando...</div>

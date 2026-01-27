@@ -1,6 +1,7 @@
 // app/components/ui/Sidebar.tsx
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -19,8 +20,14 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: SidebarProps) {
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const modulos = [
     { href: '/', icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
@@ -32,8 +39,9 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
     { href: '/meta-analise', icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
   ];
 
-  // Determinar módulo ativo baseado na rota
+  // Determinar módulo ativo baseado na rota (apenas no cliente)
   const isModuloAtivo = (modulo: typeof modulos[0]) => {
+    if (!mounted) return false;
     if (modulo.href === '/meta-analise') {
       return pathname === '/meta-analise';
     }
@@ -101,7 +109,7 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
       {/* NAVEGAÇÃO - MÓDULOS */}
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         <div className="space-y-1">
-          {modulos.map((modulo) => {
+          {mounted && modulos.map((modulo) => {
             const isActive = isModuloAtivo(modulo);
             // Metanálise usa Link, outros usam button
             if (modulo.tipo === 'meta-analise') {
@@ -137,6 +145,19 @@ export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: 
               </button>
             );
           })}
+          {!mounted && (
+            <div className="space-y-1">
+              {modulos.map((modulo) => (
+                <div
+                  key={modulo.tipo}
+                  className="flex items-center gap-3 p-3 rounded-lg text-white opacity-50"
+                >
+                  <span className="text-xl">{modulo.icon}</span>
+                  <span className="font-medium text-sm">{modulo.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </nav>
       

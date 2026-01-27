@@ -72,20 +72,24 @@ export default function ResultWindow({
   }, [initialPosition, windowIndex]);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState(() => {
-    // Inicializar apenas no cliente
-    if (typeof window !== 'undefined') {
-      return getInitialPosition();
-    }
-    return { x: 0, y: 0 };
-  });
+  const [mounted, setMounted] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Atualizar posição quando montar no cliente
   useEffect(() => {
-    if (typeof window !== 'undefined' && !initialPosition) {
-      setPosition(getInitialPosition());
+    if (mounted && typeof window !== 'undefined') {
+      if (initialPosition) {
+        setPosition(initialPosition);
+      } else {
+        setPosition(getInitialPosition());
+      }
     }
-  }, [getInitialPosition, initialPosition]);
+  }, [mounted, getInitialPosition, initialPosition]);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -399,7 +403,7 @@ export default function ResultWindow({
               </div>
             ) : windowData.resultado ? (
               <div className="prose max-w-none">
-                <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed break-words">
+                <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed wrap-break-word">
                   {windowData.resultado}
                 </div>
               </div>

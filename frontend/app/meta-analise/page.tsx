@@ -154,7 +154,12 @@ export default function MetaAnalisePage() {
 
   return (
     <div className="flex min-h-screen bg-mq-slate-50">
-      <Sidebar usuario={usuario} creditos={creditos} onLogout={logout} />
+      <Sidebar 
+        usuario={usuario} 
+        creditos={creditos} 
+        onLogout={logout}
+        onModuleClick={undefined}
+      />
       
       <div className="ml-64 flex-1 p-8">
         <div className="max-w-4xl mx-auto">
@@ -263,7 +268,7 @@ export default function MetaAnalisePage() {
       </div>
 
       {/* Sistema de Janelas - apenas renderizar se houver janelas e componente estiver montado */}
-      {mounted && (
+      {mounted && resultWindows.size > 0 && (
         <ResultWindowsManager
           windows={resultWindows}
           onUpdateWindow={handleUpdateWindow}
