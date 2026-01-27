@@ -19,7 +19,7 @@ interface ResultWindowProps {
 }
 
 export default function ResultWindow({
-  window,
+  window: windowData,
   onUpdate,
   onClose,
   token,
@@ -31,7 +31,7 @@ export default function ResultWindow({
   useEffect(() => {
     setMounted(true);
     
-    // ✅ Acessar window apenas no cliente
+    // ✅ Acessar window global apenas no cliente (renomeado para evitar conflito)
     if (typeof window !== 'undefined') {
       setPosition({
         x: Math.random() * (window.innerWidth - 400),
@@ -54,7 +54,7 @@ export default function ResultWindow({
     >
       {/* Header */}
       <div className="bg-linear-to-r from-[#0c3d66] to-[#1e5a96] text-white p-4 rounded-t-lg flex justify-between items-center">
-        <h3 className="font-bold text-sm truncate">{window.titulo}</h3>
+        <h3 className="font-bold text-sm truncate">{windowData.titulo}</h3>
         <button
           onClick={onClose}
           className="text-white hover:bg-white/20 rounded px-2 py-1 transition-colors"
@@ -65,18 +65,18 @@ export default function ResultWindow({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 text-sm text-slate-700 whitespace-pre-wrap">
-        {window.loading ? (
+        {windowData.loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin">⏳</div>
           </div>
         ) : (
-          window.resultado
+          windowData.resultado
         )}
       </div>
 
       {/* Footer */}
       <div className="border-t border-slate-200 p-3 bg-slate-50 rounded-b-lg text-xs text-slate-500">
-        {new Date(window.timestamp).toLocaleTimeString('pt-BR')}
+        {new Date(windowData.timestamp).toLocaleTimeString('pt-BR')}
       </div>
     </div>
   );
