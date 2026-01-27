@@ -328,7 +328,12 @@ export default function Home() {
   return (
     <div className="flex min-h-screen bg-mq-slate-50">
       {/* Componente Sidebar */}
-      <Sidebar usuario={usuario} creditos={creditos} onLogout={logout} />
+      <Sidebar 
+        usuario={usuario} 
+        creditos={creditos} 
+        onLogout={logout}
+        onModuleClick={runAnalise}
+      />
 
       {/* Estrutura principal da dashboard - Duas janelas */}
       <div className="ml-64 flex-1 flex h-screen"> {/* ml-64 para compensar a largura da sidebar */}

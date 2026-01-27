@@ -1,6 +1,8 @@
 // app/components/ui/TextWindow.tsx
 'use client';
 
+import { useMemo } from 'react';
+
 interface TextWindowProps {
   texto: string | null;
   loading: boolean;
@@ -10,6 +12,32 @@ interface TextWindowProps {
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onFileSelect: (file: File) => void;
+}
+
+// Função para consolidar texto removendo separadores de chunks
+function consolidarTexto(texto: string | null): string | null {
+  if (!texto) return null;
+  
+  // Remover marcadores de chunk comuns
+  let textoConsolidado = texto
+    // Remover marcadores explícitos de chunk
+    .replace(/\n\[Chunk final resumido\]/g, '')
+    .replace(/\[Chunk \d+\]/g, '')
+    .replace(/---+\s*Chunk\s*\d+\s*---+/gi, '')
+    .replace(/===+\s*Chunk\s*\d+\s*===+/gi, '')
+    // Remover múltiplas quebras de linha consecutivas (mais de 2)
+    .replace(/\n{3,}/g, '\n\n')
+    // Remover espaços em branco excessivos no início/fim de linhas
+    .split('\n')
+    .map(linha => linha.trim())
+    .join('\n')
+    // Remover linhas vazias excessivas novamente após trim
+    .replace(/\n{3,}/g, '\n\n')
+    // Garantir que parágrafos sejam separados por apenas uma quebra de linha
+    .replace(/([.!?])\n\n+/g, '$1\n\n')
+    .trim();
+  
+  return textoConsolidado;
 }
 
 export default function TextWindow({
@@ -22,6 +50,8 @@ export default function TextWindow({
   onDrop,
   onFileSelect,
 }: TextWindowProps) {
+  // Consolidar texto removendo separadores de chunks
+  const textoConsolidado = useMemo(() => consolidarTexto(texto), [texto]);
   return (
     <div className="card-elevated flex flex-col h-full">
       <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Texto Extraído</h2>
@@ -102,7 +132,7 @@ export default function TextWindow({
           ) : (
             <div className="flex-1 overflow-y-auto">
               <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans leading-relaxed wrap-break-word">
-                {texto}
+                {textoConsolidado}
               </div>
             </div>
           )}

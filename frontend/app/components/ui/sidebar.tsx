@@ -3,7 +3,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface Usuario {
   id?: string;
@@ -15,10 +15,12 @@ interface SidebarProps {
   usuario: Usuario | null;
   creditos: number;
   onLogout: () => void;
+  onModuleClick?: (tipo: string) => void; // Callback para executar análises
 }
 
-export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
+export default function Sidebar({ usuario, creditos, onLogout, onModuleClick }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   
   const modulos = [
     { href: '/', icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
@@ -36,6 +38,41 @@ export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
       return pathname === '/meta-analise';
     }
     return pathname === '/';
+  };
+
+  // Handler para clicar em módulo
+  const handleModuleClick = (modulo: typeof modulos[0], e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (modulo.tipo === 'meta-analise') {
+      // Metanálise navega para página dedicada
+      router.push('/meta-analise');
+      return;
+    }
+
+    // Outros módulos executam análise
+    if (!onModuleClick) {
+      console.warn('onModuleClick não está disponível');
+      // Se não temos a função, pelo menos navegar para a página principal
+      if (pathname !== '/') {
+        router.push('/');
+      }
+      return;
+    }
+    
+    // Se não estiver na página principal, navegar primeiro
+    if (pathname !== '/') {
+      router.push('/');
+      // Usar um pequeno delay para garantir que a navegação aconteceu
+      // e o componente foi montado antes de executar a análise
+      setTimeout(() => {
+        onModuleClick(modulo.tipo);
+      }, 300);
+    } else {
+      // Já está na página principal, executar diretamente
+      onModuleClick(modulo.tipo);
+    }
   };
 
   return (
@@ -66,11 +103,30 @@ export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
         <div className="space-y-1">
           {modulos.map((modulo) => {
             const isActive = isModuloAtivo(modulo);
+            // Metanálise usa Link, outros usam button
+            if (modulo.tipo === 'meta-analise') {
+              return (
+                <Link
+                  key={modulo.tipo}
+                  href={modulo.href}
+                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                    isActive 
+                      ? 'bg-[#0369a1] text-white shadow-md' 
+                      : 'hover:bg-[#0369a1]/50 text-white'
+                  }`}
+                >
+                  <span className="text-xl">{modulo.icon}</span>
+                  <span className="font-medium text-sm">{modulo.label}</span>
+                </Link>
+              );
+            }
+            
+            // Outros módulos são botões que executam análises
             return (
-              <Link
+              <button
                 key={modulo.tipo}
-                href={modulo.href}
-                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                onClick={(e) => handleModuleClick(modulo, e)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
                   isActive 
                     ? 'bg-[#0369a1] text-white shadow-md' 
                     : 'hover:bg-[#0369a1]/50 text-white'
@@ -78,7 +134,7 @@ export default function Sidebar({ usuario, creditos, onLogout }: SidebarProps) {
               >
                 <span className="text-xl">{modulo.icon}</span>
                 <span className="font-medium text-sm">{modulo.label}</span>
-              </Link>
+              </button>
             );
           })}
         </div>
