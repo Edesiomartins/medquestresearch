@@ -28,11 +28,8 @@ export default function ResultWindowsManager({
     return null;
   }
 
-  // ✅ Converter Map para array para renderização
-  const windowsArray = Array.from(windows.entries()).map(([id, data]) => ({
-    id,
-    ...data,
-  }));
+  // ✅ CORREÇÃO: Não duplicar 'id' - data já contém id
+  const windowsArray = Array.from(windows.entries()).map(([, data]) => data);
 
   if (windowsArray.length === 0) {
     return null;
