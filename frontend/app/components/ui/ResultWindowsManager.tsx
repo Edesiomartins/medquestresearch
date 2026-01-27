@@ -5,7 +5,7 @@ import ResultWindow from './ResultWindow';
 import { ResultWindowData } from './ResultWindow';
 
 interface ResultWindowsManagerProps {
-  windows: Map<string, ResultWindowData>;
+  windows: Record<string, ResultWindowData>;
   onUpdateWindow: (id: string, updates: Partial<ResultWindowData>) => void;
   onCloseWindow: (id: string) => void;
   token?: string;
@@ -28,8 +28,8 @@ export default function ResultWindowsManager({
     return null;
   }
 
-  // ✅ CORREÇÃO: Não duplicar 'id' - data já contém id
-  const windowsArray = Array.from(windows.entries()).map(([, data]) => data);
+  // ✅ Iterar com Object.values
+  const windowsArray = Object.values(windows);
 
   if (windowsArray.length === 0) {
     return null;
