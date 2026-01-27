@@ -26,17 +26,25 @@ export default function ChatInterface({
   onNewResponse,
   disabled = false,
 }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (initialMessage) {
-      return [{
+  const [mounted, setMounted] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Inicializar mensagem apenas no cliente após montar
+  useEffect(() => {
+    if (mounted && initialMessage && messages.length === 0) {
+      setMessages([{
         id: 'initial',
         role: 'assistant' as const,
         content: initialMessage,
         timestamp: Date.now(),
-      }];
+      }]);
     }
-    return [];
-  });
+  }, [mounted, initialMessage, messages.length]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -50,18 +58,6 @@ export default function ChatInterface({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Adicionar mensagem inicial quando mudar
-  useEffect(() => {
-    if (initialMessage && messages.length === 0) {
-      setMessages([{
-        id: 'initial',
-        role: 'assistant',
-        content: initialMessage,
-        timestamp: Date.now(),
-      }]);
-    }
-  }, [initialMessage]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading || disabled) return;

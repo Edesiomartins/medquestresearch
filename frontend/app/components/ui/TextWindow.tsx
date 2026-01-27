@@ -1,7 +1,7 @@
 // app/components/ui/TextWindow.tsx
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 
 interface TextWindowProps {
   texto: string | null;
@@ -50,8 +50,18 @@ export default function TextWindow({
   onDrop,
   onFileSelect,
 }: TextWindowProps) {
-  // Consolidar texto removendo separadores de chunks
-  const textoConsolidado = useMemo(() => consolidarTexto(texto), [texto]);
+  const [mounted, setMounted] = useState(false);
+
+  // Garantir que o componente está montado no cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Consolidar texto removendo separadores de chunks (apenas no cliente)
+  const textoConsolidado = useMemo(() => {
+    if (!mounted || !texto) return texto;
+    return consolidarTexto(texto);
+  }, [texto, mounted]);
   return (
     <div className="card-elevated flex flex-col h-full">
       <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Texto Extraído</h2>
