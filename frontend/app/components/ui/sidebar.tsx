@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Image from 'next/image';
 
 interface Usuario {
@@ -66,14 +65,11 @@ export default function Sidebar({
     { href: '/', icon: '📚', label: 'Explicar conteúdo', tipo: 'explicar' },
     { href: '/', icon: '🌍', label: 'Perspectivas científicas', tipo: 'perspectiva' },
     { href: '/', icon: '🔬', label: 'Análise crítica', tipo: 'critica' },
-    { href: '/meta-analise', icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
+    { href: '/', icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
   ];
 
   // Determinar módulo ativo baseado na rota (apenas no cliente)
   const isModuloAtivo = (modulo: typeof modulos[0]) => {
-    if (modulo.href === '/meta-analise') {
-      return pathname === '/meta-analise';
-    }
     return pathname === '/';
   };
 
@@ -82,11 +78,6 @@ export default function Sidebar({
     e.preventDefault();
     e.stopPropagation();
     
-    if (modulo.tipo === 'meta-analise') {
-      router.push('/meta-analise');
-      return;
-    }
-
     if (!onModuleClick) {
       if (pathname !== '/') {
         router.push('/');
@@ -132,23 +123,6 @@ export default function Sidebar({
         <div className="space-y-1">
           {modulos.map((modulo) => {
             const isActive = isModuloAtivo(modulo);
-            if (modulo.tipo === 'meta-analise') {
-              return (
-                <Link
-                  key={modulo.tipo}
-                  href={modulo.href}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    isActive 
-                      ? 'bg-[#0369a1] text-white shadow-md' 
-                      : 'hover:bg-[#0369a1]/50 text-white'
-                  }`}
-                >
-                  <span className="text-xl">{modulo.icon}</span>
-                  <span className="font-medium text-sm">{modulo.label}</span>
-                </Link>
-              );
-            }
-            
             return (
               <button
                 key={modulo.tipo}

@@ -13,7 +13,8 @@ interface ResultPanelProps {
   token?: string;
   onUpdateResult?: (newResult: string | null) => void;
   modoConfiguracao?: boolean;
-  onExecute?: (parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => void;
+  etapasMetanalise?: Array<{ etapa: number; titulo: string; resultado: string; loading: boolean }>;
+  onExecute?: (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => void;
 }
 
 export default function ResultPanel({ 
@@ -25,12 +26,14 @@ export default function ResultPanel({
   token,
   onUpdateResult,
   modoConfiguracao = false,
+  etapasMetanalise = [],
   onExecute,
 }: ResultPanelProps) {
   const [showChat, setShowChat] = useState(false);
   const [trecho, setTrecho] = useState('');
   const [nivel, setNivel] = useState('graduação');
   const [focoAnalise, setFocoAnalise] = useState('geral');
+  const [temaMetanalise, setTemaMetanalise] = useState('');
 
   // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
@@ -195,6 +198,63 @@ export default function ResultPanel({
           )}
         </div>
       );
+    } else if (tipoAnalise === 'meta-analise') {
+      return (
+        <div className="card-elevated flex flex-col h-full">
+          <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Metanálise PRISMA</h2>
+          <p className="text-sm text-slate-600 mb-4">
+            Digite o tema da metanálise que deseja realizar. O sistema executará automaticamente todas as 4 etapas:
+            estruturação PICO e busca na literatura, extração de dados, redação técnica (PRISMA) e verificação final.
+          </p>
+          <div className="space-y-4 mb-6">
+            <div>
+              <label htmlFor="temaMetanalise" className="block text-sm font-medium text-slate-700 mb-2">
+                Tema da Metanálise *
+              </label>
+              <textarea
+                id="temaMetanalise"
+                value={temaMetanalise}
+                onChange={(e) => setTemaMetanalise(e.target.value)}
+                placeholder="Ex: 'Eficácia da terapia X no tratamento da condição Y', 'Efeitos da intervenção Z em pacientes com doença W'..."
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] outline-none resize-none"
+                rows={4}
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => {
+                  if (onUpdateResult) {
+                    onUpdateResult(null);
+                  }
+                }}
+                className="px-4 py-2 text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (temaMetanalise.trim() && onExecute) {
+                    onExecute({ temaMetanalise: temaMetanalise.trim() });
+                  }
+                }}
+                disabled={!temaMetanalise.trim()}
+                className="px-4 py-2 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Iniciar Metanálise
+              </button>
+            </div>
+          </div>
+          {/* Mostrar texto do PDF abaixo do formulário se existir */}
+          {resultado && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">Texto do Artigo (Referência)</h3>
+              <div className="whitespace-pre-wrap text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 overflow-y-auto max-h-[300px] font-sans leading-relaxed">
+                {resultado}
+              </div>
+            </div>
+          )}
+        </div>
+      );
     }
   }
 
@@ -230,11 +290,14 @@ export default function ResultPanel({
 
   // Estado: done - mostrar resultado no painel direito (sem alert)
   if (resultado && !showChat) {
+    // Se for metanálise e tiver etapas, mostrar progresso das etapas também
+    const mostrarEtapas = tipoAnalise === 'meta-analise' && etapasMetanalise.length > 0;
+    
     return (
       <div className="card-elevated flex flex-col h-full">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-[#0c3d66]">{titulo}</h2>
-          {token && tipoAnalise && (
+          {token && tipoAnalise && tipoAnalise !== 'meta-analise' && (
             <button
               onClick={() => setShowChat(true)}
               className="px-4 py-2 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] transition-colors flex items-center gap-2 text-sm"
@@ -247,6 +310,40 @@ export default function ResultPanel({
             </button>
           )}
         </div>
+        {mostrarEtapas && (
+          <div className="mb-4 space-y-2">
+            {etapasMetanalise.map((etapa) => (
+              <div
+                key={etapa.etapa}
+                className={`p-3 rounded-lg border-2 ${
+                  etapa.loading
+                    ? 'border-blue-300 bg-blue-50'
+                    : etapa.resultado.startsWith('❌')
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-green-300 bg-green-50'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-semibold text-sm text-slate-700">{etapa.titulo}</span>
+                  {etapa.loading && (
+                    <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                  )}
+                  {!etapa.loading && !etapa.resultado.startsWith('❌') && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                  {!etapa.loading && etapa.resultado.startsWith('❌') && (
+                    <span className="text-red-600">✗</span>
+                  )}
+                </div>
+                {!etapa.loading && (
+                  <div className="text-xs text-slate-600 mt-1 line-clamp-2">
+                    {etapa.resultado.substring(0, 100)}...
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="prose max-w-none flex-1 overflow-hidden flex flex-col">
           <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed wrap-break-word overflow-y-auto flex-1">
             {resultado}

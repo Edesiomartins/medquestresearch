@@ -12,6 +12,7 @@ import {
   pesquisarPerspectiva,
   analisarCritica,
   uploadPdf,
+  metaAnalysis,
 } from '@/app/lib/api';
 import ResultPanel from '@/app/components/ui/ResultPanel';
 import TextWindow from '@/app/components/ui/TextWindow';
@@ -29,6 +30,7 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null); // Para erros de upload
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
   const [modoConfiguracao, setModoConfiguracao] = useState(false); // Para mostrar formulário de configuração no ResultPanel
+  const [etapasMetanalise, setEtapasMetanalise] = useState<Array<{ etapa: number; titulo: string; resultado: string; loading: boolean }>>([]); // Para armazenar etapas da metanálise
 
   // 2. useRouter
   const router = useRouter();
@@ -151,8 +153,15 @@ export default function Home() {
 
   // Callback 5: Executar análise
   const runAnalise = useCallback(async (tipo: string, trecho?: string, nivel?: string) => {
-    if (!textoArtigo || !token) {
+    // Metanálise não precisa de textoArtigo - funciona apenas com tema
+    if (tipo !== 'meta-analise' && (!textoArtigo || !token)) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      return;
+    }
+    
+    if (!token) {
+      setResultadoAtual('Usuário não autenticado.');
       setTituloResultado('Aviso');
       return;
     }
@@ -167,6 +176,7 @@ export default function Home() {
       fatos: 'Verificação de Fatos',
       perspectiva: 'Perspectivas Científicas',
       critica: 'Análise Crítica',
+      'meta-analise': 'Metanálise PRISMA',
     };
 
     // 2. Verificar se precisa de configuração ANTES de processar
@@ -183,6 +193,16 @@ export default function Home() {
       // Mostrar formulário de configuração no ResultPanel
       setModoConfiguracao(true);
       setTituloResultado('Análise Crítica');
+      // NÃO limpar resultadoAtual - manter texto do PDF visível
+      setLoadingResultado(false);
+      return;
+    }
+
+    if (tipo === 'meta-analise') {
+      // Mostrar formulário de configuração no ResultPanel para pedir o tema
+      setModoConfiguracao(true);
+      setTituloResultado('Metanálise PRISMA');
+      setEtapasMetanalise([]); // Limpar etapas anteriores
       // NÃO limpar resultadoAtual - manter texto do PDF visível
       setLoadingResultado(false);
       return;
@@ -244,8 +264,8 @@ export default function Home() {
   }, [token, textoArtigo, textoProcessando]);
 
   // Callback para executar análise a partir do formulário inline no ResultPanel
-  const handleExecute = useCallback(async (parametros: { trecho?: string; nivel?: string; focoAnalise?: string }) => {
-    if (!textoArtigo || !token || !cardAtivo) {
+  const handleExecute = useCallback(async (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => {
+    if (!token || !cardAtivo) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
       setTituloResultado('Aviso');
       return;
@@ -259,6 +279,7 @@ export default function Home() {
       fatos: 'Verificação de Fatos',
       perspectiva: 'Perspectivas Científicas',
       critica: 'Análise Crítica',
+      'meta-analise': 'Metanálise PRISMA',
     };
 
     const nomesFoco: Record<string, string> = {
@@ -272,6 +293,103 @@ export default function Home() {
       relevancia: 'Relevância Clínica/Científica',
       geral: 'Análise Geral'
     };
+
+    // Caso especial: Metanálise - executar todas as etapas sequencialmente
+    if (tipo === 'meta-analise' && parametros.temaMetanalise) {
+      setModoConfiguracao(false);
+      setEtapasMetanalise([]);
+      setLoadingResultado(true);
+      
+      const nomesEtapa: Record<string, string> = {
+        '1': 'Etapa 1: Estruturação PICO e Busca na Literatura',
+        '2': 'Etapa 2: Extração de Dados',
+        '3': 'Etapa 3: Redação Técnica (PRISMA)',
+        '4': 'Etapa 4: Verificação Final',
+      };
+
+      const estilo = 'Vancouver';
+      let resultadoAcumulado = '';
+
+      for (let etapa = 1; etapa <= 4; etapa++) {
+        const etapaStr = etapa.toString();
+        const tituloEtapa = nomesEtapa[etapaStr] || `Etapa ${etapa}`;
+        
+        // Adicionar etapa inicial com loading
+        setEtapasMetanalise(prev => [...prev, {
+          etapa,
+          titulo: tituloEtapa,
+          resultado: `⏳ Processando ${tituloEtapa}...`,
+          loading: true,
+        }]);
+
+        try {
+          const res = await metaAnalysis(token, {
+            tema: parametros.temaMetanalise,
+            etapa: etapaStr,
+            texto_artigo: textoArtigo || '',
+            estilo,
+          });
+
+          const resultadoEtapa = res.erro 
+            ? `❌ Erro: ${res.erro}`
+            : (res.resultado || 'Etapa concluída');
+
+          // Atualizar etapa com resultado
+          setEtapasMetanalise(prev => {
+            const novasEtapas = [...prev];
+            const index = novasEtapas.findIndex(e => e.etapa === etapa);
+            if (index !== -1) {
+              novasEtapas[index] = {
+                ...novasEtapas[index],
+                resultado: resultadoEtapa,
+                loading: false,
+              };
+            }
+            return novasEtapas;
+          });
+
+          // Acumular resultado
+          resultadoAcumulado += `\n\n${'='.repeat(60)}\n${tituloEtapa}\n${'='.repeat(60)}\n\n${resultadoEtapa}`;
+
+          // Atualizar resultadoAtual com todas as etapas acumuladas
+          setResultadoAtual(resultadoAcumulado.trim());
+          setTituloResultado('Metanálise PRISMA - Em Progresso');
+
+          // Aguardar um pouco entre etapas (exceto na última)
+          if (etapa < 4) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        } catch (error: any) {
+          const erroMsg = `❌ Erro na ${tituloEtapa}: ${error.message || 'Erro desconhecido'}`;
+          setEtapasMetanalise(prev => {
+            const novasEtapas = [...prev];
+            const index = novasEtapas.findIndex(e => e.etapa === etapa);
+            if (index !== -1) {
+              novasEtapas[index] = {
+                ...novasEtapas[index],
+                resultado: erroMsg,
+                loading: false,
+              };
+            }
+            return novasEtapas;
+          });
+          resultadoAcumulado += `\n\n${'='.repeat(60)}\n${tituloEtapa}\n${'='.repeat(60)}\n\n${erroMsg}`;
+          setResultadoAtual(resultadoAcumulado.trim());
+        }
+      }
+
+      setTituloResultado('Metanálise PRISMA - Concluída');
+      setLoadingResultado(false);
+      setCardAtivo(null);
+      return;
+    }
+
+    // Para outros tipos de análise, verificar se precisa de textoArtigo
+    if (!textoArtigo && tipo !== 'meta-analise') {
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      return;
+    }
 
     // Mostrar estado de processamento
     let textoProcessando = '⏳ Análise em andamento\n\n';
@@ -290,9 +408,9 @@ export default function Home() {
     try {
       let res;
       if (tipo === 'explicar' && parametros.trecho) {
-        res = await explicarConceito(token, textoArtigo, parametros.trecho, parametros.nivel || 'graduação');
+        res = await explicarConceito(token, textoArtigo!, parametros.trecho, parametros.nivel || 'graduação');
       } else if (tipo === 'critica' && parametros.focoAnalise) {
-        res = await analisarCritica(token, textoArtigo, parametros.focoAnalise);
+        res = await analisarCritica(token, textoArtigo!, parametros.focoAnalise);
       } else {
         return;
       }
@@ -367,11 +485,13 @@ export default function Home() {
             textoArtigo={textoArtigo || undefined}
             token={token || undefined}
             modoConfiguracao={modoConfiguracao}
+            etapasMetanalise={etapasMetanalise}
             onUpdateResult={(newResult) => {
               if (newResult === null) {
                 // Cancelar configuração - restaurar texto do PDF se existir
                 setModoConfiguracao(false);
                 setCardAtivo(null);
+                setEtapasMetanalise([]);
                 if (textoArtigo) {
                   setResultadoAtual(textoArtigo);
                   setTituloResultado('Texto extraído do arquivo');

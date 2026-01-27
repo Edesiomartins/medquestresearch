@@ -164,17 +164,13 @@ app = FastAPI(title="MedQuestResearch API", version="2.0")
 # ✅ ROUTER COM PREFIXO /genapi PARA TODAS AS ROTAS DE API
 api_router = APIRouter(prefix="/genapi")
 
-# ✅ CONFIGURAR CORS (RESTRITIVO E SEGURO)
+# ✅ CONFIGURAR CORS CORRETAMENTE PARA /genapi/*
 # Configurar CORS para Railway e desenvolvimento local.
-# ALLOWED_ORIGINS (opcional): origens extras separadas por vírgula.
+# As origens permitidas devem incluir o frontend e localhost para desenvolvimento.
 default_origins = [
-    "https://medquestresearch.up.railway.app",  # Frontend
-    "https://medquestresearch-api.up.railway.app",  # API
-    "https://medquestresearch-production.up.railway.app",
     "http://localhost:3000",
-    "http://localhost:3001",
     "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
+    "https://medquestresearch.up.railway.app",
 ]
 
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
@@ -185,11 +181,10 @@ else:
     allowed_origins = default_origins
 
 # Regex para qualquer *.up.railway.app (deploys Railway com URL gerada)
-# Aceita qualquer subdomínio do Railway (com ou sem hífens)
 allow_origin_regex = r"https://[a-z0-9-]+\.up\.railway\.app"
 
-# CORS: Temporariamente mais permissivo para debug
-# Em produção, pode restringir para allowed_origins específicas
+# CORS: Configuração para /genapi/*
+# O CORSMiddleware do FastAPI aplica-se a todas as rotas, incluindo /genapi/*
 DEBUG_CORS = os.getenv("DEBUG_CORS", "false").lower() == "true"
 
 if DEBUG_CORS:
@@ -198,18 +193,18 @@ if DEBUG_CORS:
         CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=False,  # Não pode ser True com allow_origins=["*"]
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
         allow_headers=["*"],
         expose_headers=["*"],
         max_age=3600,
     )
 else:
-    # Modo produção: origens específicas
+    # Modo produção: origens específicas com suporte a credenciais
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_origin_regex=allow_origin_regex,
-        allow_credentials=True,
+        allow_credentials=True,  # Suporte a credenciais conforme solicitado
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
         allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin", "X-CSRFToken"],
         expose_headers=["*"],
@@ -882,12 +877,43 @@ async def not_found_handler(request: Request, exc: Exception):
 # ✅ ROTAS BÁSICAS
 # ============================================
 
+# Handler OPTIONS genérico para todas as rotas (incluindo /genapi/*)
+# O FastAPI já lida com OPTIONS automaticamente via CORSMiddleware,
+# mas este handler garante compatibilidade adicional
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
-    """Handler para requisições OPTIONS (CORS preflight)."""
+    """Handler para requisições OPTIONS (CORS preflight) - funciona para todas as rotas incluindo /genapi/*."""
     origin = request.headers.get("origin", "*")
     
     # Verificar origem permitida
+    if DEBUG_CORS:
+        allow_origin = "*"
+        allow_credentials = "false"
+    else:
+        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
+            allow_origin = origin
+            allow_credentials = "true"
+        else:
+            allow_origin = allowed_origins[0] if allowed_origins else "*"
+            allow_credentials = "false"
+    
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": allow_origin,
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRFToken",
+            "Access-Control-Allow-Credentials": allow_credentials,
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
+# Handler OPTIONS específico para todas as rotas /genapi/*
+@api_router.options("/{full_path:path}")
+async def genapi_options_handler(request: Request, full_path: str):
+    """Handler OPTIONS específico para rotas /genapi/* (CORS preflight)."""
+    origin = request.headers.get("origin", "*")
+    
     if DEBUG_CORS:
         allow_origin = "*"
         allow_credentials = "false"
@@ -1093,6 +1119,33 @@ def cadastro(request: Request, data: CadastroInput):
             status_code=500,
             content={"erro": str(e)}
         )
+
+@api_router.options("/login")
+async def login_options(request: Request):
+    """Handler OPTIONS para /genapi/login (CORS preflight)."""
+    origin = request.headers.get("origin", "*")
+    
+    if DEBUG_CORS:
+        allow_origin = "*"
+        allow_credentials = "false"
+    else:
+        if origin in allowed_origins or (allow_origin_regex and re.match(allow_origin_regex, origin)):
+            allow_origin = origin
+            allow_credentials = "true"
+        else:
+            allow_origin = allowed_origins[0] if allowed_origins else "*"
+            allow_credentials = "false"
+    
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": allow_origin,
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With, Origin",
+            "Access-Control-Allow-Credentials": allow_credentials,
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 @api_router.post("/login")
 @limiter.limit("5 per minute")
