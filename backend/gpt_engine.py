@@ -47,7 +47,16 @@ def _get_client():
         api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
         base_url = os.getenv("OPENAI_API_BASE")  # ex.: https://openrouter.ai/api/v1
         if base_url:
-            client = OpenAI(api_key=api_key, base_url=base_url)
+            # Para OpenRouter, adicionar headers customizados
+            default_headers = {
+                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
+                "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
+            }
+            client = OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                default_headers=default_headers
+            )
         else:
             client = OpenAI(api_key=api_key)
     return client
@@ -82,12 +91,36 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
     if temperatura is not None:
         params["temperature"] = temperatura
     
-    response = cliente.responses.create(**params)
-    return response.output_text
+    try:
+        response = cliente.responses.create(**params)
+        # Verificar se a resposta tem output_text
+        if hasattr(response, 'output_text'):
+            return response.output_text
+        elif hasattr(response, 'output') and isinstance(response.output, list) and len(response.output) > 0:
+            # Se for formato de array, pegar o primeiro conteúdo
+            first_output = response.output[0]
+            if isinstance(first_output, dict) and 'content' in first_output:
+                return first_output['content']
+            elif isinstance(first_output, str):
+                return first_output
+        elif hasattr(response, 'output') and isinstance(response.output, str):
+            return response.output
+        else:
+            # Fallback: tentar converter para string
+            logging.warning(f"[GPT_ENGINE] Formato de resposta inesperado: {type(response)}")
+            return str(response)
+    except Exception as e:
+        # Log detalhado do erro
+        logging.error(f"[GPT_ENGINE] Erro ao chamar API OpenRouter:")
+        logging.error(f"[GPT_ENGINE] Modelo: {modelo}")
+        logging.error(f"[GPT_ENGINE] Parâmetros: {params}")
+        logging.error(f"[GPT_ENGINE] Erro: {e}")
+        logging.error(f"[GPT_ENGINE] Tipo do erro: {type(e).__name__}")
+        raise
 
 def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     """
-    Gera resposta usando modelo configurado (padrão: gpt-5-mini para velocidade).
+    Gera resposta usando modelo configurado (padrão: openai/gpt-4o-mini).
     
     Args:
         prompt: Texto do prompt
@@ -97,8 +130,9 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     _check_research_env()
     try:
         cliente = _get_client()
-        # Permite configurar modelo via variável de ambiente, senão usa gpt-5-mini (mais rápido)
-        modelo = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        # Permite configurar modelo via variável de ambiente
+        # Modelos OpenRouter comuns: openai/gpt-4o-mini, openai/gpt-4o, anthropic/claude-3.5-sonnet
+        modelo = os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
         
         # Log do valor exato da variável modelo antes da chamada
         logging.warning(f"[GPT_ENGINE] Modelo configurado: '{modelo}' (tipo: {type(modelo).__name__})")
@@ -109,11 +143,23 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
             resposta = _chamar_nova_api(modelo, prompt, temperatura, max_output_tokens)
             return resposta
         except Exception as e:
-            # Log completo do erro incluindo a classe
+            # Log completo do erro incluindo a classe e detalhes
+            import traceback
+            error_traceback = traceback.format_exc()
             logging.error(f"[GPT_ENGINE] Erro na chamada da API:")
             logging.error(f"[GPT_ENGINE] Classe do erro: {e.__class__.__name__}")
             logging.error(f"[GPT_ENGINE] Mensagem completa: {str(e)}")
             logging.error(f"[GPT_ENGINE] Modelo usado: '{modelo}'")
+            logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
+            
+            # Se for erro de API, incluir mais detalhes
+            if hasattr(e, 'response'):
+                try:
+                    error_body = e.response.text if hasattr(e.response, 'text') else str(e.response)
+                    logging.error(f"[GPT_ENGINE] Resposta do erro: {error_body}")
+                except:
+                    pass
+            
             raise Exception(f"Erro ao gerar resposta: {str(e)} (classe: {e.__class__.__name__})")
     except Exception as e:
         logging.error(f"[GPT_ENGINE] Erro geral em gerar_resposta: {str(e)} (classe: {e.__class__.__name__})")
