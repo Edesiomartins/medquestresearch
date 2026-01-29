@@ -40,7 +40,7 @@ export default function ResultPanel({
   const [trecho, setTrecho] = useState('');
   const [nivel, setNivel] = useState('graduação');
   const [focoAnalise, setFocoAnalise] = useState('geral');
-  const [temaMetanalise, setTemaMetanalise] = useState('');
+  const [temaInput, setTemaInput] = useState(''); // Estado local para o input do formulário
 
   // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
@@ -220,8 +220,8 @@ export default function ResultPanel({
               </label>
               <textarea
                 id="temaMetanalise"
-                value={temaMetanalise}
-                onChange={(e) => setTemaMetanalise(e.target.value)}
+                value={temaInput}
+                onChange={(e) => setTemaInput(e.target.value)}
                 placeholder="Ex: 'Eficácia da terapia X no tratamento da condição Y', 'Efeitos da intervenção Z em pacientes com doença W'..."
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] outline-none resize-none"
                 rows={4}
@@ -233,6 +233,7 @@ export default function ResultPanel({
                   if (onUpdateResult) {
                     onUpdateResult(null);
                   }
+                  setTemaInput(''); // Limpar input ao cancelar
                 }}
                 className="px-4 py-2 text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
               >
@@ -240,11 +241,12 @@ export default function ResultPanel({
               </button>
               <button
                 onClick={() => {
-                  if (temaMetanalise.trim() && onExecute) {
-                    onExecute({ temaMetanalise: temaMetanalise.trim() });
+                  if (temaInput.trim() && onExecute) {
+                    onExecute({ temaMetanalise: temaInput.trim() });
+                    setTemaInput(''); // Limpar input após iniciar
                   }
                 }}
-                disabled={!temaMetanalise.trim()}
+                disabled={!temaInput.trim()}
                 className="px-4 py-2 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Iniciar Metanálise
