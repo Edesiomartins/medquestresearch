@@ -46,17 +46,24 @@ def _get_client():
         _check_research_env()
         api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
         base_url = os.getenv("OPENAI_API_BASE")  # ex.: https://openrouter.ai/api/v1
-        if base_url:
+        if base_url and "openrouter.ai" in base_url:
             # Para OpenRouter, adicionar headers customizados
+            # Nota: O cliente OpenAI pode não passar esses headers automaticamente
+            # Vamos tentar configurar via default_headers
             default_headers = {
                 "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
                 "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
             }
-            client = OpenAI(
-                api_key=api_key,
-                base_url=base_url,
-                default_headers=default_headers
-            )
+            try:
+                client = OpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    default_headers=default_headers
+                )
+                logging.info(f"[GPT_ENGINE] Cliente OpenRouter configurado com headers: {list(default_headers.keys())}")
+            except Exception as e:
+                logging.warning(f"[GPT_ENGINE] Erro ao configurar headers, tentando sem headers: {e}")
+                client = OpenAI(api_key=api_key, base_url=base_url)
         else:
             client = OpenAI(api_key=api_key)
     return client
@@ -73,13 +80,20 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
     """
     cliente = _get_client()
     
-    # Configurar max_output_tokens (padrão: 4000 para evitar erro de créditos)
+    # Configurar max_output_tokens se não fornecido (padrão: 1000 para evitar erro 402)
     # Pode ser configurado via variável de ambiente
     if max_output_tokens is None:
-        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "4000"))
+        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
     
-    # Limitar a 8000 tokens máximo para evitar erros de créditos
-    max_output_tokens = min(max_output_tokens, 8000)
+    # Limitar a 2000 tokens máximo para evitar erros de créditos
+    max_output_tokens = min(max_output_tokens, 2000)
+    
+    # Se o prompt for muito longo, reduzir max_output_tokens proporcionalmente
+    # para evitar erro 402
+    prompt_length = len(prompt) if prompt else 0
+    if prompt_length > 10000:  # Prompt muito longo
+        max_output_tokens = min(max_output_tokens, 500)
+        logging.warning(f"[GPT_ENGINE] Prompt longo ({prompt_length} chars), reduzindo max_output_tokens para {max_output_tokens}")
     
     params = {
         "model": modelo,
@@ -92,7 +106,28 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
         params["temperature"] = temperatura
     
     try:
-        response = cliente.responses.create(**params)
+        # Adicionar headers OpenRouter diretamente na chamada se necessário
+        base_url = os.getenv("OPENAI_API_BASE", "")
+        extra_headers = {}
+        if base_url and "openrouter.ai" in base_url:
+            # Headers OpenRouter (podem ser necessários)
+            extra_headers = {
+                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
+                "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
+            }
+        
+        # Fazer a chamada com headers extras se disponíveis
+        if extra_headers:
+            # Tentar passar headers via extra_headers (se suportado)
+            try:
+                response = cliente.responses.create(**params, extra_headers=extra_headers)
+            except TypeError:
+                # Se extra_headers não for suportado, tentar sem
+                logging.warning(f"[GPT_ENGINE] extra_headers não suportado, tentando sem headers extras")
+                response = cliente.responses.create(**params)
+        else:
+            response = cliente.responses.create(**params)
+        
         # Verificar se a resposta tem output_text
         if hasattr(response, 'output_text'):
             return response.output_text
@@ -108,15 +143,48 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
         else:
             # Fallback: tentar converter para string
             logging.warning(f"[GPT_ENGINE] Formato de resposta inesperado: {type(response)}")
+            logging.warning(f"[GPT_ENGINE] Atributos disponíveis: {dir(response)}")
             return str(response)
     except Exception as e:
         # Log detalhado do erro
-        logging.error(f"[GPT_ENGINE] Erro ao chamar API OpenRouter:")
+        import traceback
+        error_traceback = traceback.format_exc()
+        error_message = str(e)
+        
+        logging.error(f"[GPT_ENGINE] ❌ Erro ao chamar API OpenRouter:")
         logging.error(f"[GPT_ENGINE] Modelo: {modelo}")
         logging.error(f"[GPT_ENGINE] Parâmetros: {params}")
-        logging.error(f"[GPT_ENGINE] Erro: {e}")
+        logging.error(f"[GPT_ENGINE] Erro: {error_message}")
         logging.error(f"[GPT_ENGINE] Tipo do erro: {type(e).__name__}")
-        raise
+        
+        # Tentar extrair mais informações do erro da API
+        if hasattr(e, 'status_code'):
+            logging.error(f"[GPT_ENGINE] Status code: {e.status_code}")
+        if hasattr(e, 'response'):
+            try:
+                if hasattr(e.response, 'text'):
+                    response_text = e.response.text
+                    logging.error(f"[GPT_ENGINE] Response text: {response_text}")
+                    # Tentar parsear como JSON
+                    try:
+                        import json
+                        error_json = json.loads(response_text)
+                        logging.error(f"[GPT_ENGINE] Response JSON: {json.dumps(error_json, indent=2)}")
+                    except:
+                        pass
+                if hasattr(e.response, 'json'):
+                    try:
+                        error_json = e.response.json()
+                        logging.error(f"[GPT_ENGINE] Response JSON: {json.dumps(error_json, indent=2)}")
+                    except:
+                        pass
+            except Exception as parse_error:
+                logging.error(f"[GPT_ENGINE] Erro ao parsear resposta: {parse_error}")
+        
+        logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
+        
+        # Re-raise com mensagem mais informativa
+        raise Exception(f"Erro ao chamar API OpenRouter com modelo '{modelo}': {error_message}")
 
 def _obter_modelos_fallback():
     """
@@ -145,26 +213,32 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     Gera resposta usando modelo configurado com fallback automático.
     
     Se o modelo principal falhar, tenta automaticamente os modelos de fallback.
+    Se receber erro 402 (créditos insuficientes), reduz automaticamente max_output_tokens.
     
     Args:
         prompt: Texto do prompt
         temperatura: Temperatura para geração (0-2, padrão: 1)
-        max_output_tokens: Máximo de tokens de saída (padrão: 4000)
+        max_output_tokens: Máximo de tokens de saída (padrão: 1000)
     """
     _check_research_env()
     
     modelos = _obter_modelos_fallback()
     cliente = _get_client()
     
+    # Configurar max_output_tokens inicial se não fornecido
+    if max_output_tokens is None:
+        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
+    
     ultimo_erro = None
+    max_tokens_atual = max_output_tokens
     
     # Tentar cada modelo em ordem até um funcionar
     for i, modelo in enumerate(modelos):
         try:
-            logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}'")
+            logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}' (max_tokens={max_tokens_atual})")
             
             # Nova chamada da API que retorna diretamente o texto
-            resposta = _chamar_nova_api(modelo, prompt, temperatura, max_output_tokens)
+            resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
             
             if i > 0:
                 logging.warning(f"[GPT_ENGINE] ✅ Modelo '{modelo}' funcionou (fallback)")
@@ -178,8 +252,27 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
             import traceback
             error_traceback = traceback.format_exc()
             
-            logging.warning(f"[GPT_ENGINE] ⚠️ Modelo '{modelo}' falhou, tentando próximo...")
-            logging.error(f"[GPT_ENGINE] Erro: {str(e)} (classe: {e.__class__.__name__})")
+            # Verificar se é erro 402 (créditos insuficientes)
+            is_402_error = False
+            error_str = str(e).lower()
+            if "402" in error_str or "credits" in error_str or "can only afford" in error_str:
+                is_402_error = True
+                # Reduzir max_output_tokens pela metade e tentar novamente com o mesmo modelo
+                if max_tokens_atual > 50:  # Não reduzir abaixo de 50
+                    max_tokens_atual = max(50, max_tokens_atual // 2)
+                    logging.warning(f"[GPT_ENGINE] ⚠️ Erro 402 detectado! Reduzindo max_output_tokens para {max_tokens_atual}")
+                    # Tentar novamente com o mesmo modelo e tokens reduzidos
+                    try:
+                        resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
+                        logging.warning(f"[GPT_ENGINE] ✅ Sucesso após reduzir tokens para {max_tokens_atual}")
+                        return resposta
+                    except Exception as retry_error:
+                        logging.error(f"[GPT_ENGINE] ❌ Falhou mesmo após reduzir tokens: {retry_error}")
+                        ultimo_erro = retry_error
+            
+            if not is_402_error:
+                logging.warning(f"[GPT_ENGINE] ⚠️ Modelo '{modelo}' falhou, tentando próximo...")
+                logging.error(f"[GPT_ENGINE] Erro: {str(e)} (classe: {e.__class__.__name__})")
             
             # Se não for o último modelo, continuar tentando
             if i < len(modelos) - 1:

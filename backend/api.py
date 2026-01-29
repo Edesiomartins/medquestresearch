@@ -1554,7 +1554,7 @@ Responda de forma clara, objetiva e útil. Se o usuário pedir melhorias, sugest
                 import backend.gpt_engine as gpt_engine
                 gerar_resposta = gpt_engine.gerar_resposta
 
-        resposta = gerar_resposta(prompt, temperatura=0.7, max_output_tokens=2000)
+        resposta = gerar_resposta(prompt, temperatura=0.7)  # Usa padrão configurado (1000 tokens)
 
         # Registrar log
         registrar_log(
