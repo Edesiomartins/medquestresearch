@@ -198,7 +198,6 @@ export default function TextWindow({
                   </button>
                 </div>
               )}
-            </div>
 
             {/* Progresso de Upload */}
             {uploadProgress > 0 && uploadProgress < 100 && (
