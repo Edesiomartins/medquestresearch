@@ -26,6 +26,45 @@ export interface ExplicarConceitoResponse extends ApiResponse {
   resultado?: string;
 }
 
+// ============================================
+// Autenticação e usuário
+// ============================================
+
+export async function login(email: string, senha: string): Promise<ApiResponse> {
+  const response = await fetch(getApiUrl(API_ENDPOINTS.LOGIN), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, senha }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { erro: data.erro || data.detail || `Erro ${response.status}` };
+  }
+  return data;
+}
+
+export async function cadastro(nome: string, email: string, senha: string): Promise<ApiResponse> {
+  const response = await fetch(getApiUrl(API_ENDPOINTS.CADASTRO), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, email, senha }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { erro: data.erro || data.detail || `Erro ${response.status}` };
+  }
+  return data;
+}
+
+export async function getCreditos(token: string): Promise<ApiResponse> {
+  const response = await authenticatedFetch(API_ENDPOINTS.CREDITOS, { method: 'GET' }, token);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { erro: data.erro || data.detail || `Erro ${response.status}` };
+  }
+  return data;
+}
+
 // Função genérica para chamadas de API
 async function apiCall<T = any>(
   endpoint: string,
