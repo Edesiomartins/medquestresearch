@@ -1,7 +1,7 @@
 // app/components/ui/TextWindow.tsx
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef } from 'react';
 
 interface TextWindowProps {
   texto: string | null;
@@ -61,6 +61,7 @@ export default function TextWindow({
   analisandoArtigos = false,
 }: TextWindowProps) {
   const [mounted, setMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function TextWindow({
             `}
           >
             <input
+              ref={fileInputRef}
               id="file-upload"
               type="file"
               accept=".pdf,.docx"
@@ -116,9 +118,10 @@ export default function TextWindow({
                 // Limpar input para permitir selecionar os mesmos arquivos novamente
                 e.target.value = '';
               }}
-              className="absolute inset-0 opacity-0 cursor-pointer"
+              className={modoMetanalise ? 'hidden' : 'absolute inset-0 opacity-0 cursor-pointer'}
+              aria-hidden={modoMetanalise}
             />
-            <div className="text-center">
+            <div className={`text-center ${modoMetanalise ? 'pointer-events-none' : ''}`}>
               <div className="text-6xl mb-4">{modoMetanalise ? '📚' : '📄'}</div>
               <p className="text-lg font-semibold text-mq-slate-700 mb-2">
                 {modoMetanalise 
@@ -127,7 +130,10 @@ export default function TextWindow({
                 }
               </p>
               <p className="text-sm text-mq-slate-500">
-                ou <span className="text-mq-blue-600 font-medium cursor-pointer hover:underline">clique para selecionar</span>
+                {modoMetanalise 
+                  ? 'Ou use o botão abaixo para selecionar arquivos'
+                  : 'ou clique para selecionar'
+                }
               </p>
               <p className="text-xs text-mq-slate-400 mt-2">
                 {modoMetanalise 
@@ -135,7 +141,19 @@ export default function TextWindow({
                   : '(PDF, DOCX - máximo 10MB)'
                 }
               </p>
-              {modoMetanalise && arquivosSelecionados.length > 0 && (
+            </div>
+            {modoMetanalise && (
+              <div className="mt-4 flex flex-col items-center gap-3 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-5 py-2.5 rounded-lg font-medium text-white bg-[#0c3d66] hover:bg-[#0a3255] transition-colors"
+                >
+                  Selecionar arquivos
+                </button>
+              </div>
+            )}
+            {modoMetanalise && arquivosSelecionados.length > 0 && (
                 <div className="mt-4 w-full max-w-md mx-auto space-y-3">
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm font-semibold text-blue-900 mb-2">
