@@ -118,9 +118,33 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
         logging.error(f"[GPT_ENGINE] Tipo do erro: {type(e).__name__}")
         raise
 
+def _obter_modelos_fallback():
+    """
+    Retorna lista de modelos para tentar em ordem (fallback automático).
+    Pode ser configurado via OPENAI_MODEL (modelo principal) e OPENAI_MODEL_FALLBACK (modelos alternativos separados por vírgula).
+    """
+    modelo_principal = os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
+    
+    # Modelos de fallback (separados por vírgula)
+    fallback_str = os.getenv("OPENAI_MODEL_FALLBACK", "openai/gpt-4o-mini,openai/gpt-3.5-turbo")
+    modelos_fallback = [m.strip() for m in fallback_str.split(",") if m.strip()]
+    
+    # Lista completa: modelo principal primeiro, depois fallbacks
+    modelos = [modelo_principal] + modelos_fallback
+    
+    # Remover duplicatas mantendo ordem
+    modelos_unicos = []
+    for modelo in modelos:
+        if modelo not in modelos_unicos:
+            modelos_unicos.append(modelo)
+    
+    return modelos_unicos
+
 def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     """
-    Gera resposta usando modelo configurado (padrão: openai/gpt-4o-mini).
+    Gera resposta usando modelo configurado com fallback automático.
+    
+    Se o modelo principal falhar, tenta automaticamente os modelos de fallback.
     
     Args:
         prompt: Texto do prompt
@@ -128,42 +152,56 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
         max_output_tokens: Máximo de tokens de saída (padrão: 4000)
     """
     _check_research_env()
-    try:
-        cliente = _get_client()
-        # Permite configurar modelo via variável de ambiente
-        # Modelos OpenRouter comuns: openai/gpt-4o-mini, openai/gpt-4o, anthropic/claude-3.5-sonnet
-        modelo = os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
-        
-        # Log do valor exato da variável modelo antes da chamada
-        logging.warning(f"[GPT_ENGINE] Modelo configurado: '{modelo}' (tipo: {type(modelo).__name__})")
-        
+    
+    modelos = _obter_modelos_fallback()
+    cliente = _get_client()
+    
+    ultimo_erro = None
+    
+    # Tentar cada modelo em ordem até um funcionar
+    for i, modelo in enumerate(modelos):
         try:
+            logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}'")
+            
             # Nova chamada da API que retorna diretamente o texto
-            # max_output_tokens padrão: 4000 para evitar erro 402 (créditos insuficientes)
             resposta = _chamar_nova_api(modelo, prompt, temperatura, max_output_tokens)
+            
+            if i > 0:
+                logging.warning(f"[GPT_ENGINE] ✅ Modelo '{modelo}' funcionou (fallback)")
+            else:
+                logging.warning(f"[GPT_ENGINE] ✅ Modelo principal '{modelo}' funcionou")
+            
             return resposta
+            
         except Exception as e:
-            # Log completo do erro incluindo a classe e detalhes
+            ultimo_erro = e
             import traceback
             error_traceback = traceback.format_exc()
-            logging.error(f"[GPT_ENGINE] Erro na chamada da API:")
-            logging.error(f"[GPT_ENGINE] Classe do erro: {e.__class__.__name__}")
-            logging.error(f"[GPT_ENGINE] Mensagem completa: {str(e)}")
-            logging.error(f"[GPT_ENGINE] Modelo usado: '{modelo}'")
-            logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
             
-            # Se for erro de API, incluir mais detalhes
-            if hasattr(e, 'response'):
-                try:
-                    error_body = e.response.text if hasattr(e.response, 'text') else str(e.response)
-                    logging.error(f"[GPT_ENGINE] Resposta do erro: {error_body}")
-                except:
-                    pass
+            logging.warning(f"[GPT_ENGINE] ⚠️ Modelo '{modelo}' falhou, tentando próximo...")
+            logging.error(f"[GPT_ENGINE] Erro: {str(e)} (classe: {e.__class__.__name__})")
             
-            raise Exception(f"Erro ao gerar resposta: {str(e)} (classe: {e.__class__.__name__})")
-    except Exception as e:
-        logging.error(f"[GPT_ENGINE] Erro geral em gerar_resposta: {str(e)} (classe: {e.__class__.__name__})")
-        raise Exception(f"Erro ao gerar resposta: {str(e)}")
+            # Se não for o último modelo, continuar tentando
+            if i < len(modelos) - 1:
+                continue
+            else:
+                # Último modelo falhou, log completo e lançar erro
+                logging.error(f"[GPT_ENGINE] ❌ Todos os modelos falharam!")
+                logging.error(f"[GPT_ENGINE] Modelos tentados: {modelos}")
+                logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
+                
+                # Se for erro de API, incluir mais detalhes
+                if hasattr(e, 'response'):
+                    try:
+                        error_body = e.response.text if hasattr(e.response, 'text') else str(e.response)
+                        logging.error(f"[GPT_ENGINE] Resposta do erro: {error_body}")
+                    except:
+                        pass
+                
+                raise Exception(f"Erro ao gerar resposta: Todos os modelos falharam. Último erro: {str(ultimo_erro)} (classe: {ultimo_erro.__class__.__name__})")
+    
+    # Se chegou aqui, algo deu errado
+    raise Exception(f"Erro ao gerar resposta: Nenhum modelo disponível")
 
 
 def gerar_resposta_com_chunking(texto_longo, prompt_template, temperatura=0.4):
