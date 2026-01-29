@@ -1450,21 +1450,21 @@ async def rota_upload_artigos_metanalise(
         if not debitar_creditos(user["id"], custo_total):
             raise HTTPException(status_code=402, detail="Créditos insuficientes")
         
-        # Importar módulos necessários
+        # Importar módulos necessários (compatível com uvicorn api:app a partir de /app/backend)
+        # read_docx já está definido neste módulo (api.py)
         try:
-            from .prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
-            from .pdf_processor import extrair_texto_pdf, read_docx
+            from prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
+            from pdf_processor import extrair_texto_pdf
         except ImportError:
             try:
-                from prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
-                from pdf_processor import extrair_texto_pdf, read_docx
+                from .prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
+                from .pdf_processor import extrair_texto_pdf
             except ImportError:
                 import backend.prisma_analyzer as prisma_analyzer
                 import backend.pdf_processor as pdf_processor
                 analisar_artigo_prisma = prisma_analyzer.analisar_artigo_prisma
                 gerar_resumo_analises = prisma_analyzer.gerar_resumo_analises
                 extrair_texto_pdf = pdf_processor.extrair_texto_pdf
-                read_docx = pdf_processor.read_docx
         
         temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
         os.makedirs(temp_dir, exist_ok=True)
