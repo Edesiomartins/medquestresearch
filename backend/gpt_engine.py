@@ -70,80 +70,62 @@ def _get_client():
 
 def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
     """
-    Chama a API do OpenRouter usando responses.create.
+    Chama a API do OpenRouter (ou OpenAI).
+    OpenRouter usa chat/completions com messages; outros usos podem usar responses.create.
     
     Args:
         modelo: Nome do modelo
         prompt: Texto do prompt
         temperatura: Temperatura para geração (0-2)
-        max_output_tokens: Máximo de tokens de saída (padrão: 4000 para evitar erro 402)
+        max_output_tokens: Máximo de tokens de saída (padrão: 1000)
     """
     cliente = _get_client()
-    
-    # Configurar max_output_tokens se não fornecido (padrão: 1000 para evitar erro 402)
-    # Pode ser configurado via variável de ambiente
+    base_url = os.getenv("OPENAI_API_BASE", "")
+    is_openrouter = base_url and "openrouter.ai" in base_url
+
+    # Configurar max_output_tokens se não fornecido
     if max_output_tokens is None:
         max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
-    
-    # Limitar a 2000 tokens máximo para evitar erros de créditos
     max_output_tokens = min(max_output_tokens, 2000)
-    
-    # Se o prompt for muito longo, reduzir max_output_tokens proporcionalmente
-    # para evitar erro 402
+
     prompt_length = len(prompt) if prompt else 0
-    if prompt_length > 10000:  # Prompt muito longo
+    if prompt_length > 10000:
         max_output_tokens = min(max_output_tokens, 500)
         logging.warning(f"[GPT_ENGINE] Prompt longo ({prompt_length} chars), reduzindo max_output_tokens para {max_output_tokens}")
-    
-    params = {
-        "model": modelo,
-        "input": prompt,
-        "max_output_tokens": max_output_tokens
-    }
-    
-    # Adicionar temperatura se fornecida
-    if temperatura is not None:
-        params["temperature"] = temperatura
-    
+
     try:
-        # Adicionar headers OpenRouter diretamente na chamada se necessário
-        base_url = os.getenv("OPENAI_API_BASE", "")
-        extra_headers = {}
-        if base_url and "openrouter.ai" in base_url:
-            # Headers OpenRouter (podem ser necessários)
-            extra_headers = {
-                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
-                "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
+        if is_openrouter:
+            # OpenRouter: endpoint chat/completions com messages (formato esperado pelo Nemotron e demais modelos)
+            params = {
+                "model": modelo,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_output_tokens,
             }
-        
-        # Fazer a chamada com headers extras se disponíveis
-        if extra_headers:
-            # Tentar passar headers via extra_headers (se suportado)
-            try:
-                response = cliente.responses.create(**params, extra_headers=extra_headers)
-            except TypeError:
-                # Se extra_headers não for suportado, tentar sem
-                logging.warning(f"[GPT_ENGINE] extra_headers não suportado, tentando sem headers extras")
-                response = cliente.responses.create(**params)
+            if temperatura is not None:
+                params["temperature"] = temperatura
+            response = cliente.chat.completions.create(**params)
+            text = response.choices[0].message.content if response.choices else ""
+            return text or ""
         else:
+            # Compatibilidade: API Responses (ex.: OpenAI direto)
+            params = {
+                "model": modelo,
+                "input": prompt,
+                "max_output_tokens": max_output_tokens,
+            }
+            if temperatura is not None:
+                params["temperature"] = temperatura
             response = cliente.responses.create(**params)
-        
-        # Verificar se a resposta tem output_text
-        if hasattr(response, 'output_text'):
-            return response.output_text
-        elif hasattr(response, 'output') and isinstance(response.output, list) and len(response.output) > 0:
-            # Se for formato de array, pegar o primeiro conteúdo
-            first_output = response.output[0]
-            if isinstance(first_output, dict) and 'content' in first_output:
-                return first_output['content']
-            elif isinstance(first_output, str):
-                return first_output
-        elif hasattr(response, 'output') and isinstance(response.output, str):
-            return response.output
-        else:
-            # Fallback: tentar converter para string
-            logging.warning(f"[GPT_ENGINE] Formato de resposta inesperado: {type(response)}")
-            logging.warning(f"[GPT_ENGINE] Atributos disponíveis: {dir(response)}")
+            if hasattr(response, 'output_text'):
+                return response.output_text
+            if hasattr(response, 'output') and isinstance(response.output, list) and len(response.output) > 0:
+                first_output = response.output[0]
+                if isinstance(first_output, dict) and 'content' in first_output:
+                    return first_output['content']
+                if isinstance(first_output, str):
+                    return first_output
+            if hasattr(response, 'output') and isinstance(response.output, str):
+                return response.output
             return str(response)
     except Exception as e:
         # Log detalhado do erro
@@ -151,9 +133,8 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
         error_traceback = traceback.format_exc()
         error_message = str(e)
         
-        logging.error(f"[GPT_ENGINE] ❌ Erro ao chamar API OpenRouter:")
+        logging.error(f"[GPT_ENGINE] ❌ Erro ao chamar API:")
         logging.error(f"[GPT_ENGINE] Modelo: {modelo}")
-        logging.error(f"[GPT_ENGINE] Parâmetros: {params}")
         logging.error(f"[GPT_ENGINE] Erro: {error_message}")
         logging.error(f"[GPT_ENGINE] Tipo do erro: {type(e).__name__}")
         
@@ -189,14 +170,13 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
 def _obter_modelos_fallback():
     """
     Retorna lista de modelos para tentar em ordem (fallback automático).
-    Modelo principal: NVIDIA Nemotron Nano 12B 2 VL (gratuito)
+    Modelo principal: NVIDIA Nemotron Nano 12B 2 VL :free (gratuito no OpenRouter).
     Pode ser configurado via OPENAI_MODEL (modelo principal) e OPENAI_MODEL_FALLBACK (modelos alternativos separados por vírgula).
     """
-    # Modelo principal padrão: NVIDIA Nemotron Nano 12B 2 VL (gratuito)
-    modelo_principal = os.getenv("OPENAI_MODEL", "nvidia/nemotron-nano-12b-v2-vl")
+    # Modelo principal padrão: NVIDIA Nemotron Nano 12B 2 VL - variante gratuita no OpenRouter
+    modelo_principal = os.getenv("OPENAI_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
     
     # Modelos de fallback (separados por vírgula)
-    # Padrão: modelos OpenAI como fallback
     fallback_str = os.getenv("OPENAI_MODEL_FALLBACK", "openai/gpt-4o-mini,openai/gpt-3.5-turbo,anthropic/claude-3-haiku")
     modelos_fallback = [m.strip() for m in fallback_str.split(",") if m.strip()]
     
@@ -228,6 +208,9 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     modelos = _obter_modelos_fallback()
     cliente = _get_client()
     
+    # Log do modelo principal configurado (para confirmar uso do Nemotron)
+    logging.info(f"[GPT_ENGINE] Modelo principal: '{modelos[0]}' | Fallbacks: {modelos[1:]}")
+    
     # Configurar max_output_tokens inicial se não fornecido
     if max_output_tokens is None:
         max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
@@ -235,7 +218,7 @@ def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
     ultimo_erro = None
     max_tokens_atual = max_output_tokens
     
-    # Tentar cada modelo em ordem até um funcionar
+    # Tentar cada modelo em ordem até um funcionar (Nemotron primeiro)
     for i, modelo in enumerate(modelos):
         try:
             logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}' (max_tokens={max_tokens_atual})")
