@@ -1413,7 +1413,153 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
-@api_router.post("/meta_analise")
+@api_router.post("/meta_analysis/upload_articles")
+@limiter.limit("5 per minute")
+async def rota_upload_artigos_metanalise(
+    request: Request, 
+    files: list[UploadFile] = File(...),
+    user = Depends(require_api_key)
+):
+    """
+    Endpoint para upload múltiplo de artigos científicos para metanálise.
+    Aceita até 15 arquivos PDF/DOCX e faz análise PRISMA de cada um.
+    """
+    try:
+        # Validar número de arquivos
+        if len(files) > 15:
+            raise HTTPException(
+                status_code=400, 
+                detail="Máximo de 15 artigos permitidos"
+            )
+        
+        if len(files) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Pelo menos um arquivo deve ser enviado"
+            )
+        
+        # Validar formatos
+        for file in files:
+            if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Formato inválido: {file.filename}. Apenas PDF e DOCX são suportados."
+                )
+        
+        # Cobrar créditos (custo por arquivo)
+        custo_por_arquivo = get_credit_cost("pdf")
+        custo_total = custo_por_arquivo * len(files)
+        custo_analise_prisma = get_credit_cost("meta_analise")  # Custo adicional para análise PRISMA
+        custo_total += custo_analise_prisma * len(files)
+        
+        if not debitar_creditos(user["id"], custo_total):
+            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        
+        # Importar módulos necessários
+        try:
+            from .prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
+            from .pdf_processor import extrair_texto_pdf, read_docx
+        except ImportError:
+            try:
+                from prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
+                from pdf_processor import extrair_texto_pdf, read_docx
+            except ImportError:
+                import backend.prisma_analyzer as prisma_analyzer
+                import backend.pdf_processor as pdf_processor
+                analisar_artigo_prisma = prisma_analyzer.analisar_artigo_prisma
+                gerar_resumo_analises = prisma_analyzer.gerar_resumo_analises
+                extrair_texto_pdf = pdf_processor.extrair_texto_pdf
+                read_docx = pdf_processor.read_docx
+        
+        temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        artigos_processados = []
+        analises_prisma = []
+        
+        # Processar cada arquivo
+        for idx, file in enumerate(files):
+            try:
+                extensao = file.filename.lower().split('.')[-1]
+                temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}_{idx}.{extensao}")
+                
+                # Salvar arquivo temporário
+                with open(temp_path, "wb") as f:
+                    content = await file.read()
+                    f.write(content)
+                
+                try:
+                    # Extrair texto
+                    if extensao == 'pdf':
+                        texto_extraido = extrair_texto_pdf(temp_path)
+                    elif extensao == 'docx':
+                        texto_extraido = read_docx(temp_path)
+                    else:
+                        continue
+                    
+                    if isinstance(texto_extraido, list):
+                        texto_extraido = "\n\n".join(texto_extraido)
+                    
+                    # Extrair título (primeiras linhas ou usar nome do arquivo)
+                    titulo = file.filename.replace('.pdf', '').replace('.docx', '')
+                    if texto_extraido:
+                        linhas = texto_extraido.split('\n')[:5]
+                        titulo_candidato = ' '.join([l.strip() for l in linhas if l.strip()][:2])
+                        if len(titulo_candidato) > 10:
+                            titulo = titulo_candidato[:200]
+                    
+                    # Analisar com PRISMA
+                    analise = analisar_artigo_prisma(texto_extraido[:10000], titulo)
+                    
+                    artigos_processados.append({
+                        "arquivo": file.filename,
+                        "titulo": titulo,
+                        "texto_extraido": texto_extraido[:1000],  # Primeiros 1000 chars para preview
+                        "analise_prisma": analise
+                    })
+                    
+                    analises_prisma.append(analise)
+                    
+                finally:
+                    # Limpar arquivo temporário
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                        
+            except Exception as e:
+                logging.error(f"Erro ao processar arquivo {file.filename}: {str(e)}")
+                artigos_processados.append({
+                    "arquivo": file.filename,
+                    "erro": str(e),
+                    "analise_prisma": None
+                })
+        
+        # Gerar resumo consolidado
+        resumo = gerar_resumo_analises(analises_prisma)
+        
+        # Registrar log
+        registrar_log(
+            user["id"],
+            "meta_analise_upload",
+            f"Upload de {len(files)} artigos",
+            f"Processados {len(artigos_processados)} artigos",
+            custo_total,
+            request
+        )
+        
+        return {
+            "resultado": "Artigos processados e analisados com sucesso",
+            "total_artigos": len(artigos_processados),
+            "artigos": artigos_processados,
+            "resumo_analises": resumo
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logging.error(f"Erro em upload_artigos_metanalise: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
 @api_router.post("/meta_analysis")
 @limiter.limit("10 per minute")
 def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(require_api_key)):

@@ -189,12 +189,15 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
 def _obter_modelos_fallback():
     """
     Retorna lista de modelos para tentar em ordem (fallback automático).
+    Modelo principal: NVIDIA Nemotron Nano 12B 2 VL (gratuito)
     Pode ser configurado via OPENAI_MODEL (modelo principal) e OPENAI_MODEL_FALLBACK (modelos alternativos separados por vírgula).
     """
-    modelo_principal = os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini")
+    # Modelo principal padrão: NVIDIA Nemotron Nano 12B 2 VL (gratuito)
+    modelo_principal = os.getenv("OPENAI_MODEL", "nvidia/nemotron-nano-12b-v2-vl")
     
     # Modelos de fallback (separados por vírgula)
-    fallback_str = os.getenv("OPENAI_MODEL_FALLBACK", "openai/gpt-4o-mini,openai/gpt-3.5-turbo")
+    # Padrão: modelos OpenAI como fallback
+    fallback_str = os.getenv("OPENAI_MODEL_FALLBACK", "openai/gpt-4o-mini,openai/gpt-3.5-turbo,anthropic/claude-3-haiku")
     modelos_fallback = [m.strip() for m in fallback_str.split(",") if m.strip()]
     
     # Lista completa: modelo principal primeiro, depois fallbacks

@@ -12,7 +12,7 @@ except ImportError:
         gerar_resposta = gpt_engine.gerar_resposta
         estimate_tokens = chunker.estimate_tokens
 
-def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> dict:
+def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> dict:
     """
     Gera análise e criação de artigos de Metanálises seguindo protocolo PRISMA.
     
@@ -32,8 +32,15 @@ def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, t
         texto_artigo = ""
     
     # Determinar qual prompt usar baseado na etapa
+    # NOVO FLUXO: Etapa 1 agora é análise PRISMA dos artigos enviados (não busca)
     if etapa == "1" or etapa == "pico":
-        prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
+        # Se tiver artigos analisados em dados_extras, usar análise PRISMA
+        if dados_extras and "artigos_analisados" in dados_extras:
+            prompt = _criar_prompt_etapa1_com_artigos(dados_extras)
+            resultados_busca = None
+        else:
+            # Fallback: busca tradicional (mantido para compatibilidade)
+            prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     elif etapa == "2" or etapa == "extracao":
         prompt = _criar_prompt_etapa2(texto_artigo, dados_extras)
         resultados_busca = None
@@ -44,8 +51,12 @@ def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, t
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
         resultados_busca = None
     else:
-        # Etapa padrão: iniciar com busca e PICO
-        prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
+        # Etapa padrão
+        if dados_extras and "artigos_analisados" in dados_extras:
+            prompt = _criar_prompt_etapa1_com_artigos(dados_extras)
+            resultados_busca = None
+        else:
+            prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     
     # Gerar resposta com temperatura adequada para análise científica
     resposta = gerar_resposta(prompt, temperatura=0.7)
@@ -144,6 +155,83 @@ Organize a resposta em seções claras:
 IMPORTANTE: Responda SEMPRE em português brasileiro.
 """
     return prompt, resultados_busca
+
+def _criar_prompt_etapa1_com_artigos(dados_extras: dict = None) -> str:
+    """Prompt para Etapa 1: Estruturação PICO baseada nos artigos analisados (NOVO FLUXO)."""
+    artigos_analisados = dados_extras.get("artigos_analisados", []) if dados_extras else []
+    resumo_analises = dados_extras.get("resumo_analises", {}) if dados_extras else {}
+    
+    # Preparar resumo dos artigos para o prompt
+    resumo_artigos = ""
+    for idx, artigo in enumerate(artigos_analisados, 1):
+        analise = artigo.get("analise_prisma", {})
+        resumo_artigos += f"""
+Artigo {idx}: {artigo.get("titulo", artigo.get("arquivo", "Sem título"))}
+- Tipo de Estudo: {analise.get("tipo_estudo", "N/A")}
+- Escore de Qualidade: {analise.get("escore_qualidade", 0)}/10
+- Pontuação PRISMA: {analise.get("pontuacao_prisma", 0)}/14
+- Risco de Viés: {analise.get("risco_vies", "N/A")}
+- Recomendação: {analise.get("recomendacao", "N/A")}
+- Pontos Fortes: {', '.join(analise.get("pontos_fortes", []))}
+- Pontos Fracos: {', '.join(analise.get("pontos_fracos", []))}
+"""
+    
+    prompt = f"""
+# PERSONA
+Atue como um Especialista em Metodologia Científica especializado em Revisões Sistemáticas e Metanálises seguindo protocolo PRISMA.
+
+# ETAPA 1: MAPEAMENTO PICO E PROTOCOLO BASEADO NOS ARTIGOS ANALISADOS
+
+# ARTIGOS ENVIADOS E ANALISADOS
+Total de artigos analisados: {len(artigos_analisados)}
+
+## Resumo das Análises PRISMA:
+- Escore Médio de Qualidade: {resumo_analises.get("escore_medio", 0):.2f}/10
+- Pontuação PRISMA Média: {resumo_analises.get("pontuacao_prisma_media", 0):.2f}/14
+- Distribuição por Qualidade:
+  * Excelente (9-10): {resumo_analises.get("artigos_por_qualidade", {}).get("excelente", 0)} artigos
+  * Boa (7-8): {resumo_analises.get("artigos_por_qualidade", {}).get("boa", 0)} artigos
+  * Regular (5-6): {resumo_analises.get("artigos_por_qualidade", {}).get("regular", 0)} artigos
+  * Baixa (<5): {resumo_analises.get("artigos_por_qualidade", {}).get("baixa", 0)} artigos
+
+## Detalhes dos Artigos:
+{resumo_artigos}
+
+# TAREFA
+Com base nos artigos analisados e suas avaliações PRISMA, você deve:
+
+1. **Gerar a pergunta estruturada PICO:**
+   - P (Paciente/População): Quem? (baseado nos artigos analisados)
+   - I (Intervenção): O quê? (baseado nos artigos analisados)
+   - C (Comparação): Comparado com quê?
+   - O (Outcome/Desfecho): Qual o resultado esperado?
+
+2. **Definir critérios de inclusão/exclusão:**
+   - Critérios de inclusão claros baseados nos artigos de alta qualidade
+   - Critérios de exclusão específicos (artigos com escore < 5 devem ser excluídos)
+   - Tipo de estudo predominante identificado
+
+3. **Criar estratégia de seleção baseada nos escores:**
+   - Artigos com escore >= 7: Incluir automaticamente
+   - Artigos com escore 5-6: Incluir com ressalvas (justificar)
+   - Artigos com escore < 5: Excluir (justificar)
+
+4. **Estabelecer protocolo de seleção:**
+   - Processo de triagem baseado nos escores PRISMA
+   - Critérios de elegibilidade baseados na qualidade metodológica
+   - Resolução de conflitos entre revisores
+
+# FORMATO DA RESPOSTA
+Organize a resposta em seções claras:
+- Pergunta PICO (baseada nos artigos analisados)
+- Critérios de Elegibilidade (baseados nos escores PRISMA)
+- Estratégia de Seleção (por escore de qualidade)
+- Protocolo de Seleção
+- Recomendação de Artigos a Incluir/Excluir
+
+IMPORTANTE: Responda SEMPRE em português brasileiro.
+"""
+    return prompt
 
 def _criar_prompt_inicial(texto_artigo: str, dados_extras: dict = None) -> str:
     """Prompt inicial que pergunta sobre o estágio da pesquisa."""
