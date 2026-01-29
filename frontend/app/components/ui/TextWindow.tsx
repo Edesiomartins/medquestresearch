@@ -13,8 +13,10 @@ interface TextWindowProps {
   onDrop: (e: React.DragEvent) => void;
   onFileSelect: (file: File) => void;
   modoMetanalise?: boolean; // Novo: modo para upload múltiplo
-  onFilesSelect?: (files: File[]) => void; // Novo: callback para múltiplos arquivos
+  onFilesSelect?: (files: File[]) => void; // Novo: callback para selecionar arquivos (sem upload)
+  onIniciarAnalise?: () => void; // Novo: callback para iniciar análise PRISMA
   arquivosSelecionados?: File[]; // Novo: lista de arquivos selecionados
+  analisandoArtigos?: boolean; // Novo: indica se está analisando
 }
 
 // Função para consolidar texto removendo separadores de chunks
@@ -54,7 +56,9 @@ export default function TextWindow({
   onFileSelect,
   modoMetanalise = false,
   onFilesSelect,
+  onIniciarAnalise,
   arquivosSelecionados = [],
+  analisandoArtigos = false,
 }: TextWindowProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -70,7 +74,9 @@ export default function TextWindow({
   }, [texto, mounted]);
   return (
     <div className="card-elevated flex flex-col h-full">
-      <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Texto Extraído</h2>
+      <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">
+        {modoMetanalise ? 'Upload de Artigos - Metanálise PRISMA' : 'Texto Extraído'}
+      </h2>
       
       {!texto ? (
         <div className="flex-1 flex flex-col items-center justify-center">
@@ -93,19 +99,22 @@ export default function TextWindow({
               onChange={(e) => {
                 const files = e.target.files;
                 if (modoMetanalise && files && files.length > 0) {
-                  // Modo metanálise: múltiplos arquivos
+                  // Modo metanálise: apenas selecionar arquivos (não fazer upload ainda)
                   const fileArray = Array.from(files);
                   if (fileArray.length > 15) {
                     alert('Máximo de 15 artigos permitidos');
+                    e.target.value = ''; // Limpar seleção
                     return;
                   }
                   if (onFilesSelect) {
                     onFilesSelect(fileArray);
                   }
                 } else if (files && files[0]) {
-                  // Modo normal: arquivo único
+                  // Modo normal: arquivo único (upload automático)
                   onFileSelect(files[0]);
                 }
+                // Limpar input para permitir selecionar os mesmos arquivos novamente
+                e.target.value = '';
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
@@ -127,15 +136,48 @@ export default function TextWindow({
                 }
               </p>
               {modoMetanalise && arquivosSelecionados.length > 0 && (
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-                  <p className="text-sm font-semibold text-blue-900 mb-2">
-                    {arquivosSelecionados.length} artigo{arquivosSelecionados.length > 1 ? 's' : ''} selecionado{arquivosSelecionados.length > 1 ? 's' : ''}:
-                  </p>
-                  <div className="text-xs text-blue-700 space-y-1 max-h-32 overflow-y-auto">
-                    {arquivosSelecionados.map((file, idx) => (
-                      <div key={idx} className="truncate">• {file.name}</div>
-                    ))}
+                <div className="mt-4 w-full max-w-md mx-auto space-y-3">
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-semibold text-blue-900 mb-2">
+                      {arquivosSelecionados.length} artigo{arquivosSelecionados.length > 1 ? 's' : ''} selecionado{arquivosSelecionados.length > 1 ? 's' : ''}:
+                    </p>
+                    <div className="text-xs text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                      {arquivosSelecionados.map((file, idx) => (
+                        <div key={idx} className="truncate">• {file.name}</div>
+                      ))}
+                    </div>
                   </div>
+                  
+                  {/* Botão para iniciar análise */}
+                  <button
+                    onClick={() => {
+                      if (onIniciarAnalise) {
+                        onIniciarAnalise();
+                      }
+                    }}
+                    disabled={analisandoArtigos || arquivosSelecionados.length === 0}
+                    className={`
+                      w-full px-6 py-3 rounded-lg font-semibold text-white
+                      transition-all duration-200
+                      ${analisandoArtigos || arquivosSelecionados.length === 0
+                        ? 'bg-slate-400 cursor-not-allowed'
+                        : 'bg-[#2563eb] hover:bg-[#1d4ed8] shadow-md hover:shadow-lg'
+                      }
+                      flex items-center justify-center gap-2
+                    `}
+                  >
+                    {analisandoArtigos ? (
+                      <>
+                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span>Analisando artigos...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔬</span>
+                        <span>Iniciar Análise PRISMA</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

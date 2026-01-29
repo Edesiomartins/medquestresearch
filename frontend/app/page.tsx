@@ -121,7 +121,96 @@ export default function Home() {
     }
   }, [token, cardAtivo]);
 
-  // Callback para upload múltiplo (metanálise)
+  // Callback para apenas selecionar arquivos (sem upload) - metanálise
+  const handleSelecionarArquivos = useCallback((files: File[]) => {
+    // Apenas salvar arquivos selecionados, sem fazer upload
+    setArquivosMetanalise(files);
+    setUploadError(null);
+  }, []);
+
+  // Callback para iniciar análise PRISMA (upload e análise) - metanálise
+  const handleIniciarAnalisePrisma = useCallback(async () => {
+    const files = arquivosMetanalise;
+    
+    if (!token) {
+      setUploadError("Usuário não autenticado.");
+      return;
+    }
+    if (files.length === 0) {
+      setUploadError("Nenhum arquivo selecionado.");
+      return;
+    }
+    if (files.length > 15) {
+      setUploadError("Máximo de 15 artigos permitidos.");
+      return;
+    }
+
+    // Validar formatos
+    const formatosInvalidos = files.filter(f => 
+      !['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(f.type)
+    );
+    if (formatosInvalidos.length > 0) {
+      setUploadError("Formato de arquivo inválido. Apenas PDF e DOCX são permitidos.");
+      return;
+    }
+
+    setLoadingResultado(true);
+    setTituloResultado('Analisando artigos com PRISMA...');
+    setResultadoAtual(null);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      setUploadProgress(10);
+      const res = await uploadArtigosMetanalise(token, files);
+
+      if (res.erro) {
+        setUploadError(res.erro);
+        setTituloResultado('Erro ao processar artigos');
+        setUploadProgress(0);
+      } else {
+        // Salvar análises PRISMA
+        if (res.artigos && Array.isArray(res.artigos)) {
+          setAnalisesPrisma(res.artigos);
+          setArtigosEncontrados(res.artigos);
+          setTotalArtigos(res.total_artigos || res.artigos.length);
+        }
+        
+        // Exibir resumo das análises
+        const resumo = res.resumo_analises || {};
+        const textoResumo = `
+📊 ANÁLISE PRISMA CONCLUÍDA
+
+Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
+
+📈 Estatísticas:
+- Escore médio de qualidade: ${resumo.escore_medio?.toFixed(2) || 'N/A'}/10
+- Pontuação PRISMA média: ${resumo.pontuacao_prisma_media?.toFixed(2) || 'N/A'}/14
+
+📋 Distribuição por qualidade:
+- Excelente (9-10): ${resumo.artigos_por_qualidade?.excelente || 0} artigos
+- Boa (7-8): ${resumo.artigos_por_qualidade?.boa || 0} artigos
+- Regular (5-6): ${resumo.artigos_por_qualidade?.regular || 0} artigos
+- Baixa (<5): ${resumo.artigos_por_qualidade?.baixa || 0} artigos
+
+✅ Os artigos foram analisados e estão prontos para a próxima etapa.
+        `.trim();
+        
+        setResultadoAtual(textoResumo);
+        setTituloResultado('Análise PRISMA - Artigos Processados');
+        setUploadProgress(100);
+      }
+    } catch (err: any) {
+      console.error("Erro no upload múltiplo:", err);
+      setUploadError(`Falha ao processar artigos: ${err.message || 'Erro desconhecido'}`);
+      setTituloResultado('Erro');
+      setUploadProgress(0);
+    } finally {
+      setLoadingResultado(false);
+    }
+  }, [token, arquivosMetanalise]);
+
+  // Callback para upload múltiplo (metanálise) - DEPRECATED, usar handleIniciarAnalisePrisma
   const handleUploadMultiplo = useCallback(async (files: File[]) => {
     if (!token) {
       setUploadError("Usuário não autenticado.");
@@ -145,6 +234,8 @@ export default function Home() {
       return;
     }
 
+    // Esta função não deve ser chamada diretamente - usar handleIniciarAnalisePrisma
+    // Mantida apenas para compatibilidade
     setArquivosMetanalise(files);
     setLoadingResultado(true);
     setTituloResultado('Analisando artigos com PRISMA...');
@@ -218,24 +309,24 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     e.preventDefault();
     setIsDragging(false);
     
-    // Se estiver em modo metanálise, aceitar múltiplos arquivos
-    if (cardAtivo === 'meta-analise') {
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        if (files.length > 15) {
-          setUploadError('Máximo de 15 artigos permitidos');
-          return;
+      // Se estiver em modo metanálise, aceitar múltiplos arquivos (apenas selecionar)
+      if (cardAtivo === 'meta-analise') {
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) {
+          if (files.length > 15) {
+            setUploadError('Máximo de 15 artigos permitidos');
+            return;
+          }
+          handleSelecionarArquivos(files);
         }
-        handleUploadMultiplo(files);
+      } else {
+        // Modo normal: arquivo único (upload automático)
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          handleUpload(file);
+        }
       }
-    } else {
-      // Modo normal: arquivo único
-      const file = e.dataTransfer.files[0];
-      if (file) {
-        handleUpload(file);
-      }
-    }
-  }, [handleUpload, handleUploadMultiplo, cardAtivo]);
+    }, [handleUpload, handleSelecionarArquivos, cardAtivo]);
 
   // Função para obter texto contextual por tipo de análise
   const textoProcessando = useCallback((tipo: string): string => {
@@ -577,6 +668,86 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     }
   }, [textoArtigo, token, cardAtivo]);
 
+  // Continuar para Etapas 2, 3 e 4 da metanálise (após análise PRISMA dos artigos)
+  const handleContinuarEtapasMetanalise = useCallback(async (tema?: string) => {
+    if (!token || !analisesPrisma?.length) {
+      setResultadoAtual('Nenhum artigo analisado. Faça o upload e inicie a análise PRISMA primeiro.');
+      setTituloResultado('Aviso');
+      return;
+    }
+    setLoadingResultado(true);
+    setEtapasMetanalise([]);
+    if (tema?.trim()) setTemaMetanaliseAtual(tema.trim());
+
+    const nomesEtapa: Record<string, string> = {
+      '2': 'Etapa 2: Extração de Dados',
+      '3': 'Etapa 3: Redação Técnica (PRISMA)',
+      '4': 'Etapa 4: Verificação Final',
+    };
+    const estilo = 'Vancouver';
+    let resultadoAcumulado = '';
+
+    for (let etapa = 2; etapa <= 4; etapa++) {
+      const etapaStr = etapa.toString();
+      const tituloEtapa = nomesEtapa[etapaStr] || `Etapa ${etapa}`;
+
+      setEtapasMetanalise(prev => [...prev, {
+        etapa,
+        titulo: tituloEtapa,
+        resultado: `⏳ Processando ${tituloEtapa}...`,
+        loading: true,
+      }]);
+
+      try {
+        const res = await metaAnalysis(token, {
+          tema: tema?.trim() || '',
+          etapa: etapaStr,
+          texto_artigo: '',
+          estilo,
+          artigos_analisados: analisesPrisma,
+        });
+
+        const resultadoEtapa = res.erro
+          ? `❌ Erro: ${res.erro}`
+          : (res.resultado || 'Etapa concluída');
+
+        setEtapasMetanalise(prev => {
+          const novasEtapas = [...prev];
+          const index = novasEtapas.findIndex(e => e.etapa === etapa);
+          if (index !== -1) {
+            novasEtapas[index] = {
+              ...novasEtapas[index],
+              resultado: resultadoEtapa,
+              loading: false,
+            };
+          }
+          return novasEtapas;
+        });
+
+        resultadoAcumulado += `\n\n${'='.repeat(60)}\n${tituloEtapa}\n${'='.repeat(60)}\n\n${resultadoEtapa}`;
+        setResultadoAtual(resultadoAcumulado.trim());
+        setTituloResultado('Metanálise PRISMA - Em Progresso');
+
+        if (etapa < 4) await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error: any) {
+        const erroMsg = `❌ Erro na ${tituloEtapa}: ${error.message || 'Erro desconhecido'}`;
+        setEtapasMetanalise(prev => {
+          const novasEtapas = [...prev];
+          const index = novasEtapas.findIndex(e => e.etapa === etapa);
+          if (index !== -1) {
+            novasEtapas[index] = { ...novasEtapas[index], resultado: erroMsg, loading: false };
+          }
+          return novasEtapas;
+        });
+        resultadoAcumulado += `\n\n${'='.repeat(60)}\n${tituloEtapa}\n${'='.repeat(60)}\n\n${erroMsg}`;
+        setResultadoAtual(resultadoAcumulado.trim());
+      }
+    }
+
+    setTituloResultado('Metanálise PRISMA - Concluída');
+    setLoadingResultado(false);
+    setCardAtivo(null);
+  }, [token, analisesPrisma]);
 
   // Estado de carregamento inicial da autenticação
   if (!mounted || loading || !token) {
@@ -611,8 +782,10 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
             onDrop={handleDrop}
             onFileSelect={handleUpload}
             modoMetanalise={cardAtivo === 'meta-analise'}
-            onFilesSelect={handleUploadMultiplo}
+            onFilesSelect={handleSelecionarArquivos}
+            onIniciarAnalise={handleIniciarAnalisePrisma}
             arquivosSelecionados={arquivosMetanalise}
+            analisandoArtigos={loadingResultado && uploadProgress > 0}
           />
         </div>
 
@@ -630,6 +803,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
             token={token || undefined}
             modoConfiguracao={modoConfiguracao}
             etapasMetanalise={etapasMetanalise}
+            mostrarBotaoContinuarEtapas={cardAtivo === 'meta-analise' && artigosEncontrados.length > 0 && etapasMetanalise.length === 0}
+            onContinuarEtapasMetanalise={handleContinuarEtapasMetanalise}
             onUpdateResult={(newResult) => {
               if (newResult === null) {
                 // Cancelar configuração - restaurar texto do PDF se existir

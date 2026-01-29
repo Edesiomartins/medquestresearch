@@ -19,6 +19,8 @@ interface ResultPanelProps {
   artigosEncontrados?: Artigo[];
   totalArtigos?: number;
   temaMetanalise?: string;
+  mostrarBotaoContinuarEtapas?: boolean;
+  onContinuarEtapasMetanalise?: (tema?: string) => void;
 }
 
 export default function ResultPanel({ 
@@ -35,12 +37,15 @@ export default function ResultPanel({
   artigosEncontrados = [],
   totalArtigos = 0,
   temaMetanalise = '',
+  mostrarBotaoContinuarEtapas = false,
+  onContinuarEtapasMetanalise,
 }: ResultPanelProps) {
   const [showChat, setShowChat] = useState(false);
   const [trecho, setTrecho] = useState('');
   const [nivel, setNivel] = useState('graduação');
   const [focoAnalise, setFocoAnalise] = useState('geral');
   const [temaInput, setTemaInput] = useState(''); // Estado local para o input do formulário
+  const [temaContinuar, setTemaContinuar] = useState(''); // Tema opcional para "Continuar Etapas"
 
   // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
@@ -319,6 +324,36 @@ export default function ResultPanel({
             </button>
           )}
         </div>
+        {/* Botão para continuar às Etapas 2, 3 e 4 após análise PRISMA */}
+        {mostrarBotaoContinuarEtapas && onContinuarEtapasMetanalise && (
+          <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <p className="text-sm text-slate-700 mb-3">
+              Os artigos foram analisados com PRISMA. Para gerar a extração de dados, redação técnica e verificação final, clique abaixo.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[200px]">
+                <label htmlFor="tema-continuar" className="block text-xs font-medium text-slate-600 mb-1">
+                  Tema da revisão (opcional)
+                </label>
+                <input
+                  id="tema-continuar"
+                  type="text"
+                  value={temaContinuar}
+                  onChange={(e) => setTemaContinuar(e.target.value)}
+                  placeholder="Ex: eficácia de intervenção X em população Y"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => onContinuarEtapasMetanalise(temaContinuar.trim() || undefined)}
+                className="px-4 py-2 bg-[#0c3d66] text-white rounded-lg hover:bg-[#0a3255] transition-colors font-medium text-sm"
+              >
+                Continuar para Etapa 2, 3 e 4
+              </button>
+            </div>
+          </div>
+        )}
         {mostrarEtapas && (
           <div className="mb-4 space-y-2">
             {etapasMetanalise.map((etapa) => (
