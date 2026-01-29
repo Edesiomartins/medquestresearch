@@ -32,80 +32,30 @@ async function apiCall<T = any>(
   method: 'GET' | 'POST' = 'POST',
   body?: any,
   token?: string,
-  timeout?: number // Timeout opcional em milissegundos
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await authenticatedFetch(
-      endpoint,
-      {
-        method,
-        body: body ? JSON.stringify(body) : undefined,
-      },
-      token,
-      timeout // Passar timeout para authenticatedFetch
-    );
+  timeout: number = 300000
+): Promise<T> {
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
-      return { erro: errorData.erro || `Erro ${response.status}` };
-    }
-
-    return await response.json();
-  } catch (error: any) {
-    // Tratar diferentes tipos de erro
-    const errorMessage = error?.message || error?.toString() || 'Erro desconhecido';
-    
-    // Timeout não é erro em análise científica - removido
-    
-    if (errorMessage.includes('ECONNRESET') || 
-        errorMessage.includes('socket hang up') || 
-        errorMessage.includes('network') ||
-        errorMessage.includes('fetch failed') ||
-        error?.name === 'TypeError') {
-      return { erro: 'Conexão interrompida. O servidor pode estar processando. Aguarde alguns segundos e tente novamente.' };
-    }
-    
-    return { erro: `Erro de conexão: ${errorMessage}` };
+  if (body) {
+    options.body = JSON.stringify(body);
   }
+
+  const response = await authenticatedFetch(endpoint, options, token, timeout);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
+    throw new Error(errorData.erro || `Erro ${response.status}`);
+  }
+
+  return await response.json();
 }
 
-// ============================================
-// Funções de Autenticação
-// ============================================
-
-export async function login(email: string, senha: string): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.LOGIN, 'POST', { email, senha });
-}
-
-export async function cadastro(nome: string, email: string, senha: string): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.CADASTRO, 'POST', { nome, email, senha });
-}
-
-export async function getCreditos(token: string): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.CREDITOS, 'GET', undefined, token);
-}
-
-// ============================================
-// Funções de Administração
-// ============================================
-
-export interface AdicionarCreditosParams {
-  usuario_id?: number;
-  email?: string;
-  quantidade: number;
-}
-
-export async function adicionarCreditos(
-  token: string,
-  params: AdicionarCreditosParams
-): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.ADICIONAR_CREDITOS, 'POST', params, token);
-}
-
-// ============================================
-// Função de Polling para Jobs Assíncronos
-// ============================================
-
+// Função para polling de status de jobs assíncronos
 export async function pollJobStatus(
   token: string,
   jobId: number,
@@ -141,23 +91,17 @@ export async function pollJobStatus(
       }
 
       // Se ainda está processando, aguardar antes da próxima tentativa
-      if (response.status === 'processing') {
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    } catch (error: any) {
+      // Se for timeout, continuar tentando (não retornar erro)
+      if (error.message && error.message.includes('Timeout')) {
         await new Promise(resolve => setTimeout(resolve, intervalMs));
         continue;
       }
-
-      // Status desconhecido - continuar tentando
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
-    } catch (error: any) {
-      // Em caso de erro de rede, continuar tentando
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      return { erro: error.message || 'Erro ao verificar status do job' };
     }
   }
 }
-
-// ============================================
-// Função Helper para APIs Assíncronas
-// ============================================
 
 async function callAsyncApi(
   endpoint: string,
@@ -319,6 +263,10 @@ export async function perspectiveResearch(
   return apiCall(API_ENDPOINTS.PERSPECTIVE_RESEARCH, 'POST', { texto_artigo }, token);
 }
 
+// ============================================
+// Funções de Estrutura
+// ============================================
+
 export async function structureMapper(
   token: string,
   texto_artigo: string
@@ -374,6 +322,54 @@ export async function metaAnalysis(
 }
 
 // ============================================
+// Função Upload Múltiplo de Artigos (Metanálise)
+// ============================================
+
+export async function uploadArtigosMetanalise(
+  token: string,
+  files: File[]
+): Promise<ApiResponse> {
+  if (files.length === 0) {
+    return { erro: 'Nenhum arquivo selecionado' };
+  }
+  
+  if (files.length > 15) {
+    return { erro: 'Máximo de 15 artigos permitidos' };
+  }
+
+  const formData = new FormData();
+  // FastAPI espera múltiplos arquivos com o mesmo nome 'files'
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  try {
+    const response = await fetch(
+      getApiUrl('/genapi/meta_analysis/upload_articles'),
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
+      return { erro: errorData.erro || `Erro ${response.status}` };
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    return { erro: `Erro: ${error.message || 'Erro desconhecido'}` };
+  }
+}
+
+// ============================================
 // Função Chat Follow-up (Interação com respostas)
 // ============================================
 
@@ -388,6 +384,15 @@ export async function chatFollowUp(
   token: string,
   params: ChatFollowUpParams
 ): Promise<ApiResponse> {
-  return apiCall('/genapi/chat-followup', 'POST', params, token, 300000);
+  return apiCall(
+    API_ENDPOINTS.CHAT_FOLLOWUP,
+    'POST',
+    {
+      tipo_analise: params.tipo_analise,
+      texto_artigo: params.texto_artigo,
+      mensagem: params.mensagem,
+      historico: params.historico || [],
+    },
+    token
+  );
 }
-

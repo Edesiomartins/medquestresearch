@@ -13,6 +13,7 @@ import {
   analisarCritica,
   uploadPdf,
   metaAnalysis,
+  uploadArtigosMetanalise,
 } from '@/app/lib/api';
 import ResultPanel from '@/app/components/ui/ResultPanel';
 import TextWindow from '@/app/components/ui/TextWindow';
@@ -34,6 +35,8 @@ export default function Home() {
   const [artigosEncontrados, setArtigosEncontrados] = useState<any[]>([]); // Artigos encontrados na busca
   const [totalArtigos, setTotalArtigos] = useState(0); // Total de artigos encontrados
   const [temaMetanaliseAtual, setTemaMetanaliseAtual] = useState(''); // Tema atual da metanálise
+  const [arquivosMetanalise, setArquivosMetanalise] = useState<File[]>([]); // Arquivos selecionados para metanálise
+  const [analisesPrisma, setAnalisesPrisma] = useState<any[]>([]); // Análises PRISMA dos artigos
 
   // 2. useRouter
   const router = useRouter();
@@ -69,6 +72,11 @@ export default function Home() {
 
   // Callback 1: Lógica principal de upload
   const handleUpload = useCallback(async (file: File) => {
+    // Se estiver em modo metanálise, não fazer upload único
+    if (cardAtivo === 'meta-analise') {
+      return;
+    }
+
     if (!token) {
       setUploadError("Usuário não autenticado.");
       return;
@@ -111,6 +119,87 @@ export default function Home() {
     } finally {
       setLoadingResultado(false);
     }
+  }, [token, cardAtivo]);
+
+  // Callback para upload múltiplo (metanálise)
+  const handleUploadMultiplo = useCallback(async (files: File[]) => {
+    if (!token) {
+      setUploadError("Usuário não autenticado.");
+      return;
+    }
+    if (files.length === 0) {
+      setUploadError("Nenhum arquivo selecionado.");
+      return;
+    }
+    if (files.length > 15) {
+      setUploadError("Máximo de 15 artigos permitidos.");
+      return;
+    }
+
+    // Validar formatos
+    const formatosInvalidos = files.filter(f => 
+      !['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(f.type)
+    );
+    if (formatosInvalidos.length > 0) {
+      setUploadError("Formato de arquivo inválido. Apenas PDF e DOCX são permitidos.");
+      return;
+    }
+
+    setArquivosMetanalise(files);
+    setLoadingResultado(true);
+    setTituloResultado('Analisando artigos com PRISMA...');
+    setResultadoAtual(null);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      setUploadProgress(10);
+      const res = await uploadArtigosMetanalise(token, files);
+
+      if (res.erro) {
+        setUploadError(res.erro);
+        setTituloResultado('Erro ao processar artigos');
+        setUploadProgress(0);
+      } else {
+        // Salvar análises PRISMA
+        if (res.artigos && Array.isArray(res.artigos)) {
+          setAnalisesPrisma(res.artigos);
+          setArtigosEncontrados(res.artigos);
+          setTotalArtigos(res.total_artigos || res.artigos.length);
+        }
+        
+        // Exibir resumo das análises
+        const resumo = res.resumo_analises || {};
+        const textoResumo = `
+📊 ANÁLISE PRISMA CONCLUÍDA
+
+Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
+
+📈 Estatísticas:
+- Escore médio de qualidade: ${resumo.escore_medio?.toFixed(2) || 'N/A'}/10
+- Pontuação PRISMA média: ${resumo.pontuacao_prisma_media?.toFixed(2) || 'N/A'}/14
+
+📋 Distribuição por qualidade:
+- Excelente (9-10): ${resumo.artigos_por_qualidade?.excelente || 0} artigos
+- Boa (7-8): ${resumo.artigos_por_qualidade?.boa || 0} artigos
+- Regular (5-6): ${resumo.artigos_por_qualidade?.regular || 0} artigos
+- Baixa (<5): ${resumo.artigos_por_qualidade?.baixa || 0} artigos
+
+✅ Os artigos foram analisados e estão prontos para a próxima etapa.
+        `.trim();
+        
+        setResultadoAtual(textoResumo);
+        setTituloResultado('Análise PRISMA - Artigos Processados');
+        setUploadProgress(100);
+      }
+    } catch (err: any) {
+      console.error("Erro no upload múltiplo:", err);
+      setUploadError(`Falha ao processar artigos: ${err.message || 'Erro desconhecido'}`);
+      setTituloResultado('Erro');
+      setUploadProgress(0);
+    } finally {
+      setLoadingResultado(false);
+    }
   }, [token]);
 
   // Callback 2: Evento de arrastar sobre
@@ -128,11 +217,25 @@ export default function Home() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleUpload(file);
+    
+    // Se estiver em modo metanálise, aceitar múltiplos arquivos
+    if (cardAtivo === 'meta-analise') {
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        if (files.length > 15) {
+          setUploadError('Máximo de 15 artigos permitidos');
+          return;
+        }
+        handleUploadMultiplo(files);
+      }
+    } else {
+      // Modo normal: arquivo único
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleUpload(file);
+      }
     }
-  }, [handleUpload]);
+  }, [handleUpload, handleUploadMultiplo, cardAtivo]);
 
   // Função para obter texto contextual por tipo de análise
   const textoProcessando = useCallback((tipo: string): string => {
@@ -202,11 +305,14 @@ export default function Home() {
     }
 
     if (tipo === 'meta-analise') {
-      // Mostrar formulário de configuração no ResultPanel para pedir o tema
-      setModoConfiguracao(true);
-      setTituloResultado('Metanálise PRISMA');
+      // Novo fluxo: mostrar área de upload múltiplo no TextWindow
+      setModoConfiguracao(false);
+      setTituloResultado('Metanálise PRISMA - Upload de Artigos');
       setEtapasMetanalise([]); // Limpar etapas anteriores
-      // NÃO limpar resultadoAtual - manter texto do PDF visível
+      setTextoArtigo(null); // Limpar texto anterior para mostrar área de upload
+      setArquivosMetanalise([]); // Limpar arquivos anteriores
+      setAnalisesPrisma([]); // Limpar análises anteriores
+      setResultadoAtual(null);
       setLoadingResultado(false);
       return;
     }
@@ -493,7 +599,7 @@ export default function Home() {
 
       {/* Estrutura principal da dashboard - Duas janelas */}
       <div className="ml-64 flex-1 flex h-screen"> {/* ml-64 para compensar a largura da sidebar */}
-        {/* JANELA ESQUERDA - Texto Extraído */}
+        {/* JANELA ESQUERDA - Texto Extraído / Upload de Artigos */}
         <div className="w-1/2 p-6 border-r border-mq-slate-200 overflow-hidden flex flex-col">
           <TextWindow
             texto={textoArtigo}
@@ -504,6 +610,9 @@ export default function Home() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onFileSelect={handleUpload}
+            modoMetanalise={cardAtivo === 'meta-analise'}
+            onFilesSelect={handleUploadMultiplo}
+            arquivosSelecionados={arquivosMetanalise}
           />
         </div>
 

@@ -12,6 +12,9 @@ interface TextWindowProps {
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onFileSelect: (file: File) => void;
+  modoMetanalise?: boolean; // Novo: modo para upload múltiplo
+  onFilesSelect?: (files: File[]) => void; // Novo: callback para múltiplos arquivos
+  arquivosSelecionados?: File[]; // Novo: lista de arquivos selecionados
 }
 
 // Função para consolidar texto removendo separadores de chunks
@@ -49,6 +52,9 @@ export default function TextWindow({
   onDragLeave,
   onDrop,
   onFileSelect,
+  modoMetanalise = false,
+  onFilesSelect,
+  arquivosSelecionados = [],
 }: TextWindowProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -83,23 +89,55 @@ export default function TextWindow({
               id="file-upload"
               type="file"
               accept=".pdf,.docx"
+              multiple={modoMetanalise}
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onFileSelect(file);
+                const files = e.target.files;
+                if (modoMetanalise && files && files.length > 0) {
+                  // Modo metanálise: múltiplos arquivos
+                  const fileArray = Array.from(files);
+                  if (fileArray.length > 15) {
+                    alert('Máximo de 15 artigos permitidos');
+                    return;
+                  }
+                  if (onFilesSelect) {
+                    onFilesSelect(fileArray);
+                  }
+                } else if (files && files[0]) {
+                  // Modo normal: arquivo único
+                  onFileSelect(files[0]);
+                }
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
             <div className="text-center">
-              <div className="text-6xl mb-4">📄</div>
+              <div className="text-6xl mb-4">{modoMetanalise ? '📚' : '📄'}</div>
               <p className="text-lg font-semibold text-mq-slate-700 mb-2">
-                Arraste e solte seu arquivo aqui
+                {modoMetanalise 
+                  ? 'Arraste e solte seus artigos aqui (máx. 15)'
+                  : 'Arraste e solte seu arquivo aqui'
+                }
               </p>
               <p className="text-sm text-mq-slate-500">
                 ou <span className="text-mq-blue-600 font-medium cursor-pointer hover:underline">clique para selecionar</span>
               </p>
               <p className="text-xs text-mq-slate-400 mt-2">
-                (PDF, DOCX - máximo 10MB)
+                {modoMetanalise 
+                  ? '(PDF, DOCX - máximo 15 artigos)'
+                  : '(PDF, DOCX - máximo 10MB)'
+                }
               </p>
+              {modoMetanalise && arquivosSelecionados.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+                  <p className="text-sm font-semibold text-blue-900 mb-2">
+                    {arquivosSelecionados.length} artigo{arquivosSelecionados.length > 1 ? 's' : ''} selecionado{arquivosSelecionados.length > 1 ? 's' : ''}:
+                  </p>
+                  <div className="text-xs text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                    {arquivosSelecionados.map((file, idx) => (
+                      <div key={idx} className="truncate">• {file.name}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Progresso de Upload */}

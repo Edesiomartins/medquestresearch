@@ -1412,7 +1412,7 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
 @limiter.limit("5 per minute")
 async def rota_upload_artigos_metanalise(
     request: Request, 
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(..., description="Lista de arquivos PDF/DOCX (máx. 15)"),
     user = Depends(require_api_key)
 ):
     """
