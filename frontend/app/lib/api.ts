@@ -338,12 +338,13 @@ export async function structureVisualizer(
 // ============================================
 
 export interface MetaAnaliseParams {
-  tema: string; // Tema é obrigatório agora
+  tema?: string; // Tema agora é opcional (novo fluxo usa upload de artigos)
   etapa?: string; // 1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação
   texto_artigo?: string; // Opcional - usado apenas nas etapas 2-4
   json_extracao?: string | object;
   estilo?: string; // 'Vancouver' ou 'ABNT'
   manuscrito?: string;
+  artigos_analisados?: any; // Artigos analisados (novo fluxo)
 }
 
 export async function metaAnalysis(
@@ -351,8 +352,8 @@ export async function metaAnalysis(
   params: MetaAnaliseParams
 ): Promise<ApiResponse> {
   // Converter json_extracao para string se for objeto
-  const body = {
-    tema: params.tema, // Tema é obrigatório
+  const body: any = {
+    tema: params.tema || '', // Tema agora é opcional
     etapa: params.etapa || '1',
     texto_artigo: params.texto_artigo || null, // Opcional
     json_extracao: typeof params.json_extracao === 'object' 
@@ -361,6 +362,13 @@ export async function metaAnalysis(
     estilo: params.estilo || 'Vancouver',
     manuscrito: params.manuscrito,
   };
+  
+  // Adicionar artigos analisados se fornecido (novo fluxo)
+  if (params.artigos_analisados) {
+    body.artigos_analisados = typeof params.artigos_analisados === 'object'
+      ? JSON.stringify(params.artigos_analisados)
+      : params.artigos_analisados;
+  }
 
   return callAsyncApi(API_ENDPOINTS.META_ANALYSIS, token, body, 300000);
 }

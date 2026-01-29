@@ -785,18 +785,13 @@ class InputMapa(BaseModel):
         return v
 
 class InputMetaAnalise(BaseModel):
-    tema: str  # Tema é obrigatório agora
+    tema: Optional[str] = ""  # Tema agora é opcional (novo fluxo usa upload de artigos)
     etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação
     texto_artigo: Optional[str] = None  # Opcional - usado apenas nas etapas 2-4
     json_extracao: Optional[str] = None
     estilo: Optional[str] = "Vancouver"  # Vancouver ou ABNT
     manuscrito: Optional[str] = None
-
-    @validator('tema')
-    def validate_tema(cls, v):
-        if not v or not v.strip():
-            raise ValueError("tema não pode estar vazio")
-        return v
+    artigos_analisados: Optional[str] = None  # JSON string com artigos analisados (novo fluxo)
 
 # ============================================
 # ✅ HANDLER DE ERROS GLOBAL
@@ -1561,6 +1556,7 @@ async def rota_upload_artigos_metanalise(
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 @api_router.post("/meta_analysis")
+@api_router.post("/meta_analise")  # Alias para compatibilidade
 @limiter.limit("10 per minute")
 def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(require_api_key)):
     try:
@@ -1579,19 +1575,29 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
             dados_extras["estilo"] = data.estilo
         if data.manuscrito:
             dados_extras["manuscrito"] = data.manuscrito
+        
+        # Novo fluxo: incluir artigos analisados se fornecido
+        if data.artigos_analisados:
+            try:
+                artigos = json.loads(data.artigos_analisados) if isinstance(data.artigos_analisados, str) else data.artigos_analisados
+                dados_extras["artigos_analisados"] = artigos
+            except:
+                dados_extras["artigos_analisados"] = data.artigos_analisados
 
-        # Criar job assíncrono (tema é o campo principal agora)
+        # Criar job assíncrono
         dados_extras_json = json.dumps(dados_extras) if dados_extras else None
-        entrada_texto = data.texto_artigo if data.texto_artigo else data.tema
+        entrada_texto = data.texto_artigo if data.texto_artigo else (data.tema if data.tema else "Metanálise")
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
             (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json)
         )
 
-        # Iniciar processamento em background (tema primeiro, depois texto_artigo)
+        # Iniciar processamento em background
+        # Tema pode ser vazio no novo fluxo (usa artigos analisados)
+        tema_processamento = data.tema if data.tema else ""
         threading.Thread(
             target=processar_job_meta_analise,
-            args=(job_id, data.tema, data.etapa, data.texto_artigo, dados_extras),
+            args=(job_id, tema_processamento, data.etapa, data.texto_artigo, dados_extras),
             daemon=True
         ).start()
 
