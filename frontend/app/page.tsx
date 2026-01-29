@@ -31,6 +31,9 @@ export default function Home() {
   const [cardAtivo, setCardAtivo] = useState<string | null>(null); // Para controlar qual card está ativo
   const [modoConfiguracao, setModoConfiguracao] = useState(false); // Para mostrar formulário de configuração no ResultPanel
   const [etapasMetanalise, setEtapasMetanalise] = useState<Array<{ etapa: number; titulo: string; resultado: string; loading: boolean }>>([]); // Para armazenar etapas da metanálise
+  const [artigosEncontrados, setArtigosEncontrados] = useState<any[]>([]); // Artigos encontrados na busca
+  const [totalArtigos, setTotalArtigos] = useState(0); // Total de artigos encontrados
+  const [temaMetanaliseAtual, setTemaMetanaliseAtual] = useState(''); // Tema atual da metanálise
 
   // 2. useRouter
   const router = useRouter();
@@ -308,6 +311,9 @@ export default function Home() {
     if (tipo === 'meta-analise' && parametros.temaMetanalise) {
       setModoConfiguracao(false);
       setEtapasMetanalise([]);
+      setArtigosEncontrados([]); // Limpar artigos anteriores
+      setTotalArtigos(0);
+      setTemaMetanaliseAtual(parametros.temaMetanalise);
       setLoadingResultado(true);
       
       const nomesEtapa: Record<string, string> = {
@@ -339,6 +345,13 @@ export default function Home() {
             texto_artigo: textoArtigo || '',
             estilo,
           });
+
+          // Se for etapa 1 e tiver artigos na resposta, salvar
+          if (etapa === 1 && res.artigos && Array.isArray(res.artigos)) {
+            setArtigosEncontrados(res.artigos);
+            setTotalArtigos(res.total_artigos || res.artigos.length);
+            setTemaMetanaliseAtual(parametros.temaMetanalise || '');
+          }
 
           const resultadoEtapa = res.erro 
             ? `❌ Erro: ${res.erro}`
@@ -497,6 +510,9 @@ export default function Home() {
         {/* JANELA DIREITA - Resultados + Chat */}
         <div className="w-1/2 p-6 overflow-hidden flex flex-col">
           <ResultPanel
+            artigosEncontrados={artigosEncontrados}
+            totalArtigos={totalArtigos}
+            temaMetanalise={temaMetanaliseAtual}
             loading={loadingResultado}
             titulo={tituloResultado}
             resultado={resultadoAtual}

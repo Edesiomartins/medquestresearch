@@ -684,20 +684,32 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
         if texto_artigo:
             texto_artigo = texto_artigo[:6000]
         
-        # Chamar função de metanálise (agora com tema como parâmetro principal)
-        resultado = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
+        # Chamar função de metanálise (agora retorna dict com 'resultado' e 'artigos')
+        resultado_dict = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
+        
+        resultado_texto = resultado_dict.get('resultado', '')
+        artigos_encontrados = resultado_dict.get('artigos', [])
+        total_artigos = resultado_dict.get('total_artigos', 0)
+        
+        # Preparar dados extras com artigos (se houver)
+        dados_extras_atualizados = dados_extras.copy() if dados_extras else {}
+        if artigos_encontrados:
+            dados_extras_atualizados['artigos'] = artigos_encontrados
+            dados_extras_atualizados['total_artigos'] = total_artigos
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
+                # Salvar resultado e dados extras (com artigos)
+                dados_extras_json = json.dumps(dados_extras_atualizados) if dados_extras_atualizados else None
                 cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
+                    "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s WHERE id=%s",
+                    ("done", resultado_texto, dados_extras_json, job_id)
                 )
                 rowcount = cursor.rowcount
             conn.commit()
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}, artigos={len(artigos_encontrados)}")
         finally:
             conn.close()
         
@@ -1145,6 +1157,16 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
         # Se o job estiver completo, incluir o resultado
         if job["status"] == "done" and job.get("resultado"):
             response["resultado"] = job["resultado"]
+            
+            # Se for metanálise e tiver dados_extras com artigos, incluir artigos na resposta
+            if job.get("dados_extras"):
+                try:
+                    dados_extras = json.loads(job["dados_extras"]) if isinstance(job["dados_extras"], str) else job["dados_extras"]
+                    if isinstance(dados_extras, dict) and "artigos" in dados_extras:
+                        response["artigos"] = dados_extras["artigos"]
+                        response["total_artigos"] = dados_extras.get("total_artigos", len(dados_extras.get("artigos", [])))
+                except:
+                    pass  # Se não conseguir parsear, ignora
 
         # Se o job falhou, incluir o erro
         if job["status"] == "failed" and job.get("erro"):

@@ -12,7 +12,7 @@ except ImportError:
         gerar_resposta = gpt_engine.gerar_resposta
         estimate_tokens = chunker.estimate_tokens
 
-def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> str:
+def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> dict:
     """
     Gera análise e criação de artigos de Metanálises seguindo protocolo PRISMA.
     
@@ -23,7 +23,7 @@ def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, t
         texto_artigo: Texto do(s) artigo(s) científico(s) - opcional, usado apenas nas etapas 2-4
     
     Returns:
-        Resposta formatada da IA seguindo o protocolo PRISMA
+        Dicionário com 'resultado' (resposta formatada da IA) e 'artigos' (lista de artigos encontrados, apenas na etapa 1)
     """
     # Limitar texto se fornecido
     if texto_artigo:
@@ -33,23 +33,48 @@ def gerar_meta_analise(tema: str, etapa: str = "1", dados_extras: dict = None, t
     
     # Determinar qual prompt usar baseado na etapa
     if etapa == "1" or etapa == "pico":
-        prompt = _criar_prompt_etapa1_com_busca(tema, dados_extras)
+        prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     elif etapa == "2" or etapa == "extracao":
         prompt = _criar_prompt_etapa2(texto_artigo, dados_extras)
+        resultados_busca = None
     elif etapa == "3" or etapa == "redacao":
         prompt = _criar_prompt_etapa3(texto_artigo, dados_extras)
+        resultados_busca = None
     elif etapa == "4" or etapa == "verificacao":
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
+        resultados_busca = None
     else:
         # Etapa padrão: iniciar com busca e PICO
-        prompt = _criar_prompt_etapa1_com_busca(tema, dados_extras)
+        prompt, resultados_busca = _criar_prompt_etapa1_com_busca(tema, dados_extras)
     
     # Gerar resposta com temperatura adequada para análise científica
     resposta = gerar_resposta(prompt, temperatura=0.7)
-    return resposta
+    
+    # Retornar resultado e artigos (apenas na etapa 1)
+    resultado = {
+        'resultado': resposta
+    }
+    
+    # Se for etapa 1, incluir artigos encontrados
+    if (etapa == "1" or etapa == "pico") and resultados_busca:
+        artigos_pubmed = resultados_busca.get('pubmed', {}).get('artigos', [])
+        # Filtrar apenas artigos com detalhes completos (não apenas IDs)
+        artigos_detalhados = [a for a in artigos_pubmed if isinstance(a, dict) and 'title' in a]
+        resultado['artigos'] = artigos_detalhados
+        resultado['total_artigos'] = resultados_busca.get('pubmed', {}).get('total', 0)
+    else:
+        resultado['artigos'] = []
+        resultado['total_artigos'] = 0
+    
+    return resultado
 
-def _criar_prompt_etapa1_com_busca(tema: str, dados_extras: dict = None) -> str:
-    """Prompt para Etapa 1: Estruturação PICO, Protocolo e Busca na Literatura."""
+def _criar_prompt_etapa1_com_busca(tema: str, dados_extras: dict = None) -> tuple:
+    """
+    Prompt para Etapa 1: Estruturação PICO, Protocolo e Busca na Literatura.
+    
+    Returns:
+        Tupla (prompt_str, resultados_busca_dict)
+    """
     try:
         from .literature_search import buscar_literatura, gerar_resumo_busca
     except ImportError:
@@ -118,7 +143,7 @@ Organize a resposta em seções claras:
 
 IMPORTANTE: Responda SEMPRE em português brasileiro.
 """
-    return prompt
+    return prompt, resultados_busca
 
 def _criar_prompt_inicial(texto_artigo: str, dados_extras: dict = None) -> str:
     """Prompt inicial que pergunta sobre o estágio da pesquisa."""

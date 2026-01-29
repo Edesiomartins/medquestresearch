@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import ChatInterface from './ChatInterface';
+import ArticleSelector, { Artigo } from './ArticleSelector';
 
 interface ResultPanelProps {
   loading: boolean;
@@ -15,6 +16,9 @@ interface ResultPanelProps {
   modoConfiguracao?: boolean;
   etapasMetanalise?: Array<{ etapa: number; titulo: string; resultado: string; loading: boolean }>;
   onExecute?: (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => void;
+  artigosEncontrados?: Artigo[];
+  totalArtigos?: number;
+  temaMetanalise?: string;
 }
 
 export default function ResultPanel({ 
@@ -28,6 +32,9 @@ export default function ResultPanel({
   modoConfiguracao = false,
   etapasMetanalise = [],
   onExecute,
+  artigosEncontrados = [],
+  totalArtigos = 0,
+  temaMetanalise = '',
 }: ResultPanelProps) {
   const [showChat, setShowChat] = useState(false);
   const [trecho, setTrecho] = useState('');
@@ -344,6 +351,25 @@ export default function ResultPanel({
             ))}
           </div>
         )}
+        
+        {/* Mostrar seletor de artigos após etapa 1 completa */}
+        {tipoAnalise === 'meta-analise' && 
+         artigosEncontrados && 
+         artigosEncontrados.length > 0 && 
+         etapasMetanalise.some(e => e.etapa === 1 && !e.loading && !e.resultado.startsWith('❌')) && (
+          <div className="mb-6">
+            <ArticleSelector
+              artigos={artigosEncontrados}
+              totalArtigos={totalArtigos}
+              tema={temaMetanalise}
+              onArtigosSelecionados={(selecionados) => {
+                // Opcional: salvar artigos selecionados para uso nas próximas etapas
+                console.log('Artigos selecionados:', selecionados);
+              }}
+            />
+          </div>
+        )}
+        
         <div className="prose max-w-none flex-1 overflow-hidden flex flex-col">
           <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed wrap-break-word overflow-y-auto flex-1">
             {resultado}

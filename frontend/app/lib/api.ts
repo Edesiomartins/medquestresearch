@@ -18,6 +18,8 @@ export interface ApiResponse<T = any> {
   request_id?: number;
   status?: string;
   detalhes?: string;
+  artigos?: any[]; // Artigos encontrados (para metanálise)
+  total_artigos?: number; // Total de artigos encontrados
 }
 
 export interface ExplicarConceitoResponse extends ApiResponse {
@@ -124,9 +126,13 @@ export async function pollJobStatus(
         return response;
       }
 
-      // Se o job estiver completo, retornar o resultado
+      // Se o job estiver completo, retornar o resultado e artigos (se houver)
       if (response.status === 'done' && response.resultado) {
-        return { resultado: response.resultado };
+        return { 
+          resultado: response.resultado,
+          artigos: response.artigos,
+          total_artigos: response.total_artigos
+        };
       }
 
       // Se o job falhou, retornar o erro
