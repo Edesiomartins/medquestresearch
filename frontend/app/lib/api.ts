@@ -20,6 +20,11 @@ export interface ApiResponse<T = any> {
   detalhes?: string;
   artigos?: any[]; // Artigos encontrados (para metanálise)
   total_artigos?: number; // Total de artigos encontrados
+  resumo_analises?: {
+    escore_medio?: number;
+    pontuacao_prisma_media?: number;
+    artigos_por_qualidade?: { excelente?: number; boa?: number; regular?: number; baixa?: number };
+  }; // Resumo PRISMA (upload artigos metanálise)
 }
 
 export interface ExplicarConceitoResponse extends ApiResponse {
