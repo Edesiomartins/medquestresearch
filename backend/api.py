@@ -353,7 +353,15 @@ def run_with_two_chunks(
     Executa processamento de IA em no máximo DOIS chunks,
     evitando timeout no servidor.
     """
-    from .chunker import chunk_text, combine_responses
+    try:
+        from .chunker import chunk_text, combine_responses
+    except ImportError:
+        try:
+            from chunker import chunk_text, combine_responses
+        except ImportError:
+            import backend.chunker as _chunker
+            chunk_text = _chunker.chunk_text
+            combine_responses = _chunker.combine_responses
 
     log_t("ANTES chunking")
     chunks = chunk_text(texto, chunk_size=chunk_size, overlap=overlap)
