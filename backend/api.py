@@ -1084,6 +1084,38 @@ def login(request: Request, data: LoginRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao fazer login: {str(e)}")
 
+# ============================================
+# Planos e pacotes (monetização) - dados públicos
+# ============================================
+
+@api_router.get("/planos")
+@limiter.limit("30 per minute")
+def listar_planos(request: Request):
+    """
+    Lista planos de assinatura para exibição na página de monetização.
+    Dados estáticos; depois pode vir de tabela planos no banco.
+    """
+    planos = [
+        {"id": "basico", "nome": "Básico", "creditos_mes": 200, "preco_reais": 29.90, "recorrente": True, "descricao": "Ideal para estudantes e uso leve"},
+        {"id": "pesquisador", "nome": "Pesquisador", "creditos_mes": 660, "preco_reais": 79.90, "recorrente": True, "bonus": "10%", "descricao": "Uso intenso, metanálises e múltiplos artigos"},
+        {"id": "laboratorio", "nome": "Laboratório", "creditos_mes": 2070, "preco_reais": 199.90, "recorrente": True, "bonus": "15%", "descricao": "Até 5 usuários ou créditos compartilhados"},
+    ]
+    return {"planos": planos}
+
+@api_router.get("/pacotes")
+@limiter.limit("30 per minute")
+def listar_pacotes(request: Request):
+    """
+    Lista pacotes avulsos de créditos (sem assinatura).
+    """
+    pacotes = [
+        {"id": "pequeno", "nome": "Pequeno", "creditos": 50, "preco_reais": 9.90},
+        {"id": "medio", "nome": "Médio", "creditos": 150, "preco_reais": 24.90},
+        {"id": "grande", "nome": "Grande", "creditos": 400, "preco_reais": 59.90},
+        {"id": "metanalise", "nome": "Metanálise", "creditos": 200, "preco_reais": 39.90, "destaque": True},
+    ]
+    return {"pacotes": pacotes}
+
 @api_router.get("/creditos")
 def creditos(user = Depends(require_api_key)):
     try:

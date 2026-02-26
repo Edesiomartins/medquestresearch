@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 
 interface Usuario {
@@ -141,14 +142,19 @@ export default function Sidebar({
         </div>
       </nav>
       
-      {/* RODAPÉ - Créditos e Logout */}
+      {/* RODAPÉ - Créditos, Planos e Logout */}
       <div className="p-6 border-t border-[#0369a1]/50 space-y-4">
         {/* Créditos */}
         <div className="bg-[#0369a1]/30 rounded-lg p-4">
           <p className="text-blue-200 text-xs mb-1">Créditos Disponíveis</p>
           <p className="font-bold text-2xl text-white">{creditos}</p>
         </div>
-        
+        <Link
+          href="/planos"
+          className="block w-full text-center py-2 text-blue-200 hover:text-white text-sm font-medium transition-colors"
+        >
+          Planos e preços
+        </Link>
         {/* Logout */}
         <button
           onClick={onLogout}

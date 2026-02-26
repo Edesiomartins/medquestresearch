@@ -44,6 +44,8 @@ export const API_ENDPOINTS = {
   CREDITOS: '/genapi/creditos',
   ADICIONAR_CREDITOS: '/genapi/admin/adicionar-creditos',
   LISTAR_CUSTOS: '/genapi/admin/custos',
+  PLANOS: '/genapi/planos',
+  PACOTES: '/genapi/pacotes',
   
   // Rotas de IA (versões antigas - mantidas para compatibilidade)
   EXPLICAR: '/genapi/explicar',
