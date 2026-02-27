@@ -1142,6 +1142,7 @@ def listar_pacotes(request: Request):
         },
     }
 
+
 @api_router.get("/creditos")
 def creditos(user = Depends(require_api_key)):
     try:
@@ -1835,6 +1836,16 @@ except ImportError:
     except ImportError:
         from .routes.asaas_webhook import router as asaas_webhook_router
 app.include_router(asaas_webhook_router)
+
+# Checkout créditos (POST /genapi/checkout/creditos)
+try:
+    from backend.routes.checkout_creditos import router as checkout_router
+except ImportError:
+    try:
+        from routes.checkout_creditos import router as checkout_router
+    except ImportError:
+        from .routes.checkout_creditos import router as checkout_router
+app.include_router(checkout_router)
 
 # Log para debug: verificar se os routers foram incluídos
 logging.warning(f"[DEBUG] Router incluído com prefixo: /genapi")
