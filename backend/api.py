@@ -1828,13 +1828,12 @@ app.include_router(api_router)
 
 # Webhook Asaas (POST /genapi/webhook/asaas)
 try:
-    from routes.asaas_webhook import router as asaas_webhook_router
+    from backend.routes.asaas_webhook import router as asaas_webhook_router
 except ImportError:
     try:
-        from .routes.asaas_webhook import router as asaas_webhook_router
+        from routes.asaas_webhook import router as asaas_webhook_router
     except ImportError:
-        import backend.routes.asaas_webhook as asaas_webhook_module  # type: ignore
-        asaas_webhook_router = asaas_webhook_module.router
+        from .routes.asaas_webhook import router as asaas_webhook_router
 app.include_router(asaas_webhook_router)
 
 # Log para debug: verificar se os routers foram incluídos
