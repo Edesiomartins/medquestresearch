@@ -5,47 +5,38 @@ import Link from 'next/link';
 import { getApiUrl } from '@/app/lib/api-config';
 import { API_ENDPOINTS } from '@/app/lib/api-config';
 
-interface Plano {
-  id: string;
-  nome: string;
-  creditos_mes: number;
-  preco_reais: number;
-  recorrente: boolean;
-  descricao?: string;
-  bonus?: string;
-}
-
 interface Pacote {
   id: string;
   nome: string;
-  creditos: number;
+  quantidade: number;
+  creditos_entregues: number;
   preco_reais: number;
   destaque?: boolean;
 }
 
+interface Regra {
+  preco_por_credito_reais?: number;
+  bonus_acima_de?: number;
+  bonus_percentual?: number;
+}
+
 export default function PlanosPage() {
-  const [planos, setPlanos] = useState<Plano[]>([]);
   const [pacotes, setPacotes] = useState<Pacote[]>([]);
+  const [regra, setRegra] = useState<Regra | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     const carregar = async () => {
       try {
-        const [resPlanos, resPacotes] = await Promise.all([
-          fetch(getApiUrl(API_ENDPOINTS.PLANOS)),
-          fetch(getApiUrl(API_ENDPOINTS.PACOTES)),
-        ]);
-        if (resPlanos.ok) {
-          const data = await resPlanos.json();
-          setPlanos(data.planos || []);
-        }
+        const resPacotes = await fetch(getApiUrl(API_ENDPOINTS.PACOTES));
         if (resPacotes.ok) {
           const data = await resPacotes.json();
           setPacotes(data.pacotes || []);
+          setRegra(data.regra || null);
         }
-      } catch (e: any) {
-        setErro(e?.message || 'Erro ao carregar planos.');
+      } catch (e: unknown) {
+        setErro(e instanceof Error ? e.message : 'Erro ao carregar preços.');
       } finally {
         setLoading(false);
       }
@@ -75,10 +66,19 @@ export default function PlanosPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-bold text-[#0c3d66] mb-2">Planos e preços</h1>
-        <p className="text-slate-600 mb-10">
-          Use créditos para análises de artigos, metanálise PRISMA, explicações e mais. Escolha um plano ou compre créditos avulsos.
+        <h1 className="text-3xl font-bold text-[#0c3d66] mb-2">Comprar créditos</h1>
+        <p className="text-slate-600 mb-4">
+          Use créditos para análises de artigos, metanálise PRISMA, explicações e mais. Compre a quantidade que precisar.
         </p>
+
+        {regra && (
+          <div className="mb-8 p-4 bg-[#0c3d66]/10 border border-[#0c3d66]/30 rounded-xl">
+            <p className="text-slate-700 font-medium">
+              R$ 0,25 por crédito. Compras acima de {regra.bonus_acima_de ?? 300} créditos ganham{' '}
+              <strong>{regra.bonus_percentual ?? 20}%</strong> de bônus.
+            </p>
+          </div>
+        )}
 
         {loading && (
           <div className="text-center py-12 text-slate-500">Carregando...</div>
@@ -91,40 +91,9 @@ export default function PlanosPage() {
 
         {!loading && (
           <>
-            <section className="mb-12">
-              <h2 className="text-xl font-semibold text-[#0c3d66] mb-4">Planos mensais</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {planos.map((plano) => (
-                  <div
-                    key={plano.id}
-                    className="bg-white border-2 border-slate-200 rounded-xl p-6 shadow-sm hover:border-[#0c3d66]/40 transition-colors"
-                  >
-                    <h3 className="text-lg font-bold text-[#0c3d66]">{plano.nome}</h3>
-                    <p className="text-2xl font-bold text-slate-800 mt-2">
-                      {formatarPreco(plano.preco_reais)}
-                      <span className="text-sm font-normal text-slate-500">/mês</span>
-                    </p>
-                    <p className="text-slate-600 text-sm mt-1">
-                      {plano.creditos_mes} créditos/mês
-                      {plano.bonus && (
-                        <span className="ml-1 text-green-600 font-medium">+{plano.bonus}</span>
-                      )}
-                    </p>
-                    <p className="text-slate-500 text-sm mt-3">{plano.descricao}</p>
-                    <button
-                      disabled
-                      className="mt-6 w-full py-3 rounded-lg bg-slate-200 text-slate-500 text-sm font-medium cursor-not-allowed"
-                    >
-                      Em breve
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-
             <section>
-              <h2 className="text-xl font-semibold text-[#0c3d66] mb-4">Pacotes avulsos</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <h2 className="text-xl font-semibold text-[#0c3d66] mb-4">Pacotes de créditos</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pacotes.map((pacote) => (
                   <div
                     key={pacote.id}
@@ -134,11 +103,18 @@ export default function PlanosPage() {
                   >
                     {pacote.destaque && (
                       <span className="text-xs font-semibold text-[#0c3d66] bg-[#0c3d66]/10 px-2 py-0.5 rounded">
-                        Recomendado
+                        +20% bônus
                       </span>
                     )}
                     <h3 className="text-lg font-bold text-[#0c3d66] mt-1">{pacote.nome}</h3>
-                    <p className="text-xl font-bold text-slate-800 mt-1">{pacote.creditos} créditos</p>
+                    <p className="text-xl font-bold text-slate-800 mt-1">
+                      {pacote.creditos_entregues} créditos
+                      {pacote.creditos_entregues > pacote.quantidade && (
+                        <span className="text-sm font-normal text-green-600 ml-1">
+                          (compra de {pacote.quantidade})
+                        </span>
+                      )}
+                    </p>
                     <p className="text-slate-600 text-sm">{formatarPreco(pacote.preco_reais)}</p>
                     <button
                       disabled

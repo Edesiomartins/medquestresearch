@@ -153,7 +153,7 @@ export default function Sidebar({
           href="/planos"
           className="block w-full text-center py-2 text-blue-200 hover:text-white text-sm font-medium transition-colors"
         >
-          Planos e preços
+          Comprar créditos
         </Link>
         {/* Logout */}
         <button
