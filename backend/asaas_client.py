@@ -48,16 +48,32 @@ def calcular_creditos_entregues(quantidade: int) -> int:
     return quantidade + bonus
 
 
+# Padrões para cadastro quando o usuário não informa CPF/telefone (ex.: cadastro só com nome e email)
+CPF_PADRAO = "12345678909"  # 11 dígitos (ex.: 123.456.789-09)
+TELEFONE_PADRAO = "62999999999"  # DDD + 9 dígitos (ex.: (62) 99999-9999)
+
+
+def _somente_numeros(valor: str) -> str:
+    return "".join(c for c in (valor or "") if c.isdigit())
+
+
 def criar_cliente(nome: str, email: str, cpf_cnpj: Optional[str] = None, telefone: Optional[str] = None) -> dict:
     """
     Cria um cliente no Asaas. Retorna o JSON da resposta com 'id' (ex: cus_xxx).
     Campos obrigatórios na API: name, cpfCnpj, mobilePhone. Email recomendado.
+    Usa modelos padrão de cadastro (CPF e telefone) quando não informados.
     """
+    cpf_limpo = _somente_numeros(cpf_cnpj) or CPF_PADRAO
+    if len(cpf_limpo) != 11:
+        cpf_limpo = CPF_PADRAO
+    fone_limpo = _somente_numeros(telefone) or TELEFONE_PADRAO
+    if len(fone_limpo) < 10:
+        fone_limpo = TELEFONE_PADRAO
     payload = {
-        "name": nome or "Cliente",
-        "email": email or "",
-        "cpfCnpj": (cpf_cnpj or "").replace(".", "").replace("-", "").replace("/", "") or "00000000000",
-        "mobilePhone": (telefone or "").replace(" ", "").replace("-", "") or "11999999999",
+        "name": (nome or "").strip() or "Cliente",
+        "email": (email or "").strip() or "",
+        "cpfCnpj": cpf_limpo,
+        "mobilePhone": fone_limpo,
     }
     with httpx.Client(timeout=30.0) as client:
         r = client.post(
