@@ -1,9 +1,10 @@
 """
 POST /genapi/checkout/creditos: gera cobrança PIX no Asaas para compra de créditos.
-Requer usuário autenticado (Bearer token) e asaas_customer_id preenchido.
+Se o usuário não tiver asaas_customer_id, cria o cliente no Asaas (com cpfCnpj e mobilePhone obrigatórios).
 """
 
 from datetime import datetime, timedelta
+import logging
 import os
 
 import httpx
@@ -17,6 +18,14 @@ except ImportError:
         from database import get_connection, db_select_one
     except ImportError:
         from ..database import get_connection, db_select_one
+
+try:
+    from backend.asaas_client import criar_cliente as asaas_criar_cliente
+except ImportError:
+    try:
+        from asaas_client import criar_cliente as asaas_criar_cliente
+    except ImportError:
+        from ..asaas_client import criar_cliente as asaas_criar_cliente
 
 router = APIRouter(prefix="/genapi", tags=["checkout"])
 
@@ -67,15 +76,35 @@ async def checkout_creditos(
                 (current_user["id"],),
             )
             result = cursor.fetchone()
+        asaas_customer_id = result.get("asaas_customer_id") if result else None
     finally:
         conn.close()
 
-    asaas_customer_id = result.get("asaas_customer_id") if result else None
+    # Se não tem cliente Asaas, criar (API exige name, cpfCnpj e mobilePhone)
     if not asaas_customer_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Usuário sem asaas_customer_id. Registre-se no gateway de pagamento antes de comprar créditos.",
-        )
+        nome = (current_user.get("nome") or "").strip() or "Cliente"
+        email = (current_user.get("email") or "").strip()
+        try:
+            customer = asaas_criar_cliente(nome=nome, email=email)
+            asaas_customer_id = customer.get("id")
+        except Exception as e:
+            logging.exception("[CHECKOUT] Erro ao criar cliente Asaas: %s", e)
+            raise HTTPException(
+                status_code=502,
+                detail="Não foi possível registrar o cliente no gateway de pagamento. Tente novamente.",
+            )
+        if not asaas_customer_id:
+            raise HTTPException(status_code=502, detail="Resposta inválida do gateway ao criar cliente.")
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE usuarios SET asaas_customer_id = %s WHERE id = %s",
+                    (asaas_customer_id, current_user["id"]),
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
     base_url = (os.getenv("ASAAS_BASE_URL") or "https://api.asaas.com/v3").rstrip("/")
     api_key = os.getenv("ASAAS_API_KEY")
