@@ -155,6 +155,12 @@ export default function Sidebar({
         >
           Comprar créditos
         </Link>
+        <Link
+          href="/perfil"
+          className="block w-full text-center py-2 text-blue-200 hover:text-white text-sm font-medium transition-colors"
+        >
+          Atualizar cadastro
+        </Link>
         {/* Logout */}
         <button
           onClick={onLogout}

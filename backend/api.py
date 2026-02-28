@@ -217,6 +217,15 @@ class LoginRequest(BaseModel):
     email: str
     senha: str
 
+
+class AtualizarPerfilInput(BaseModel):
+    """Campos opcionais para atualizar cadastro (perfil)."""
+    nome: Optional[str] = None
+    email: Optional[str] = None
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+
+
 class ExplicarRequest(BaseModel):
     texto_artigo: str
     trecho: str
@@ -1171,6 +1180,51 @@ def creditos(user = Depends(require_api_key)):
         import traceback
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Erro ao buscar créditos: {str(e)}")
+
+
+@api_router.get("/perfil")
+@limiter.limit("30 per minute")
+def get_perfil(request: Request, user=Depends(require_api_key)):
+    """Retorna dados do perfil do usuário (para edição em Atualizar cadastro)."""
+    return {
+        "id": user.get("id"),
+        "nome": user.get("nome") or "",
+        "email": user.get("email") or "",
+        "cpf": user.get("cpf") or "",
+        "telefone": user.get("telefone") or "",
+    }
+
+
+@api_router.patch("/perfil")
+@limiter.limit("20 per minute")
+def atualizar_perfil(request: Request, data: AtualizarPerfilInput, user=Depends(require_api_key)):
+    """Atualiza nome, email, cpf e/ou telefone do usuário. CPF e telefone são necessários para comprar créditos."""
+    updates = []
+    params = []
+    if data.nome is not None:
+        updates.append("nome = %s")
+        params.append(data.nome.strip())
+    if data.email is not None:
+        updates.append("email = %s")
+        params.append(data.email.strip())
+    if data.cpf is not None:
+        updates.append("cpf = %s")
+        params.append(data.cpf.strip() or None)
+    if data.telefone is not None:
+        updates.append("telefone = %s")
+        params.append(data.telefone.strip() or None)
+    if not updates:
+        return {"ok": True, "mensagem": "Nenhum campo alterado"}
+    params.append(user["id"])
+    sql = f"UPDATE usuarios SET {', '.join(updates)} WHERE id = %s"
+    db_execute(sql, tuple(params))
+    row = db_select_one("SELECT id, nome, email, cpf, telefone FROM usuarios WHERE id = %s", (user["id"],))
+    return {
+        "ok": True,
+        "mensagem": "Cadastro atualizado",
+        "usuario": dict(row) if row else {},
+    }
+
 
 @api_router.get("/jobs")
 @limiter.limit("30 per minute")

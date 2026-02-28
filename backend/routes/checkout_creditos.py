@@ -82,18 +82,25 @@ async def checkout_creditos(
     finally:
         conn.close()
 
-    # Se não tem cliente Asaas, criar (API exige name, cpfCnpj e mobilePhone)
+    # Se não tem cliente Asaas, criar (API exige name, cpfCnpj e mobilePhone válidos)
     if not asaas_customer_id:
         nome = (current_user.get("nome") or "").strip() or "Cliente"
         email = (current_user.get("email") or "").strip()
+        cpf = (current_user.get("cpf") or "").strip()
+        telefone = (current_user.get("telefone") or "").strip()
+        if not cpf or not telefone:
+            raise HTTPException(
+                status_code=400,
+                detail="Para comprar créditos, atualize seu cadastro com CPF e telefone em Meus dados.",
+            )
         try:
-            customer = asaas_criar_cliente(nome=nome, email=email)
+            customer = asaas_criar_cliente(nome=nome, email=email, cpf_cnpj=cpf, telefone=telefone)
             asaas_customer_id = customer.get("id")
         except Exception as e:
             logging.exception("[CHECKOUT] Erro ao criar cliente Asaas: %s", e)
             raise HTTPException(
-                status_code=502,
-                detail="Não foi possível registrar o cliente no gateway de pagamento. Tente novamente.",
+                status_code=400,
+                detail="Dados de CPF ou telefone inválidos. Atualize em Meus dados com valores válidos.",
             )
         if not asaas_customer_id:
             raise HTTPException(status_code=502, detail="Resposta inválida do gateway ao criar cliente.")

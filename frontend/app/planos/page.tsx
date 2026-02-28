@@ -162,6 +162,13 @@ export default function PlanosPage() {
         {checkoutErro && (
           <div className="mb-8 p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm">
             {checkoutErro}
+            {(checkoutErro.includes('cadastro') || checkoutErro.includes('Meus dados')) && (
+              <p className="mt-2">
+                <Link href="/perfil" className="font-medium text-[#0c3d66] hover:underline">
+                  Ir para Atualizar cadastro →
+                </Link>
+              </p>
+            )}
           </div>
         )}
 
