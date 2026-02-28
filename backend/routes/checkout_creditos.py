@@ -27,6 +27,14 @@ except ImportError:
     except ImportError:
         from ..asaas_client import criar_cliente as asaas_criar_cliente
 
+try:
+    from backend.auth import get_current_user
+except ImportError:
+    try:
+        from auth import get_current_user
+    except ImportError:
+        from ..auth import get_current_user
+
 router = APIRouter(prefix="/genapi", tags=["checkout"])
 
 PRECO_CREDITO = 0.25
@@ -36,19 +44,6 @@ BONUS_PERCENT = 0.20
 
 class CheckoutCreditosRequest(BaseModel):
     quantidade: int
-
-
-async def get_current_user(authorization: str = Header(None)):
-    """Autentica pelo header Authorization: Bearer <token> e retorna o usuário."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Não autorizado")
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Não autorizado")
-    user = db_select_one("SELECT * FROM usuarios WHERE token = %s", (token,))
-    if not user:
-        raise HTTPException(status_code=401, detail="Não autorizado")
-    return dict(user)
 
 
 @router.post("/checkout/creditos")

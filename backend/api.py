@@ -253,16 +253,6 @@ def gerar_hash_senha(senha):
 def gerar_hash_senha(senha):
     return hash_senha(senha)
 
-def autenticar(authorization: Optional[str] = Header(None)):
-    """Função de autenticação para FastAPI."""
-    if not authorization:
-        return None
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        return None
-    row = db_select_one("SELECT * FROM usuarios WHERE token=%s", (token,))
-    return row
-
 def creditos_disponiveis(usuario):
     return max(0, usuario["creditos"] - usuario["creditos_usados"])
 
@@ -331,12 +321,17 @@ def read_docx(file_path):
     text = '\n'.join([p.text for p in doc.paragraphs])
     return text
 
-async def require_api_key(authorization: str = Header(None)):
-    """Dependency para autenticação em rotas FastAPI."""
-    user = autenticar(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Não autorizado")
-    return user
+try:
+    from backend.auth import get_current_user
+except ImportError:
+    try:
+        from auth import get_current_user
+    except ImportError:
+        from .auth import get_current_user
+
+def require_api_key(authorization: str = Header(None)):
+    """Dependency para autenticação em rotas FastAPI (usa get_current_user do auth)."""
+    return get_current_user(authorization)
 
 def log_t(msg):
     """Função auxiliar para logging com timestamp."""
