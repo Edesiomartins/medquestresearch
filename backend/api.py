@@ -321,16 +321,23 @@ def read_docx(file_path):
     text = '\n'.join([p.text for p in doc.paragraphs])
     return text
 
-try:
-    from backend.auth import get_current_user
-except ImportError:
-    try:
-        from auth import get_current_user
-    except ImportError:
-        from .auth import get_current_user
+def get_current_user(authorization: str = Header(None)):
+    """Autenticação: extrai token do header (Bearer ou puro) e busca usuário no banco."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    if authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "").strip()
+    else:
+        token = authorization.strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    row = db_select_one("SELECT * FROM usuarios WHERE token = %s", (token,))
+    if not row:
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    return dict(row)
 
 def require_api_key(authorization: str = Header(None)):
-    """Dependency para autenticação em rotas FastAPI (usa get_current_user do auth)."""
+    """Dependency para autenticação em rotas FastAPI."""
     return get_current_user(authorization)
 
 def log_t(msg):
