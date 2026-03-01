@@ -232,12 +232,12 @@ export default function PlanosPage() {
                         <button
                           onClick={() => handleComprar(pacote)}
                           disabled={isLoading}
-                          className="mt-5 w-full py-3 rounded-xl font-medium text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-[#0c3d66] hover:bg-[#0a3352] text-white shadow-sm"
+                          className="mt-5 w-full py-3.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed bg-[#0c3d66] hover:bg-[#0a3352] text-white shadow-md hover:shadow-lg border border-[#0c3d66]/20"
                         >
                           {isLoading
                             ? 'Gerando pagamento...'
                             : token
-                              ? 'Ver opções de pagamento'
+                              ? 'Comprar créditos'
                               : 'Entrar para comprar'}
                         </button>
                       </div>

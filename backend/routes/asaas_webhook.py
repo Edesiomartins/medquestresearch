@@ -22,6 +22,14 @@ except ImportError:
     except ImportError:
         from backend.database import get_connection  # type: ignore
 
+try:
+    from backend.services.credit_service import registrar_compra
+except ImportError:
+    try:
+        from services.credit_service import registrar_compra
+    except ImportError:
+        registrar_compra = None  # opcional
+
 router = APIRouter(prefix="/genapi", tags=["asaas"])
 
 
@@ -121,6 +129,11 @@ async def webhook_asaas(request: Request):
                         (usuario_id, reference, value, evento),
                     )
                     conn.commit()
+                    if registrar_compra:
+                        try:
+                            registrar_compra(usuario_id, creditos, custo_total=0)
+                        except Exception:
+                            pass
                     return {"status": "ok", "creditos_adicionados": creditos}
 
                 # Fluxo legado: buscar usuário pelo customer Asaas + pacote_N ou valor
@@ -172,6 +185,11 @@ async def webhook_asaas(request: Request):
                     (usuario_id, reference, value, evento),
                 )
                 conn.commit()
+                if registrar_compra:
+                    try:
+                        registrar_compra(usuario_id, creditos, custo_total=0)
+                    except Exception:
+                        pass
             return {"status": "ok", "creditos_adicionados": creditos}
         finally:
             conn.close()

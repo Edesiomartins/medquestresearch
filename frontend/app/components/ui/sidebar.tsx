@@ -151,7 +151,7 @@ export default function Sidebar({
         </div>
         <Link
           href="/planos"
-          className="block w-full text-center py-2 text-blue-200 hover:text-white text-sm font-medium transition-colors"
+          className="block w-full text-center py-3 rounded-lg text-sm font-semibold text-[#0c3d66] bg-white hover:bg-slate-100 shadow-md transition-colors border border-white/30"
         >
           Comprar créditos
         </Link>
@@ -161,6 +161,14 @@ export default function Sidebar({
         >
           Atualizar cadastro
         </Link>
+        {(usuario?.email || '').trim().toLowerCase() === 'prof.edesio@gmail.com' && (
+          <Link
+            href="/admin"
+            className="block w-full text-center py-2 text-amber-200 hover:text-amber-100 text-sm font-medium transition-colors"
+          >
+            Admin (métricas)
+          </Link>
+        )}
         {/* Logout */}
         <button
           onClick={onLogout}

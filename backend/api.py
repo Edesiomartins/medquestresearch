@@ -176,6 +176,17 @@ except ImportError:
         get_credit_cost = credit_costs.get_credit_cost
         get_all_costs = credit_costs.get_all_costs
 
+try:
+    from .services.credit_service import consumir_creditos, consumir_creditos_total, registrar_compra
+except ImportError:
+    try:
+        from services.credit_service import consumir_creditos, consumir_creditos_total, registrar_compra
+    except ImportError:
+        import backend.services.credit_service as credit_service  # type: ignore[reportMissingImports]
+        consumir_creditos = credit_service.consumir_creditos
+        consumir_creditos_total = credit_service.consumir_creditos_total
+        registrar_compra = credit_service.registrar_compra
+
 # ============================================
 # ✅ APLICAÇÃO FASTAPI
 # ============================================
@@ -348,6 +359,18 @@ def get_current_user(authorization: str = Header(None)):
 def require_api_key(authorization: str = Header(None)):
     """Dependency para autenticação em rotas FastAPI."""
     return get_current_user(authorization)
+
+
+ADMIN_EMAIL = "prof.edesio@gmail.com"
+
+
+def require_admin(authorization: str = Header(None)):
+    """Dependency: apenas usuário admin (prof.edesio@gmail.com) pode acessar."""
+    user = get_current_user(authorization)
+    email = (user.get("email") or "").strip().lower()
+    if email != ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="Acesso restrito ao administrador.")
+    return user
 
 def log_t(msg):
     """Função auxiliar para logging com timestamp."""
@@ -943,6 +966,63 @@ def listar_custos(request: Request, user = Depends(require_api_key)):
         logging.error(f"Erro ao listar custos: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao listar custos: {str(e)}")
 
+
+@api_router.get("/admin/metricas-creditos")
+@limiter.limit("30 per minute")
+def metricas_creditos(request: Request, user=Depends(require_admin)):
+    """
+    Dashboard de métricas de créditos: auditoria, uso por módulo, compras.
+    Acesso restrito ao admin (prof.edesio@gmail.com).
+    """
+    try:
+        # Totais por tipo
+        totais_tipo = db_select(
+            """
+            SELECT tipo, COUNT(*) AS qtd, COALESCE(SUM(custo_total), 0)::bigint AS total_creditos
+            FROM historico_creditos
+            GROUP BY tipo
+            """
+        )
+        compras = next((t for t in totais_tipo if t.get("tipo") == "compra"), {})
+        consumo = next((t for t in totais_tipo if t.get("tipo") == "consumo"), {})
+
+        # Uso por módulo (consumo)
+        por_modulo = db_select(
+            """
+            SELECT modulo, COUNT(*) AS qtd_registros, COALESCE(SUM(custo_total), 0)::bigint AS total_creditos
+            FROM historico_creditos
+            WHERE tipo = 'consumo' AND modulo IS NOT NULL
+            GROUP BY modulo
+            ORDER BY total_creditos DESC
+            """
+        )
+
+        # Últimos 50 registros (auditoria)
+        ultimos = db_select(
+            """
+            SELECT h.id, h.usuario_id, u.email, u.nome, h.tipo, h.modulo, h.quantidade, h.custo_total, h.criado_em
+            FROM historico_creditos h
+            LEFT JOIN usuarios u ON u.id = h.usuario_id
+            ORDER BY h.criado_em DESC
+            LIMIT 50
+            """
+        )
+        for r in ultimos:
+            if r.get("criado_em"):
+                r["criado_em"] = r["criado_em"].isoformat() if hasattr(r["criado_em"], "isoformat") else str(r["criado_em"])
+
+        return {
+            "resumo": {
+                "compras": {"registros": compras.get("qtd", 0), "total_creditos": compras.get("total_creditos", 0)},
+                "consumo": {"registros": consumo.get("qtd", 0), "total_creditos": consumo.get("total_creditos", 0)},
+            },
+            "por_modulo": list(por_modulo),
+            "ultimos_registros": list(ultimos),
+        }
+    except Exception as e:
+        logging.exception("Erro em metricas_creditos: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/admin/adicionar-creditos")
 @limiter.limit("20 per minute")
 def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = Depends(require_api_key)):
@@ -1312,9 +1392,7 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
         if not data.trecho:
             raise HTTPException(status_code=400, detail="Campo 'trecho' é obrigatório")
 
-        custo = get_credit_cost("explicar")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "explicar")
 
         # Criar job assíncrono
         dados_extras = json.dumps({"trecho": data.trecho, "nivel": data.nivel})
@@ -1352,9 +1430,7 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
 def rota_critica(request: Request, data: InputCritica, user = Depends(require_api_key)):
     try:
         foco_analise = data.foco_analise or "geral"
-        custo = get_credit_cost("critica")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "critica")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
@@ -1389,9 +1465,7 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
 @limiter.limit("10 per minute")
 def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_key)):
     try:
-        custo = get_credit_cost("fatos")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "fatos")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
@@ -1426,9 +1500,7 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
 @limiter.limit("10 per minute")
 def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(require_api_key)):
     try:
-        custo = get_credit_cost("perspectiva")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "perspectiva")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
@@ -1463,9 +1535,7 @@ def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(re
 @limiter.limit("10 per minute")
 def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
-        custo = get_credit_cost("mapa")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "mapa")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
@@ -1499,9 +1569,7 @@ def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)
 @limiter.limit("10 per minute")
 def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(require_api_key)):
     try:
-        custo = get_credit_cost("structure_mapper")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "structure_mapper")
 
         # Criar job assíncrono
         job_id = db_insert_return_id(
@@ -1564,14 +1632,11 @@ async def rota_upload_artigos_metanalise(
                     detail=f"Formato inválido: {file.filename}. Apenas PDF e DOCX são suportados."
                 )
         
-        # Cobrar créditos (custo por arquivo)
-        custo_por_arquivo = get_credit_cost("pdf")
-        custo_total = custo_por_arquivo * len(files)
-        custo_analise_prisma = get_credit_cost("meta_analise")  # Custo adicional para análise PRISMA
-        custo_total += custo_analise_prisma * len(files)
-        
-        if not debitar_creditos(user["id"], custo_total):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        # Cobrar créditos (custo por arquivo + análise PRISMA por artigo)
+        custo_por_arquivo = 5  # pdf
+        custo_analise_prisma = 15  # meta_etapa por artigo
+        custo_total = (custo_por_arquivo + custo_analise_prisma) * len(files)
+        consumir_creditos_total(user["id"], custo_total, "meta_analise_upload")
         
         # Importar módulos necessários (compatível com uvicorn api:app a partir de /app/backend)
         # read_docx já está definido neste módulo (api.py)
@@ -1683,9 +1748,7 @@ async def rota_upload_artigos_metanalise(
 @limiter.limit("10 per minute")
 def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(require_api_key)):
     try:
-        custo = get_credit_cost("meta_analise")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "meta_analise")
 
         # Preparar dados extras para o processamento
         dados_extras = {}
@@ -1748,9 +1811,7 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
             raise HTTPException(status_code=400, detail="Formato inválido. Apenas PDF e DOCX são suportados.")
 
         # Cobrar créditos antes de processar
-        custo = get_credit_cost("pdf")
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "pdf")
 
         extensao = file.filename.lower().split('.')[-1]
         
@@ -1802,10 +1863,7 @@ def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends
         if not data.mensagem or not data.mensagem.strip():
             raise HTTPException(status_code=400, detail="Mensagem não pode estar vazia")
 
-        # Custo menor para mensagens de follow-up (1 crédito)
-        custo = 1
-        if not debitar_creditos(user["id"], custo):
-            raise HTTPException(status_code=402, detail="Créditos insuficientes")
+        custo = consumir_creditos(user["id"], "chat_followup")
 
         # Construir contexto do histórico
         contexto_historico = ""

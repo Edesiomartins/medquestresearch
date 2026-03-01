@@ -44,6 +44,7 @@ export const API_ENDPOINTS = {
   CREDITOS: '/genapi/creditos',
   ADICIONAR_CREDITOS: '/genapi/admin/adicionar-creditos',
   LISTAR_CUSTOS: '/genapi/admin/custos',
+  METRICAS_CREDITOS: '/genapi/admin/metricas-creditos',
   CHECKOUT_CREDITOS: '/genapi/checkout/creditos',
   PERFIL: '/genapi/perfil',
   PLANOS: '/genapi/planos',
