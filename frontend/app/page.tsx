@@ -12,6 +12,7 @@ import {
   pesquisarPerspectiva,
   analisarCritica,
   uploadPdf,
+  traduzirTexto,
   metaAnalysis,
   uploadArtigosMetanalise,
 } from '@/app/lib/api';
@@ -38,6 +39,8 @@ export default function Home() {
   const [temaMetanaliseAtual, setTemaMetanaliseAtual] = useState(''); // Tema atual da metanálise
   const [arquivosMetanalise, setArquivosMetanalise] = useState<File[]>([]); // Arquivos selecionados para metanálise
   const [analisesPrisma, setAnalisesPrisma] = useState<any[]>([]); // Análises PRISMA dos artigos
+  const [loadingTraduzir, setLoadingTraduzir] = useState(false);
+  const [traduzirErro, setTraduzirErro] = useState<string | null>(null);
 
   // 2. useRouter
   const router = useRouter();
@@ -110,7 +113,8 @@ export default function Home() {
         setTituloResultado('Erro ao processar arquivo');
       } else {
         setTextoArtigo(res.resultado || '');
-        setTextoArtigoPt(res.resultado_pt ?? null);
+        setTextoArtigoPt(null); // Tradução sob demanda pelo botão
+        setTraduzirErro(null);
         setUploadProgress(100); // Simula conclusão
       }
     } catch (err: any) {
@@ -121,6 +125,19 @@ export default function Home() {
       setLoadingResultado(false);
     }
   }, [token, cardAtivo]);
+
+  const handleTraduzir = useCallback(async () => {
+    if (!token || !textoArtigo) return;
+    setLoadingTraduzir(true);
+    setTraduzirErro(null);
+    try {
+      const res = await traduzirTexto(token, textoArtigo);
+      if (res.erro) setTraduzirErro(res.erro);
+      else setTextoArtigoPt(res.resultado_pt ?? null);
+    } finally {
+      setLoadingTraduzir(false);
+    }
+  }, [token, textoArtigo]);
 
   // Callback para apenas selecionar arquivos (sem upload) - metanálise
   const handleSelecionarArquivos = useCallback((files: File[]) => {
@@ -403,6 +420,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       setEtapasMetanalise([]); // Limpar etapas anteriores
       setTextoArtigo(null);
       setTextoArtigoPt(null);
+      setTraduzirErro(null);
       setArquivosMetanalise([]); // Limpar arquivos anteriores
       setAnalisesPrisma([]); // Limpar análises anteriores
       setResultadoAtual(null);
@@ -780,6 +798,9 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
             loading={loadingResultado && uploadProgress > 0 && uploadProgress < 100}
             uploadProgress={uploadProgress}
             uploadError={uploadError}
+            onTraduzir={handleTraduzir}
+            loadingTraduzir={loadingTraduzir}
+            traduzirErro={traduzirErro}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

@@ -5,10 +5,13 @@ import { useMemo, useEffect, useState, useRef } from 'react';
 
 interface TextWindowProps {
   texto: string | null;
-  textoPt?: string | null; // Versão em português (tradução quando disponível)
+  textoPt?: string | null; // Versão em português (após clicar em Traduzir texto)
   loading: boolean;
   uploadProgress: number;
   uploadError: string | null;
+  onTraduzir?: () => void;
+  loadingTraduzir?: boolean;
+  traduzirErro?: string | null;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -52,6 +55,9 @@ export default function TextWindow({
   loading,
   uploadProgress,
   uploadError,
+  onTraduzir,
+  loadingTraduzir = false,
+  traduzirErro = null,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -245,30 +251,55 @@ export default function TextWindow({
                 </div>
               ) : (
                 <>
-                  {texto && (textoPt != null) && (
-                    <div className="flex gap-1 mb-3 border-b border-slate-200 pb-2">
-                      <button
-                        type="button"
-                        onClick={() => setAbaTexto('original')}
-                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
-                          abaTexto === 'original'
-                            ? 'bg-[#0c3d66] text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        Original
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAbaTexto('pt')}
-                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
-                          abaTexto === 'pt'
-                            ? 'bg-[#0c3d66] text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        Português
-                      </button>
+                  {texto && !modoMetanalise && (
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      {textoPt != null ? (
+                        <div className="flex gap-1 border-b border-slate-200 pb-2">
+                          <button
+                            type="button"
+                            onClick={() => setAbaTexto('original')}
+                            className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                              abaTexto === 'original'
+                                ? 'bg-[#0c3d66] text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            Original
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAbaTexto('pt')}
+                            className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                              abaTexto === 'pt'
+                                ? 'bg-[#0c3d66] text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            Português
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={onTraduzir}
+                            disabled={loadingTraduzir}
+                            className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0c3d66] text-white hover:bg-[#0a3255] disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                          >
+                            {loadingTraduzir ? (
+                              <>
+                                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Traduzir texto...
+                              </>
+                            ) : (
+                              <>Traduzir texto</>
+                            )}
+                          </button>
+                          {traduzirErro && (
+                            <p className="text-sm text-red-600">{traduzirErro}</p>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                   <div className="flex-1 overflow-y-auto">

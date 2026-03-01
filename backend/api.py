@@ -1840,9 +1840,7 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
             texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
             registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, custo, request)
 
-            # Versão em português (Qwen/Groq quando disponível)
-            resultado_pt = obter_versao_portugues(texto_extraido)
-            return {"resultado": texto_extraido, "resultado_pt": resultado_pt}
+            return {"resultado": texto_extraido}
 
         except HTTPException:
             raise
@@ -1856,6 +1854,28 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
+
+
+class TraducaoInput(BaseModel):
+    """Texto a ser traduzido para português (usado pelo botão Traduzir texto)."""
+    texto: str
+
+
+@api_router.post("/traducao")
+@limiter.limit("20 per minute")
+def rota_traducao(request: Request, data: TraducaoInput, user=Depends(require_api_key)):
+    """
+    Traduz o texto extraído para português brasileiro (Qwen/Groq quando disponível).
+    Usado quando o usuário clica em "Traduzir texto" na aba do texto extraído.
+    """
+    if not data.texto or not data.texto.strip():
+        raise HTTPException(status_code=400, detail="Texto não pode estar vazio")
+    try:
+        resultado_pt = obter_versao_portugues(data.texto.strip())
+        return {"resultado_pt": resultado_pt}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao traduzir: {str(e)}")
+
 
 @api_router.post("/chat-followup")
 @limiter.limit("20 per minute")

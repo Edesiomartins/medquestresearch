@@ -269,6 +269,26 @@ export async function uploadPdf(token: string, file: File): Promise<ApiResponse>
   }
 }
 
+export async function traduzirTexto(token: string, texto: string): Promise<ApiResponse> {
+  try {
+    const response = await fetch(getApiUrl(API_ENDPOINTS.TRADUCAO), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ texto }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { erro: (data as any).detail || data.erro || `Erro ${response.status}` };
+    }
+    return data;
+  } catch (error: any) {
+    return { erro: `Erro: ${error.message || 'Erro desconhecido'}` };
+  }
+}
+
 // ============================================
 // Funções Research - Versões Novas (Recomendadas)
 // ============================================

@@ -57,6 +57,7 @@ export const API_ENDPOINTS = {
   PERSPECTIVA: '/genapi/perspectiva',
   MAPA: '/genapi/mapa',
   PDF: '/genapi/pdf',
+  TRADUCAO: '/genapi/traducao',
   
   // Rotas Research (novas - recomendadas)
   CRITICAL_ANALYSIS: '/genapi/critical_analysis',
