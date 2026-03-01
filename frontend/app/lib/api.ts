@@ -12,6 +12,7 @@ export interface ApiResponse<T = any> {
   data?: T;
   erro?: string;
   resultado?: string;
+  resultado_pt?: string; // Versão em português do texto extraído (tradução quando aplicável)
   token?: string;
   usuario?: any;
   creditos?: number;

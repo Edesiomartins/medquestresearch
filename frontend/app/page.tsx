@@ -23,6 +23,7 @@ export default function Home() {
   // 1. Todos os useState
   const [mounted, setMounted] = useState(false);
   const [textoArtigo, setTextoArtigo] = useState<string | null>(null);
+  const [textoArtigoPt, setTextoArtigoPt] = useState<string | null>(null);
   const [loadingResultado, setLoadingResultado] = useState(false);
   const [tituloResultado, setTituloResultado] = useState('');
   const [resultadoAtual, setResultadoAtual] = useState<string | null>(null); // Para mostrar texto do PDF
@@ -109,7 +110,7 @@ export default function Home() {
         setTituloResultado('Erro ao processar arquivo');
       } else {
         setTextoArtigo(res.resultado || '');
-        // Não atualizar resultadoAtual aqui - o texto será mostrado na janela esquerda (TextWindow)
+        setTextoArtigoPt(res.resultado_pt ?? null);
         setUploadProgress(100); // Simula conclusão
       }
     } catch (err: any) {
@@ -400,7 +401,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       setModoConfiguracao(false);
       setTituloResultado('Metanálise PRISMA - Upload de Artigos');
       setEtapasMetanalise([]); // Limpar etapas anteriores
-      setTextoArtigo(null); // Limpar texto anterior para mostrar área de upload
+      setTextoArtigo(null);
+      setTextoArtigoPt(null);
       setArquivosMetanalise([]); // Limpar arquivos anteriores
       setAnalisesPrisma([]); // Limpar análises anteriores
       setResultadoAtual(null);
@@ -774,6 +776,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         <div className="w-1/2 p-6 border-r border-mq-slate-200 overflow-hidden flex flex-col">
           <TextWindow
             texto={textoArtigo}
+            textoPt={textoArtigoPt}
             loading={loadingResultado && uploadProgress > 0 && uploadProgress < 100}
             uploadProgress={uploadProgress}
             uploadError={uploadError}

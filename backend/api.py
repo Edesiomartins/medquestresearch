@@ -145,14 +145,16 @@ except ImportError:
         gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
 
 try:
-    from .pdf_processor import extrair_texto_pdf
+    from .pdf_processor import extrair_texto_pdf, obter_versao_portugues
 except ImportError:
     try:
         import pdf_processor
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
+        obter_versao_portugues = pdf_processor.obter_versao_portugues
     except ImportError:
         import backend.pdf_processor as pdf_processor  # type: ignore[reportMissingImports]
         extrair_texto_pdf = pdf_processor.extrair_texto_pdf
+        obter_versao_portugues = pdf_processor.obter_versao_portugues
 
 try:
     from .meta_analysis import gerar_meta_analise
@@ -1838,7 +1840,9 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
             texto_log = texto_extraido[:500] if isinstance(texto_extraido, str) else str(texto_extraido)[:500]
             registrar_log(user["id"], "pdf", "[ARQUIVO]", texto_log, custo, request)
 
-            return {"resultado": texto_extraido}
+            # Versão em português (Qwen/Groq quando disponível)
+            resultado_pt = obter_versao_portugues(texto_extraido)
+            return {"resultado": texto_extraido, "resultado_pt": resultado_pt}
 
         except HTTPException:
             raise

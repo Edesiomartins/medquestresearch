@@ -1,3 +1,4 @@
+import os
 import fitz  # PyMuPDF
 import re
 import unicodedata
@@ -11,6 +12,36 @@ except ImportError:
     except ImportError:
         import backend.gpt_engine as gpt_engine
         gerar_resposta = gpt_engine.gerar_resposta
+
+
+def _traduzir_chunk_qwen(chunk, max_tokens=2000):
+    """Traduz um chunk para português usando Groq + Qwen quando GROQ_API_KEY está definida."""
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_key)
+            model = os.getenv("GROQ_MODEL_TRADUCAO", "qwen2.5-7b-instruct")
+            prompt = f"""Traduza o seguinte texto científico para português brasileiro. Mantenha termos técnicos e nomes próprios. Seja preciso e mantenha a formatação. Responda apenas com a tradução.
+
+Texto:
+{chunk}
+
+Tradução em português brasileiro:"""
+            r = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=max_tokens,
+            )
+            if r.choices and r.choices[0].message.content:
+                return r.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[PDF] Groq/Qwen tradução falhou: {e}, usando fallback")
+    return gerar_resposta(
+        f"Traduza para português brasileiro (mantenha termos técnicos e formatação). Responda só com a tradução:\n\n{chunk}",
+        temperatura=0.3,
+    )
 
 def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
     doc = fitz.open(caminho_pdf)
@@ -60,8 +91,8 @@ def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
     # Normalizar e limpar formatação
     texto_completo = _formatar_texto(texto_completo)
     
-    # Traduzir para português se o texto estiver principalmente em inglês
-    texto_completo = _traduzir_para_portugues(texto_completo)
+    # Manter texto original na extração; versão em português é gerada na API
+    # texto_completo = _traduzir_para_portugues(texto_completo)  # desativado: retornamos original + pt na rota
     
     # Dividir em chunks para PDFs longos
     chunks = []
@@ -384,3 +415,38 @@ Tradução em português brasileiro:"""
     
     # Se já está em português ou não precisa traduzir, retornar original
     return texto
+
+
+def _precisa_traduzir_para_pt(texto):
+    """Retorna True se o texto parece estar em inglês e deve ser traduzido."""
+    if not texto or len(texto.strip()) < 50:
+        return False
+    palavras_ingles = ['the', 'and', 'of', 'to', 'in', 'for', 'is', 'are', 'was', 'were', 'this', 'that', 'with', 'from', 'by', 'as', 'an', 'be', 'been', 'have', 'has', 'had', 'will', 'would', 'could', 'should']
+    palavras_portugues = ['o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas', 'para', 'por', 'com', 'sem', 'que', 'qual', 'quais', 'é', 'são', 'foi', 'foram', 'ser', 'estar', 'ter', 'tem', 'teve']
+    texto_lower = texto.lower()
+    count_ingles = sum(1 for p in palavras_ingles if p in texto_lower)
+    count_portugues = sum(1 for p in palavras_portugues if p in texto_lower)
+    return count_ingles > count_portugues * 2 and count_ingles > 10
+
+
+def obter_versao_portugues(texto):
+    """
+    Retorna a versão em português do texto (usando Qwen/Groq quando disponível).
+    Se o texto já estiver em português ou tradução falhar, retorna o próprio texto.
+    """
+    if not texto or not texto.strip():
+        return texto
+    if not _precisa_traduzir_para_pt(texto):
+        return texto
+    try:
+        chunk_size = 2000
+        chunks = []
+        for i in range(0, len(texto), chunk_size):
+            chunk = texto[i:i + chunk_size]
+            if chunk.strip():
+                chunk_traduzido = _traduzir_chunk_qwen(chunk)
+                chunks.append(chunk_traduzido)
+        return '\n\n'.join(chunks) if chunks else texto
+    except Exception as e:
+        print(f"Erro ao obter versão em português: {e}")
+        return texto

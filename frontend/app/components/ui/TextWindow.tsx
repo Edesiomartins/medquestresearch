@@ -5,6 +5,7 @@ import { useMemo, useEffect, useState, useRef } from 'react';
 
 interface TextWindowProps {
   texto: string | null;
+  textoPt?: string | null; // Versão em português (tradução quando disponível)
   loading: boolean;
   uploadProgress: number;
   uploadError: string | null;
@@ -12,11 +13,11 @@ interface TextWindowProps {
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onFileSelect: (file: File) => void;
-  modoMetanalise?: boolean; // Novo: modo para upload múltiplo
-  onFilesSelect?: (files: File[]) => void; // Novo: callback para selecionar arquivos (sem upload)
-  onIniciarAnalise?: () => void; // Novo: callback para iniciar análise PRISMA
-  arquivosSelecionados?: File[]; // Novo: lista de arquivos selecionados
-  analisandoArtigos?: boolean; // Novo: indica se está analisando
+  modoMetanalise?: boolean;
+  onFilesSelect?: (files: File[]) => void;
+  onIniciarAnalise?: () => void;
+  arquivosSelecionados?: File[];
+  analisandoArtigos?: boolean;
 }
 
 // Função para consolidar texto removendo separadores de chunks
@@ -47,6 +48,7 @@ function consolidarTexto(texto: string | null): string | null {
 
 export default function TextWindow({
   texto,
+  textoPt = null,
   loading,
   uploadProgress,
   uploadError,
@@ -61,7 +63,12 @@ export default function TextWindow({
   analisandoArtigos = false,
 }: TextWindowProps) {
   const [mounted, setMounted] = useState(false);
+  const [abaTexto, setAbaTexto] = useState<'original' | 'pt'>('original');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textoConsolidadoPt = useMemo(() => {
+    if (!mounted || !textoPt) return textoPt;
+    return consolidarTexto(textoPt);
+  }, [textoPt, mounted]);
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -227,20 +234,50 @@ export default function TextWindow({
             </div>
           )}
         </div>
-      ) : (
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
-                <p className="text-slate-600">Processando arquivo...</p>
-              </div>
-            </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
-              <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans leading-relaxed wrap-break-word">
-                {textoConsolidado}
-              </div>
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {loading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
+                    <p className="text-slate-600">Processando arquivo...</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {texto && (textoPt != null) && (
+                    <div className="flex gap-1 mb-3 border-b border-slate-200 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setAbaTexto('original')}
+                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                          abaTexto === 'original'
+                            ? 'bg-[#0c3d66] text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Original
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAbaTexto('pt')}
+                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                          abaTexto === 'pt'
+                            ? 'bg-[#0c3d66] text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Português
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans leading-relaxed wrap-break-word">
+                      {abaTexto === 'pt' && textoConsolidadoPt != null ? textoConsolidadoPt : textoConsolidado}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
