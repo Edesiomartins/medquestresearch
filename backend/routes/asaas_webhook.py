@@ -2,8 +2,8 @@
 Webhook Asaas: processa PAYMENT_RECEIVED, credita usuário e registra pagamento.
 
 Requer no banco:
-- usuarios.asaas_customer_id (VARCHAR, nullable) – ID do cliente no Asaas (ex: cus_000143719698)
-- Tabela pagamentos com: usuario_id, payment_asaas_id (único), referencia, valor, evento, creditos_adicionados, created_at
+- usuarios.asaas_customer_id (VARCHAR, nullable) – ID do cliente no Asaas
+- Tabela pagamentos com: usuario_id, referencia (idempotência), valor, evento, created_at
 """
 
 from fastapi import APIRouter, Request, HTTPException
@@ -78,19 +78,19 @@ async def webhook_asaas(request: Request):
     customer_id = payment.get("customer")
     value = payment.get("value")
     payment_id = payment.get("id")
-    reference = payment.get("externalReference")
 
-    if not payment_id:
-        return {"status": "ok", "erro": "payload sem payment.id"}
+    reference = payment.get("externalReference")
+    if not reference:
+        return {"status": "ok", "erro": "payload sem externalReference"}
 
     try:
         conn = get_connection()
         try:
             with conn.cursor() as cur:
-                # Idempotência: já processamos este payment?
+                # Idempotência: já processamos esta referência?
                 cur.execute(
-                    "SELECT id FROM pagamentos WHERE payment_asaas_id = %s",
-                    (payment_id,),
+                    "SELECT id FROM pagamentos WHERE referencia = %s",
+                    (reference,),
                 )
                 if cur.fetchone():
                     conn.close()
@@ -115,10 +115,10 @@ async def webhook_asaas(request: Request):
                         raise HTTPException(status_code=500, detail="Falha ao adicionar créditos")
                     cur.execute(
                         """
-                        INSERT INTO pagamentos (usuario_id, payment_asaas_id, referencia, valor, evento, creditos_adicionados)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO pagamentos (usuario_id, referencia, valor, evento)
+                        VALUES (%s, %s, %s, %s)
                         """,
-                        (usuario_id, payment_id, reference, value, evento, creditos),
+                        (usuario_id, reference, value, evento),
                     )
                     conn.commit()
                     return {"status": "ok", "creditos_adicionados": creditos}
@@ -166,10 +166,10 @@ async def webhook_asaas(request: Request):
                 # Registrar pagamento (tabela pagamentos)
                 cur.execute(
                     """
-                    INSERT INTO pagamentos (usuario_id, payment_asaas_id, referencia, valor, evento, creditos_adicionados)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO pagamentos (usuario_id, referencia, valor, evento)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (usuario_id, payment_id, reference, value, evento, creditos),
+                    (usuario_id, reference, value, evento),
                 )
                 conn.commit()
             return {"status": "ok", "creditos_adicionados": creditos}
