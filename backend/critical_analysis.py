@@ -11,11 +11,19 @@ except ImportError:
 # Mapeamento de focos de análise para prompts específicos (simplificados para velocidade)
 PROMPTS_POR_FOCO = {
     "metodologia": """
-Analise CRITICAMENTE a metodologia do artigo científico abaixo. Foque em: desenho do estudo, métodos, controles, instrumentos, procedimentos, pontos fortes e fracos.
+Analise CRITICAMENTE a METODOLOGIA do artigo científico abaixo.
+Responda em português brasileiro, em formato estruturado e conciso:
 
-IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês.
+1. Desenho do estudo (2–4 frases)
+2. Amostragem e tamanho amostral (2–4 frases)
+3. Procedimentos / intervenção / controles (2–4 frases)
+4. Análise estatística (2–4 frases)
+5. Principais vieses e limitações (2–4 frases)
 
-Texto: {texto_artigo}
+Não repita o texto original, não faça resumo narrativo geral: foque na avaliação crítica.
+
+Texto do artigo:
+{texto_artigo}
 """,
     "validade": """
 Avalie CRITICAMENTE a validade interna e externa do estudo. Foque em: controle de variáveis, vieses, causalidade, generalização, representatividade da amostra.
@@ -67,11 +75,22 @@ IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja 
 Texto: {texto_artigo}
 """,
     "geral": """
-Realize análise crítica ABRANGENTE: metodologia, validade, confiabilidade, vieses, amostragem, estatística, ética, relevância, implicações.
+Realize uma ANÁLISE CRÍTICA ABRANGENTE do artigo científico abaixo.
+Responda em português brasileiro em, no máximo, 7 blocos numerados:
 
-IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês.
+1. Desenho do estudo (2–3 frases)
+2. Amostragem e participantes (2–3 frases)
+3. Métodos / intervenção / instrumentos (2–3 frases)
+4. Análise estatística (2–3 frases)
+5. Vieses e limitações (2–3 frases)
+6. Aspectos éticos relevantes (1–3 frases, se houver)
+7. Relevância clínica/científica e implicações (2–3 frases)
 
-Texto: {texto_artigo}
+Se alguma informação não estiver clara no texto, declare explicitamente que não foi possível avaliar.
+Não reescreva o artigo; foque em julgamento crítico.
+
+Texto do artigo:
+{texto_artigo}
 """
 }
 
