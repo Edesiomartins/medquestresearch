@@ -16,27 +16,20 @@ import re
 from functools import wraps
 from psycopg2 import IntegrityError
 
-# Carregar variáveis de ambiente do arquivo .env
+# Carregar variáveis de ambiente do arquivo .env (local). Em produção/Railway as vars vêm do ambiente.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 try:
     from dotenv import load_dotenv
-    # Carrega .env do diretório do backend
     env_path = os.path.join(BASE_DIR, '.env')
     if os.path.exists(env_path):
         load_dotenv(env_path)
-        print(f"[ENV] ✅ Arquivo .env carregado de: {env_path}")
-        # Verificar se DATABASE_URL foi carregada
-        if os.getenv("DATABASE_URL"):
-            print(f"[ENV] ✅ DATABASE_URL configurada (primeiros 30 chars): {os.getenv('DATABASE_URL')[:30]}...")
-        else:
-            print(f"[ENV] ⚠️ DATABASE_URL não encontrada no .env")
+        logging.info(f"[ENV] .env carregado de: {env_path}")
     else:
-        print(f"[ENV] ⚠️ Arquivo .env não encontrado em: {env_path}")
+        load_dotenv()  # tenta diretório atual; em produção não existe .env e está ok
 except ImportError:
-    # Se python-dotenv não estiver instalado, continua sem erro
-    print("[ENV] ⚠️ python-dotenv não instalado. Instale com: pip install python-dotenv")
+    pass  # python-dotenv opcional em produção
 except Exception as e:
-    print(f"[ENV] ❌ Erro ao carregar .env: {e}")
+    logging.debug(f"[ENV] Erro ao carregar .env: {e}")
 
 from fastapi import FastAPI, Request, HTTPException, Depends, Header, File, UploadFile, status, APIRouter
 from fastapi.responses import JSONResponse
