@@ -93,7 +93,14 @@ export function useAuth() {
       } else {
         // Só define o token após validação bem-sucedida
         setToken(tokenValue);
-        if (typeof res.creditos === 'number') {
+        // No backend, /creditos retorna:
+        // - creditos: total adquirido
+        // - creditos_usados: já consumidos
+        // - creditos_disponiveis: saldo atual
+        if (typeof (res as any).creditos_disponiveis === 'number') {
+          setCreditos((res as any).creditos_disponiveis);
+        } else if (typeof res.creditos === 'number') {
+          // Fallback para compatibilidade antiga
           setCreditos(res.creditos);
         }
         if (res.usuario) {
@@ -125,7 +132,9 @@ export function useAuth() {
         return false;
       }
 
-      hydrateSession(res.token, res.usuario, res.creditos);
+      const creditosDisponiveis =
+        (res as any).creditos_disponiveis ?? res.creditos;
+      hydrateSession(res.token, res.usuario, creditosDisponiveis);
       setLoading(false);
       return true;
     } catch (error: any) {
@@ -156,7 +165,9 @@ export function useAuth() {
         return false;
       }
 
-      hydrateSession(res.token, res.usuario, res.creditos);
+      const creditosDisponiveis =
+        (res as any).creditos_disponiveis ?? res.creditos;
+      hydrateSession(res.token, res.usuario, creditosDisponiveis);
       setLoading(false);
       return true;
     } catch (error: any) {
