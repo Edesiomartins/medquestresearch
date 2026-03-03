@@ -15,22 +15,21 @@ except ImportError:
         combine_responses = chunker.combine_responses
         estimate_tokens = chunker.estimate_tokens
 
-# Carrega chave do .env
-# Garantir que carrega do diretório correto
+# Carrega chave do .env (somente em desenvolvimento/local).
+# Em produção (Railway), as variáveis já vêm do ambiente, então evitamos prints ruidosos.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(BASE_DIR, '.env')
 if os.path.exists(env_path):
     load_dotenv(env_path)
-    print(f"[GPT_ENGINE] ✅ Arquivo .env carregado de: {env_path}")
+    logging.info(f"[GPT_ENGINE] Arquivo .env carregado de: {env_path}")
 else:
-    # Tentar carregar do diretório pai (se executado da raiz)
     parent_env = os.path.join(os.path.dirname(BASE_DIR), '.env')
     if os.path.exists(parent_env):
         load_dotenv(parent_env)
-        print(f"[GPT_ENGINE] ✅ Arquivo .env carregado de: {parent_env}")
+        logging.info(f"[GPT_ENGINE] Arquivo .env carregado de: {parent_env}")
     else:
-        load_dotenv()  # Tentar carregar do diretório atual
-        print(f"[GPT_ENGINE] ⚠️ Tentando carregar .env do diretório atual")
+        # Tenta carregar do diretório atual, mas sem logar warning se não existir.
+        load_dotenv()
 
 def _check_research_env():
     if not os.getenv("API_OPENAI_KEY_RESEARCH"):
