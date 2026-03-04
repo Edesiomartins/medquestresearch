@@ -64,7 +64,6 @@ export default function Sidebar({
     { href: '/', icon: '🧠', label: 'Mapear estrutura', tipo: 'structure_mapper' },
     { href: '/', icon: '✓', label: 'Verificar fatos', tipo: 'fatos' },
     { href: '/', icon: '📚', label: 'Explicar conteúdo', tipo: 'explicar' },
-    { href: '/', icon: '🌍', label: 'Perspectivas científicas', tipo: 'perspectiva' },
     { href: '/', icon: '🔬', label: 'Análise crítica', tipo: 'critica' },
     { href: '/', icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
   ];

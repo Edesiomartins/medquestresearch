@@ -355,8 +355,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         return 'Mapeando a organização lógica do estudo…';
       case 'fatos':
         return 'Verificando afirmações e evidências…';
-      case 'perspectiva':
-        return 'Executando análise científica comparativa…';
       case 'critica':
         return 'Aplicando leitura crítica aprofundada…';
       case 'explicar':
@@ -389,7 +387,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       structure_mapper: 'Mapeamento de Estrutura',
       structure_visualizer: 'Visualização de Estrutura',
       fatos: 'Verificação de Fatos',
-      perspectiva: 'Perspectivas Científicas',
       critica: 'Análise Crítica',
       'meta-analise': 'Metanálise PRISMA',
     };
@@ -461,9 +458,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         case 'fatos':
           res = await verificarFatos(token, textoArtigo);
           break;
-        case 'perspectiva':
-          res = await pesquisarPerspectiva(token, textoArtigo);
-          break;
         default:
           throw new Error('Tipo de análise não reconhecido');
       }
@@ -507,7 +501,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       structure_mapper: 'Mapeamento de Estrutura',
       structure_visualizer: 'Visualização de Estrutura',
       fatos: 'Verificação de Fatos',
-      perspectiva: 'Perspectivas Científicas',
       critica: 'Análise Crítica',
       'meta-analise': 'Metanálise PRISMA',
     };

@@ -321,13 +321,6 @@ export async function factChecker(
   return apiCall(API_ENDPOINTS.FACT_CHECKER, 'POST', { texto_artigo }, token);
 }
 
-export async function perspectiveResearch(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.PERSPECTIVE_RESEARCH, 'POST', { texto_artigo }, token);
-}
-
 // ============================================
 // Funções de Estrutura
 // ============================================

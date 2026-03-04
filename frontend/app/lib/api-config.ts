@@ -54,7 +54,6 @@ export const API_ENDPOINTS = {
   EXPLICAR: '/genapi/explicar',
   CRITICA: '/genapi/critica',
   FATOS: '/genapi/fatos',
-  PERSPECTIVA: '/genapi/perspectiva',
   MAPA: '/genapi/mapa',
   PDF: '/genapi/pdf',
   TRADUCAO: '/genapi/traducao',
@@ -63,7 +62,6 @@ export const API_ENDPOINTS = {
   CRITICAL_ANALYSIS: '/genapi/critical_analysis',
   EXPLAIN_CONCEPT: '/genapi/explain_concept',
   FACT_CHECKER: '/genapi/fact_checker',
-  PERSPECTIVE_RESEARCH: '/genapi/perspective_research',
   META_ANALYSIS: '/genapi/meta_analysis',
   META_ANALYSE: '/genapi/meta_analise', // Alias para compatibilidade
   

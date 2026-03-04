@@ -108,16 +108,6 @@ except ImportError:
         verificar_fatos = Fact_checker.verificar_fatos
 
 try:
-    from .Perspective_research import buscar_perspectivas_pubmed
-except ImportError:
-    try:
-        import Perspective_research
-        buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
-    except ImportError:
-        import backend.Perspective_research as Perspective_research  # type: ignore[reportMissingImports]
-        buscar_perspectivas_pubmed = Perspective_research.buscar_perspectivas_pubmed
-
-try:
     from .structure_visualizer import visualizar_estrutura
 except ImportError:
     try:
@@ -552,60 +542,6 @@ def processar_job_fatos(job_id: int, texto_artigo: str):
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - fatos\n{erro}")
-        
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
-                    ("failed", erro[:1000], job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-
-def processar_job_perspectiva(job_id: int, texto_artigo: str):
-    """Processa job de pesquisa de perspectivas em background."""
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - perspectiva")
-        
-        # Limitar texto para reduzir tempo de processamento
-        texto_artigo = texto_artigo[:4000]
-        
-        def processar_chunk(chunk):
-            return buscar_perspectivas_pubmed(chunk)
-        
-        resultado = run_with_two_chunks(
-            texto_artigo,
-            processar_chunk,
-            chunk_size=2000,  # Aumentado para reduzir número de chunks
-            overlap=200  # Reduzido para acelerar
-        )
-        
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-        
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - perspectiva")
-        
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - perspectiva\n{erro}")
         
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         # autocommit=False para permitir controle explícito do commit
@@ -1109,16 +1045,23 @@ def cadastro(request: Request, data: CadastroInput):
         )
 
         # Buscar usuário criado, gerar token e retornar (login automático pós-cadastro)
-        row = db_select_one("SELECT id, nome, email FROM usuarios WHERE email=%s", (data.email,))
+        row = db_select_one("SELECT id, nome, email, creditos, creditos_usados FROM usuarios WHERE email=%s", (data.email,))
         if not row:
             return JSONResponse(status_code=500, content={"erro": "Erro ao criar usuário"})
 
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
 
+        creditos = row.get("creditos", 0) or 0
+        creditos_usados = row.get("creditos_usados", 0) or 0
+        creditos_disponiveis = max(0, creditos - creditos_usados)
+
         return {
             "token": token,
             "usuario": {"id": row["id"], "nome": row["nome"], "email": row["email"]},
+            "creditos": creditos,
+            "creditos_usados": creditos_usados,
+            "creditos_disponiveis": creditos_disponiveis,
             "mensagem": "Usuário criado com sucesso"
         }
 
@@ -1159,9 +1102,16 @@ def login(request: Request, data: LoginRequest):
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
 
+        creditos = row.get("creditos", 0) or 0
+        creditos_usados = row.get("creditos_usados", 0) or 0
+        creditos_disponiveis = max(0, creditos - creditos_usados)
+
         return {
             "token": token,
             "usuario": {"id": row["id"], "nome": row["nome"], "email": row["email"]},
+            "creditos": creditos,
+            "creditos_usados": creditos_usados,
+            "creditos_disponiveis": creditos_disponiveis,
             "status": "Login realizado com sucesso"
         }
 
@@ -1487,41 +1437,6 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /fatos")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-
-@api_router.post("/perspectiva")
-@api_router.post("/perspective_research")
-@limiter.limit("10 per minute")
-def rota_perspectiva(request: Request, data: InputPerspectiva, user = Depends(require_api_key)):
-    try:
-        custo = consumir_creditos(user["id"], "perspectiva")
-
-        # Criar job assíncrono
-        job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
-            (user["id"], "perspectiva", "processing", data.texto_artigo, custo)
-        )
-
-        # Iniciar processamento em background
-        threading.Thread(
-            target=processar_job_perspectiva,
-            args=(job_id, data.texto_artigo),
-            daemon=True
-        ).start()
-
-        return JSONResponse(
-            content={
-                "request_id": job_id,
-                "status": "processing"
-            },
-            status_code=202
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print("ERRO NA ROTA /perspectiva")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
@@ -1894,7 +1809,6 @@ def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends
             "explicar": "Explicação de Conceito",
             "critica": "Análise Crítica",
             "fatos": "Verificação de Fatos",
-            "perspectiva": "Pesquisa de Perspectivas",
             "mapa": "Mapa Conceitual",
             "structure_mapper": "Mapeamento de Estrutura",
             "meta_analise": "Metanálise",
