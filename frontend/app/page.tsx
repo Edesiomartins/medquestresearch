@@ -157,8 +157,8 @@ export default function Home() {
       setUploadError("Nenhum arquivo selecionado.");
       return;
     }
-    if (files.length > 15) {
-      setUploadError("Máximo de 15 artigos permitidos.");
+    if (files.length > 25) {
+      setUploadError("Máximo de 25 artigos permitidos.");
       return;
     }
 
@@ -237,8 +237,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       setUploadError("Nenhum arquivo selecionado.");
       return;
     }
-    if (files.length > 15) {
-      setUploadError("Máximo de 15 artigos permitidos.");
+    if (files.length > 25) {
+      setUploadError("Máximo de 25 artigos permitidos.");
       return;
     }
 
@@ -330,8 +330,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       if (cardAtivo === 'meta-analise') {
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-          if (files.length > 15) {
-            setUploadError('Máximo de 15 artigos permitidos');
+          if (files.length > 25) {
+            setUploadError('Máximo de 25 artigos permitidos');
             return;
           }
           handleSelecionarArquivos(files);

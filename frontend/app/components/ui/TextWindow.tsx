@@ -115,8 +115,8 @@ export default function TextWindow({
                 const files = e.target.files;
                 if (modoMetanalise && files && files.length > 0) {
                   const fileArray = Array.from(files);
-                  if (fileArray.length > 15) {
-                    alert('Máximo de 15 artigos permitidos');
+                  if (fileArray.length > 25) {
+                    alert('Máximo de 25 artigos permitidos');
                     e.target.value = '';
                     return;
                   }
@@ -135,7 +135,7 @@ export default function TextWindow({
               <div className="text-6xl mb-4">{modoMetanalise ? '📚' : '📄'}</div>
               <p className="text-lg font-semibold text-mq-slate-700 mb-2">
                 {modoMetanalise
-                  ? 'Arraste e solte seus artigos aqui (máx. 15)'
+                  ? 'Arraste e solte seus artigos aqui (máx. 25)'
                   : 'Arraste e solte seu arquivo aqui'}
               </p>
               <p className="text-sm text-mq-slate-500">
@@ -145,7 +145,7 @@ export default function TextWindow({
               </p>
               <p className="text-xs text-mq-slate-400 mt-2">
                 {modoMetanalise
-                  ? '(PDF, DOCX - máximo 15 artigos)'
+                  ? '(PDF, DOCX - máximo 25 artigos)'
                   : '(PDF, DOCX - máximo 10MB)'}
               </p>
             </div>

@@ -1513,19 +1513,19 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
 @limiter.limit("5 per minute")
 async def rota_upload_artigos_metanalise(
     request: Request, 
-    files: list[UploadFile] = File(..., description="Lista de arquivos PDF/DOCX (máx. 15)"),
+    files: list[UploadFile] = File(..., description="Lista de arquivos PDF/DOCX (máx. 25)"),
     user = Depends(require_api_key)
 ):
     """
     Endpoint para upload múltiplo de artigos científicos para metanálise.
-    Aceita até 15 arquivos PDF/DOCX e faz análise PRISMA de cada um.
+    Aceita até 25 arquivos PDF/DOCX e faz análise PRISMA de cada um.
     """
     try:
         # Validar número de arquivos
-        if len(files) > 15:
+        if len(files) > 25:
             raise HTTPException(
                 status_code=400, 
-                detail="Máximo de 15 artigos permitidos"
+                detail="Máximo de 25 artigos permitidos"
             )
         
         if len(files) == 0:
