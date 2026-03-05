@@ -91,7 +91,7 @@ export default function TextWindow({
       <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">
         {modoMetanalise ? 'Upload de Artigos - Metanálise PRISMA' : 'Texto Extraído'}
       </h2>
-      
+
       {!texto ? (
         <div className="flex-1 flex flex-col items-center justify-center">
           {/* Área de Upload */}
@@ -114,21 +114,18 @@ export default function TextWindow({
               onChange={(e) => {
                 const files = e.target.files;
                 if (modoMetanalise && files && files.length > 0) {
-                  // Modo metanálise: apenas selecionar arquivos (não fazer upload ainda)
                   const fileArray = Array.from(files);
                   if (fileArray.length > 15) {
                     alert('Máximo de 15 artigos permitidos');
-                    e.target.value = ''; // Limpar seleção
+                    e.target.value = '';
                     return;
                   }
                   if (onFilesSelect) {
                     onFilesSelect(fileArray);
                   }
                 } else if (files && files[0]) {
-                  // Modo normal: arquivo único (upload automático)
                   onFileSelect(files[0]);
                 }
-                // Limpar input para permitir selecionar os mesmos arquivos novamente
                 e.target.value = '';
               }}
               className={modoMetanalise ? 'hidden' : 'absolute inset-0 opacity-0 cursor-pointer'}
@@ -137,24 +134,22 @@ export default function TextWindow({
             <div className={`text-center ${modoMetanalise ? 'pointer-events-none' : ''}`}>
               <div className="text-6xl mb-4">{modoMetanalise ? '📚' : '📄'}</div>
               <p className="text-lg font-semibold text-mq-slate-700 mb-2">
-                {modoMetanalise 
+                {modoMetanalise
                   ? 'Arraste e solte seus artigos aqui (máx. 15)'
-                  : 'Arraste e solte seu arquivo aqui'
-                }
+                  : 'Arraste e solte seu arquivo aqui'}
               </p>
               <p className="text-sm text-mq-slate-500">
-                {modoMetanalise 
+                {modoMetanalise
                   ? 'Ou use o botão abaixo para selecionar arquivos'
-                  : 'ou clique para selecionar'
-                }
+                  : 'ou clique para selecionar'}
               </p>
               <p className="text-xs text-mq-slate-400 mt-2">
-                {modoMetanalise 
+                {modoMetanalise
                   ? '(PDF, DOCX - máximo 15 artigos)'
-                  : '(PDF, DOCX - máximo 10MB)'
-                }
+                  : '(PDF, DOCX - máximo 10MB)'}
               </p>
             </div>
+
             {modoMetanalise && (
               <div className="mt-4 flex flex-col items-center gap-3 pointer-events-auto">
                 <button
@@ -166,51 +161,54 @@ export default function TextWindow({
                 </button>
               </div>
             )}
+
             {modoMetanalise && arquivosSelecionados.length > 0 && (
-                <div className="mt-4 w-full max-w-md mx-auto space-y-3">
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-semibold text-blue-900 mb-2">
-                      {arquivosSelecionados.length} artigo{arquivosSelecionados.length > 1 ? 's' : ''} selecionado{arquivosSelecionados.length > 1 ? 's' : ''}:
-                    </p>
-                    <div className="text-xs text-blue-700 space-y-1 max-h-32 overflow-y-auto">
-                      {arquivosSelecionados.map((file, idx) => (
-                        <div key={idx} className="truncate">• {file.name}</div>
-                      ))}
-                    </div>
+              <div className="mt-4 w-full max-w-md mx-auto space-y-3">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-semibold text-blue-900 mb-2">
+                    {arquivosSelecionados.length} artigo
+                    {arquivosSelecionados.length > 1 ? 's' : ''} selecionado
+                    {arquivosSelecionados.length > 1 ? 's' : ''}:
+                  </p>
+                  <div className="text-xs text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                    {arquivosSelecionados.map((file, idx) => (
+                      <div key={idx} className="truncate">
+                        • {file.name}
+                      </div>
+                    ))}
                   </div>
-                  
-                  {/* Botão para iniciar análise */}
-                  <button
-                    onClick={() => {
-                      if (onIniciarAnalise) {
-                        onIniciarAnalise();
-                      }
-                    }}
-                    disabled={analisandoArtigos || arquivosSelecionados.length === 0}
-                    className={`
-                      w-full px-6 py-3 rounded-lg font-semibold text-white
-                      transition-all duration-200
-                      ${analisandoArtigos || arquivosSelecionados.length === 0
-                        ? 'bg-slate-400 cursor-not-allowed'
-                        : 'bg-[#2563eb] hover:bg-[#1d4ed8] shadow-md hover:shadow-lg'
-                      }
-                      flex items-center justify-center gap-2
-                    `}
-                  >
-                    {analisandoArtigos ? (
-                      <>
-                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                        <span>Analisando artigos...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>🔬</span>
-                        <span>Iniciar Análise PRISMA</span>
-                      </>
-                    )}
-                  </button>
                 </div>
-              )}
+
+                <button
+                  onClick={() => {
+                    if (onIniciarAnalise) {
+                      onIniciarAnalise();
+                    }
+                  }}
+                  disabled={analisandoArtigos || arquivosSelecionados.length === 0}
+                  className={`
+                    w-full px-6 py-3 rounded-lg font-semibold text-white
+                    transition-all duration-200
+                    ${analisandoArtigos || arquivosSelecionados.length === 0
+                      ? 'bg-slate-400 cursor-not-allowed'
+                      : 'bg-[#2563eb] hover:bg-[#1d4ed8] shadow-md hover:shadow-lg'}
+                    flex items-center justify-center gap-2
+                  `}
+                >
+                  {analisandoArtigos ? (
+                    <>
+                      <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                      <span>Analisando artigos...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔬</span>
+                      <span>Iniciar Análise PRISMA</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
             {/* Progresso de Upload */}
             {uploadProgress > 0 && uploadProgress < 100 && (
@@ -240,76 +238,75 @@ export default function TextWindow({
             </div>
           )}
         </div>
-          ) : (
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {loading ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
-                    <p className="text-slate-600">Processando arquivo...</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {texto && !modoMetanalise && (
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      {textoPt != null ? (
-                        <div className="flex gap-1 border-b border-slate-200 pb-2">
-                          <button
-                            type="button"
-                            onClick={() => setAbaTexto('original')}
-                            className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
-                              abaTexto === 'original'
-                                ? 'bg-[#0c3d66] text-white'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                          >
-                            Original
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAbaTexto('pt')}
-                            className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
-                              abaTexto === 'pt'
-                                ? 'bg-[#0c3d66] text-white'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                          >
-                            Português
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={onTraduzir}
-                            disabled={loadingTraduzir}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0c3d66] text-white hover:bg-[#0a3255] disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                          >
-                            {loadingTraduzir ? (
-                              <>
-                                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                Traduzir texto...
-                              </>
-                            ) : (
-                              <>Traduzir texto</>
-                            )}
-                          </button>
-                          {traduzirErro && (
-                            <p className="text-sm text-red-600">{traduzirErro}</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans leading-relaxed wrap-break-word">
-                      {abaTexto === 'pt' && textoConsolidadoPt != null ? textoConsolidadoPt : textoConsolidado}
-                    </div>
-                  </div>
-                </>
-              )}
+      ) : (
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
+                <p className="text-slate-600">Processando arquivo...</p>
+              </div>
             </div>
+          ) : (
+            <>
+              {texto && !modoMetanalise && (
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  {textoPt != null ? (
+                    <div className="flex gap-1 border-b border-slate-200 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setAbaTexto('original')}
+                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                          abaTexto === 'original'
+                            ? 'bg-[#0c3d66] text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Original
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAbaTexto('pt')}
+                        className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                          abaTexto === 'pt'
+                            ? 'bg-[#0c3d66] text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Português
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={onTraduzir}
+                        disabled={loadingTraduzir}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-[#0c3d66] text-white hover:bg-[#0a3255] disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                      >
+                        {loadingTraduzir ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Traduzir texto...
+                          </>
+                        ) : (
+                          <>Traduzir texto</>
+                        )}
+                      </button>
+                      {traduzirErro && (
+                        <p className="text-sm text-red-600">{traduzirErro}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto">
+                <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans leading-relaxed wrap-break-word">
+                  {abaTexto === 'pt' && textoConsolidadoPt != null ? textoConsolidadoPt : textoConsolidado}
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
