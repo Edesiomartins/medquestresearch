@@ -1,18 +1,42 @@
+from __future__ import annotations
+
 import os
 import time
+import json
+import hashlib
 import logging
+from typing import Any, Dict, List, Optional
+
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# Tentar importação relativa primeiro, depois absoluta
+# Exceções do OpenAI (SDK v1+); fallback se não existirem
+try:
+    from openai import (
+        AuthenticationError,
+        RateLimitError,
+        APIConnectionError,
+        APITimeoutError,
+        BadRequestError,
+    )
+except ImportError:
+    AuthenticationError = type("AuthenticationError", (Exception,), {})
+    RateLimitError = type("RateLimitError", (Exception,), {})
+    APIConnectionError = type("APIConnectionError", (Exception,), {})
+    APITimeoutError = type("APITimeoutError", (Exception,), {})
+    BadRequestError = type("BadRequestError", (Exception,), {})
+
+# -----------------------------
+# Imports locais (chunker, model_router, cache)
+# -----------------------------
 try:
     from .chunker import chunk_text, combine_responses, estimate_tokens
-    from .model_router import escolher_modelo, MODELOS_FALLBACK
+    from .model_router import modelos_para_tipo, MODELOS_FALLBACK
     from .cache_llm import get_cached, set_cached
 except ImportError:
     try:
         from chunker import chunk_text, combine_responses, estimate_tokens
-        from model_router import escolher_modelo, MODELOS_FALLBACK
+        from model_router import modelos_para_tipo, MODELOS_FALLBACK
         from cache_llm import get_cached, set_cached
     except ImportError:
         import backend.chunker as chunker
@@ -21,309 +45,381 @@ except ImportError:
         chunk_text = chunker.chunk_text
         combine_responses = chunker.combine_responses
         estimate_tokens = chunker.estimate_tokens
-        escolher_modelo = model_router.escolher_modelo
+        modelos_para_tipo = model_router.modelos_para_tipo
         MODELOS_FALLBACK = model_router.MODELOS_FALLBACK
         get_cached = cache_llm.get_cached
         set_cached = cache_llm.set_cached
 
-# Carrega chave do .env (somente em desenvolvimento/local).
-# Em produção (Railway), as variáveis já vêm do ambiente, então evitamos prints ruidosos.
+# Carrega .env (desenvolvimento/local)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(BASE_DIR, '.env')
+env_path = os.path.join(BASE_DIR, ".env")
 if os.path.exists(env_path):
     load_dotenv(env_path)
-    logging.info(f"[GPT_ENGINE] Arquivo .env carregado de: {env_path}")
 else:
-    parent_env = os.path.join(os.path.dirname(BASE_DIR), '.env')
+    parent_env = os.path.join(os.path.dirname(BASE_DIR), ".env")
     if os.path.exists(parent_env):
         load_dotenv(parent_env)
-        logging.info(f"[GPT_ENGINE] Arquivo .env carregado de: {parent_env}")
     else:
-        # Tenta carregar do diretório atual, mas sem logar warning se não existir.
         load_dotenv()
 
+# -----------------------------
+# Logging
+# -----------------------------
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
+
+# -----------------------------
+# Helpers de ENV
+# -----------------------------
+def _env(name: str, default: Optional[str] = None) -> Optional[str]:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    val = val.strip()
+    return val if val else default
+
+
 def _get_api_key(use_backup: bool = False) -> str:
-    """Chave principal: API_OPENAI_KEY_RESEARCH ou OPENROUTER_API_KEY_MAIN. Backup: OPENROUTER_API_KEY_BACKUP."""
+    """Chave principal ou backup (OpenRouter)."""
     if use_backup:
-        return (os.getenv("OPENROUTER_API_KEY_BACKUP") or "").strip()
-    return (os.getenv("API_OPENAI_KEY_RESEARCH") or os.getenv("OPENROUTER_API_KEY_MAIN") or "").strip()
+        return (_env("OPENROUTER_API_KEY_BACKUP") or "").strip()
+    return (
+        _env("API_OPENAI_KEY_RESEARCH")
+        or _env("OPENROUTER_API_KEY_MAIN")
+        or _env("OPENROUTER_API_KEY")
+        or ""
+    ).strip()
 
 
-def _check_research_env():
+def _check_research_env() -> None:
     if not _get_api_key(use_backup=False):
-        raise RuntimeError("API_OPENAI_KEY_RESEARCH ou OPENROUTER_API_KEY_MAIN não configurada")
+        raise RuntimeError(
+            "Defina API_OPENAI_KEY_RESEARCH, OPENROUTER_API_KEY_MAIN ou OPENROUTER_API_KEY."
+        )
 
-# Inicializa cliente OpenAI (será criado quando necessário); _client_use_backup indica se usamos chave backup
-client = None
+
+def _parse_models() -> List[str]:
+    """Lista de modelos a partir de ENV. Se vazio, usa model_router em gerar_resposta."""
+    main = _env("OPENAI_MODEL")
+    fb_raw = _env("OPENAI_MODEL_FALLBACK", "") or ""
+    fallbacks = [m.strip() for m in fb_raw.split(",") if m.strip()]
+    models: List[str] = []
+    if main:
+        models.append(main)
+    models.extend([m for m in fallbacks if m and m not in models])
+    if not models:
+        models = list(MODELOS_FALLBACK)
+    return models
+
+
+# -----------------------------
+# Cache em memória (opcional)
+# -----------------------------
+_CACHE_ENABLED = (_env("LLM_CACHE_ENABLED", "true") or "true").lower() in ("1", "true", "yes", "on")
+_CACHE_MAX_ITEMS = int(_env("LLM_CACHE_MAX_ITEMS", "200") or 200)
+_cache: Dict[str, str] = {}
+_cache_order: List[str] = []
+
+
+def _cache_key(model: str, prompt: str, temperature: float, max_tokens: int) -> str:
+    h = hashlib.sha256()
+    h.update(model.encode("utf-8"))
+    h.update(b"|")
+    h.update(str(temperature).encode("utf-8"))
+    h.update(b"|")
+    h.update(str(max_tokens).encode("utf-8"))
+    h.update(b"|")
+    h.update(prompt.encode("utf-8", errors="ignore")[:16000])
+    return h.hexdigest()
+
+
+def _cache_get(key: str) -> Optional[str]:
+    if not _CACHE_ENABLED:
+        return None
+    return _cache.get(key)
+
+
+def _cache_set(key: str, value: str) -> None:
+    if not _CACHE_ENABLED:
+        return
+    if key in _cache:
+        _cache[key] = value
+        return
+    _cache[key] = value
+    _cache_order.append(key)
+    while len(_cache_order) > _CACHE_MAX_ITEMS:
+        old = _cache_order.pop(0)
+        _cache.pop(old, None)
+
+
+# -----------------------------
+# Cliente OpenRouter
+# -----------------------------
+OPENAI_API_BASE = _env("OPENAI_API_BASE", "https://openrouter.ai/api/v1") or "https://openrouter.ai/api/v1"
+HTTP_REFERER = _env("OPENROUTER_HTTP_REFERER") or _env("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app") or ""
+APP_TITLE = _env("OPENROUTER_APP_TITLE", "MedQuestResearch") or "MedQuestResearch"
+
+_client: Optional[OpenAI] = None
 _client_use_backup = False
 
-def _get_client(use_backup: bool = False):
-    """Retorna o cliente OpenAI. use_backup=True usa OPENROUTER_API_KEY_BACKUP (após 401 na chave principal)."""
-    global client, _client_use_backup
-    if client is None or _client_use_backup != use_backup:
-        key = _get_api_key(use_backup=use_backup)
-        if use_backup and not key:
-            raise RuntimeError("OPENROUTER_API_KEY_BACKUP não configurada")
-        if not use_backup:
-            _check_research_env()
-        client = None
-        _client_use_backup = use_backup
-        api_key = key if use_backup else _get_api_key(use_backup=False)
-        base_url = os.getenv("OPENAI_API_BASE")  # ex.: https://openrouter.ai/api/v1
-        if base_url and "openrouter.ai" in base_url:
-            default_headers = {
-                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
-                "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
-            }
-            try:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url=base_url,
-                    default_headers=default_headers
-                )
-                logging.info(f"[GPT_ENGINE] Cliente OpenRouter configurado ({'backup' if use_backup else 'main'})")
-            except Exception as e:
-                logging.warning(f"[GPT_ENGINE] Erro ao configurar headers, tentando sem headers: {e}")
-                client = OpenAI(api_key=api_key, base_url=base_url)
-        else:
-            client = OpenAI(api_key=api_key)
-    return client
 
-def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None, use_backup_key: bool = False):
-    """
-    Chama a API do OpenRouter (ou OpenAI).
-    use_backup_key: usa OPENROUTER_API_KEY_BACKUP quando True (após 401 na chave principal).
-    """
-    cliente = _get_client(use_backup=use_backup_key)
-    base_url = os.getenv("OPENAI_API_BASE", "")
-    is_openrouter = base_url and "openrouter.ai" in base_url
-
-    # Configurar max_output_tokens se não fornecido
-    if max_output_tokens is None:
-        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
-    max_output_tokens = min(max_output_tokens, 2000)
-
-    prompt_length = len(prompt) if prompt else 0
-    if prompt_length > 10000:
-        max_output_tokens = min(max_output_tokens, 500)
-        logging.warning(f"[GPT_ENGINE] Prompt longo ({prompt_length} chars), reduzindo max_output_tokens para {max_output_tokens}")
-
+def _get_client(use_backup: bool = False) -> OpenAI:
+    global _client, _client_use_backup
+    if _client is not None and _client_use_backup == use_backup:
+        return _client
+    key = _get_api_key(use_backup=use_backup)
+    if use_backup and not key:
+        raise RuntimeError("OPENROUTER_API_KEY_BACKUP não configurada")
+    if not use_backup:
+        _check_research_env()
+    _client = None
+    _client_use_backup = use_backup
+    base_url = OPENAI_API_BASE
+    headers: Dict[str, str] = {}
+    if base_url and "openrouter.ai" in base_url:
+        headers = {"HTTP-Referer": HTTP_REFERER, "X-Title": APP_TITLE}
     try:
-        if is_openrouter:
-            # OpenRouter: endpoint chat/completions com messages (formato esperado pelo Nemotron e demais modelos)
-            params = {
-                "model": modelo,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_output_tokens,
-            }
-            if temperatura is not None:
-                params["temperature"] = temperatura
-            response = cliente.chat.completions.create(**params)
-            text = response.choices[0].message.content if response.choices else ""
-            return text or ""
-        else:
-            # Compatibilidade: API Responses (ex.: OpenAI direto)
-            params = {
-                "model": modelo,
-                "input": prompt,
-                "max_output_tokens": max_output_tokens,
-            }
-            if temperatura is not None:
-                params["temperature"] = temperatura
-            response = cliente.responses.create(**params)
-            if hasattr(response, 'output_text'):
-                return response.output_text
-            if hasattr(response, 'output') and isinstance(response.output, list) and len(response.output) > 0:
-                first_output = response.output[0]
-                if isinstance(first_output, dict) and 'content' in first_output:
-                    return first_output['content']
-                if isinstance(first_output, str):
-                    return first_output
-            if hasattr(response, 'output') and isinstance(response.output, str):
-                return response.output
-            return str(response)
-    except Exception as e:
-        # Log detalhado do erro
-        import traceback
-        error_traceback = traceback.format_exc()
-        error_message = str(e)
-        
-        logging.error(f"[GPT_ENGINE] ❌ Erro ao chamar API:")
-        logging.error(f"[GPT_ENGINE] Modelo: {modelo}")
-        logging.error(f"[GPT_ENGINE] Erro: {error_message}")
-        logging.error(f"[GPT_ENGINE] Tipo do erro: {type(e).__name__}")
-        
-        # Tentar extrair mais informações do erro da API
-        if hasattr(e, 'status_code'):
-            logging.error(f"[GPT_ENGINE] Status code: {e.status_code}")
-        if hasattr(e, 'response'):
-            try:
-                if hasattr(e.response, 'text'):
-                    response_text = e.response.text
-                    logging.error(f"[GPT_ENGINE] Response text: {response_text}")
-                    # Tentar parsear como JSON
-                    try:
-                        import json
-                        error_json = json.loads(response_text)
-                        logging.error(f"[GPT_ENGINE] Response JSON: {json.dumps(error_json, indent=2)}")
-                    except:
-                        pass
-                if hasattr(e.response, 'json'):
-                    try:
-                        error_json = e.response.json()
-                        logging.error(f"[GPT_ENGINE] Response JSON: {json.dumps(error_json, indent=2)}")
-                    except:
-                        pass
-            except Exception as parse_error:
-                logging.error(f"[GPT_ENGINE] Erro ao parsear resposta: {parse_error}")
-        
-        logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
-        
-        # 401 = chave inválida/desativada: não tentar outros modelos com a mesma chave
-        status_code = getattr(e, "status_code", None)
-        if status_code == 401 or "401" in error_message:
-            raise Exception("API key inválida ou desativada. Verifique OPENROUTER/API_OPENAI_KEY_RESEARCH no Railway.")
-        raise Exception(f"Erro ao chamar API OpenRouter com modelo '{modelo}': {error_message}")
+        _client = OpenAI(api_key=key, base_url=base_url, default_headers=headers)
+    except Exception:
+        _client = OpenAI(api_key=key, base_url=base_url)
+    return _client
 
-def gerar_resposta(prompt, temperatura=0.7, max_output_tokens=None, tipo="geral", use_cache=True):
+
+# -----------------------------
+# Classificação de erros
+# -----------------------------
+def _is_rate_limit(err: Exception) -> bool:
+    return isinstance(err, RateLimitError) or "429" in str(err)
+
+
+def _is_auth(err: Exception) -> bool:
+    return isinstance(err, AuthenticationError) or "401" in str(err) or "User not found" in str(err)
+
+
+def _is_bad_request(err: Exception) -> bool:
+    return isinstance(err, BadRequestError) or "400" in str(err)
+
+
+def _is_transient(err: Exception) -> bool:
+    return (
+        isinstance(err, (RateLimitError, APIConnectionError, APITimeoutError))
+        or "timeout" in str(err).lower()
+        or "rate" in str(err).lower()
+    )
+
+
+# -----------------------------
+# Chamada ao modelo (uma requisição)
+# -----------------------------
+def _call_chat_completion(
+    model: str,
+    prompt: str,
+    temperature: float,
+    max_tokens: int,
+    timeout_s: int = 60,
+    use_backup_key: bool = False,
+) -> str:
+    client = _get_client(use_backup=use_backup_key)
+    params: Dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    try:
+        resp = client.chat.completions.create(**params, timeout=timeout_s)
+    except TypeError:
+        resp = client.chat.completions.create(**params)
+    try:
+        return (resp.choices[0].message.content or "").strip()
+    except Exception:
+        return str(resp).strip()
+
+
+# -----------------------------
+# API pública: gerar_resposta
+# -----------------------------
+def gerar_resposta(
+    prompt: str,
+    temperatura: float = 0.3,
+    max_output_tokens: Optional[int] = None,
+    tipo: str = "geral",
+    timeout_s: int = 60,
+    use_cache: bool = True,
+) -> str:
     """
-    Gera resposta usando o modelo escolhido pelo roteador para o tipo de tarefa, com fallback e cache opcional.
+    Gera resposta via OpenRouter com fallback de modelos e retry.
 
-    Args:
-        prompt: Texto do prompt
-        temperatura: Temperatura para geração (0-2, padrão: 0.7)
-        max_output_tokens: Máximo de tokens de saída (padrão: 2500 ou env OPENROUTER_MAX_OUTPUT_TOKENS)
-        tipo: Tipo de tarefa para o roteador (extracao, prisma, critica, explicacao, meta_analise, geral)
-        use_cache: Se True, usa cache_llm para evitar chamadas repetidas (mesmo prompt+tipo+temperatura)
+    - Modelos: ENV (OPENAI_MODEL + OPENAI_MODEL_FALLBACK) ou model_router por tipo.
+    - Cache opcional em memória (por model+prompt+temp+max_tokens).
+    - Retry para 429/timeout; troca de modelo se persistir; 401 tenta chave backup.
     """
     _check_research_env()
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt vazio")
 
-    if use_cache and prompt and len(prompt) <= 8000:
+    max_tokens = max_output_tokens or int(_env("OPENROUTER_MAX_OUTPUT_TOKENS", "2500") or 2500)
+    max_tokens = min(max_tokens, 4000)
+
+    # Lista de modelos: ENV ou model_router por tipo
+    models_from_env = _parse_models() if _env("OPENAI_MODEL") else None
+    if models_from_env and len(models_from_env) > 0:
+        models = models_from_env
+    else:
+        primarios = modelos_para_tipo(tipo)
+        models = list(primarios) + [m for m in MODELOS_FALLBACK if m not in primarios]
+
+    # Cache global (prompt+tipo+temp) para evitar rodar a lista inteira
+    if use_cache and len(prompt) <= 8000:
         cached = get_cached(prompt, tipo, temperatura)
         if cached is not None:
+            logger.info(f"[GPT_ENGINE] ({tipo}) Cache HIT (global)")
             return cached
 
-    modelo_principal = escolher_modelo(tipo)
-    # Lista: modelo do roteador primeiro, depois fallbacks (sem repetir o principal)
-    modelos = [modelo_principal] + [m for m in MODELOS_FALLBACK if m != modelo_principal]
+    max_retries_per_model = int(_env("OPENROUTER_MAX_RETRIES", "3") or 3)
+    base_backoff_s = float(_env("OPENROUTER_BACKOFF_SECONDS", "2.5") or 2.5)
+    last_error: Optional[Exception] = None
+    tried_backup = False
 
-    if max_output_tokens is None:
-        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "2500"))
+    for idx, model in enumerate(models, start=1):
+        logger.warning(f"[GPT_ENGINE] ({tipo}) Tentando modelo {idx}/{len(models)}: '{model}' (max_tokens={max_tokens})")
 
-    logging.warning(f"[GPT_ENGINE] tipo={tipo} -> modelo '{modelo_principal}' | fallbacks: {modelos[1:] or 'nenhum'}")
+        cache_k = _cache_key(model, prompt, temperatura, max_tokens)
+        cached = _cache_get(cache_k)
+        if cached is not None:
+            logger.info(f"[GPT_ENGINE] ({tipo}) Cache HIT para '{model}'")
+            if use_cache and len(prompt) <= 8000:
+                set_cached(prompt, tipo, temperatura, cached)
+            return cached
 
-    ultimo_erro = None
-    max_tokens_atual = max_output_tokens
-    tried_backup_key = False
+        for attempt in range(1, max_retries_per_model + 1):
+            try:
+                text = _call_chat_completion(
+                    model=model,
+                    prompt=prompt,
+                    temperature=temperatura,
+                    max_tokens=max_tokens,
+                    timeout_s=timeout_s,
+                    use_backup_key=False,
+                )
+                if not text:
+                    raise Exception("Resposta vazia do modelo")
+                _cache_set(cache_k, text)
+                if use_cache and len(prompt) <= 8000:
+                    set_cached(prompt, tipo, temperatura, text)
+                logger.info(f"[GPT_ENGINE] ({tipo}) ✅ Sucesso com '{model}' (tentativa {attempt}/{max_retries_per_model})")
+                return text
 
-    # Tentar modelo do roteador, depois fallbacks
-    for i, modelo in enumerate(modelos):
+            except Exception as e:
+                last_error = e
+                logger.error(f"[GPT_ENGINE] ({tipo}) ❌ Erro | modelo='{model}' | tentativa {attempt}/{max_retries_per_model} | {e.__class__.__name__}: {e}")
+
+                if _is_auth(e):
+                    if _get_api_key(use_backup=True) and not tried_backup:
+                        tried_backup = True
+                        global _client
+                        _client = None
+                        logger.warning("[GPT_ENGINE] 401 na chave principal, tentando OPENROUTER_API_KEY_BACKUP...")
+                        try:
+                            text = _call_chat_completion(
+                                model=model,
+                                prompt=prompt,
+                                temperature=temperatura,
+                                max_tokens=max_tokens,
+                                timeout_s=timeout_s,
+                                use_backup_key=True,
+                            )
+                            if text:
+                                _cache_set(cache_k, text)
+                                if use_cache and len(prompt) <= 8000:
+                                    set_cached(prompt, tipo, temperatura, text)
+                                return text
+                        except Exception as backup_err:
+                            last_error = backup_err
+                    raise Exception(
+                        "Falha de autenticação (401) na OpenRouter. Verifique a chave no Railway e no painel OpenRouter."
+                    )
+
+                if _is_bad_request(e):
+                    logger.warning(f"[GPT_ENGINE] ({tipo}) BadRequest (400), próximo modelo.")
+                    break
+
+                if _is_transient(e):
+                    sleep_s = base_backoff_s * attempt
+                    logger.warning(f"[GPT_ENGINE] ({tipo}) ⚠️ Transiente (429/timeout). Aguardando {sleep_s:.1f}s...")
+                    time.sleep(sleep_s)
+                    continue
+
+                logger.warning(f"[GPT_ENGINE] ({tipo}) Erro não-transiente, próximo modelo.")
+                break
+
+        if idx < len(models):
+            time.sleep(1.5)
+
+    raise Exception(
+        f"Erro ao gerar resposta: todos os modelos falharam. "
+        f"Modelos: {models}. Último erro: {last_error!s} ({type(last_error).__name__ if last_error else 'None'})"
+    )
+
+
+# -----------------------------
+# Utilitário: gerar JSON
+# -----------------------------
+def gerar_resposta_json(
+    prompt: str,
+    temperatura: float = 0.2,
+    max_tokens: int = 2500,
+    tipo: str = "json",
+    timeout_s: int = 60,
+) -> Dict[str, Any]:
+    """Chama gerar_resposta e tenta parsear JSON; extrai bloco {...} ou [...] se necessário."""
+    text = gerar_resposta(
+        prompt, temperatura=temperatura, max_output_tokens=max_tokens, tipo=tipo, timeout_s=timeout_s
+    )
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    start_obj = text.find("{")
+    end_obj = text.rfind("}")
+    start_arr = text.find("[")
+    end_arr = text.rfind("]")
+    candidate = None
+    if start_obj != -1 and end_obj != -1 and end_obj > start_obj:
+        candidate = text[start_obj : end_obj + 1]
+    elif start_arr != -1 and end_arr != -1 and end_arr > start_arr:
+        candidate = text[start_arr : end_arr + 1]
+    if candidate:
         try:
-            logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}' (max_tokens={max_tokens_atual})")
-            resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
-            if i > 0:
-                logging.warning(f"[GPT_ENGINE] ✅ Modelo '{modelo}' funcionou (fallback)")
-            else:
-                logging.warning(f"[GPT_ENGINE] ✅ Modelo principal '{modelo}' funcionou")
-            if use_cache and prompt and len(prompt) <= 8000:
-                set_cached(prompt, tipo, temperatura, resposta)
-            return resposta
-
-        except Exception as e:
-            ultimo_erro = e
-            import traceback
-            error_traceback = traceback.format_exc()
-            error_str = str(e)
-            status_code = getattr(e, "status_code", None)
-
-            # 401 = chave inválida/desativada: uma tentativa com backup (se existir), senão falha na hora
-            if status_code == 401 or "401" in error_str or "User not found" in error_str:
-                if _get_api_key(use_backup=True) and not tried_backup_key:
-                    tried_backup_key = True
-                    try:
-                        logging.warning("[GPT_ENGINE] 401 na chave principal, tentando OPENROUTER_API_KEY_BACKUP...")
-                        global client
-                        client = None
-                        resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual, use_backup_key=True)
-                        if use_cache and prompt and len(prompt) <= 8000:
-                            set_cached(prompt, tipo, temperatura, resposta)
-                        return resposta
-                    except Exception:
-                        pass
-                raise Exception("API key inválida ou desativada. Verifique a chave no Railway e no painel OpenRouter.")
-
-            # Verificar se é erro 402 (créditos insuficientes)
-            is_402_error = False
-            if "402" in error_str or "credits" in error_str or "can only afford" in error_str:
-                is_402_error = True
-                if max_tokens_atual > 50:
-                    max_tokens_atual = max(50, max_tokens_atual // 2)
-                    logging.warning(f"[GPT_ENGINE] ⚠️ Erro 402 detectado! Reduzindo max_output_tokens para {max_tokens_atual}")
-                    try:
-                        resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
-                        logging.warning(f"[GPT_ENGINE] ✅ Sucesso após reduzir tokens para {max_tokens_atual}")
-                        if use_cache and prompt and len(prompt) <= 8000:
-                            set_cached(prompt, tipo, temperatura, resposta)
-                        return resposta
-                    except Exception as retry_error:
-                        logging.error(f"[GPT_ENGINE] ❌ Falhou mesmo após reduzir tokens: {retry_error}")
-                        ultimo_erro = retry_error
-
-            if not is_402_error:
-                logging.warning(f"[GPT_ENGINE] ⚠️ Modelo '{modelo}' falhou, tentando próximo...")
-                logging.error(f"[GPT_ENGINE] Erro: {str(e)} (classe: {e.__class__.__name__})")
-
-            # Pausa entre modelos para evitar rate-limit/desativação pela OpenRouter
-            if i < len(modelos) - 1:
-                time.sleep(1.5)
-                continue
-            else:
-                # Último modelo falhou, log completo e lançar erro
-                logging.error(f"[GPT_ENGINE] ❌ Todos os modelos falharam!")
-                logging.error(f"[GPT_ENGINE] Modelos tentados: {modelos}")
-                logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
-                
-                # Se for erro de API, incluir mais detalhes
-                if hasattr(e, 'response'):
-                    try:
-                        error_body = e.response.text if hasattr(e.response, 'text') else str(e.response)
-                        logging.error(f"[GPT_ENGINE] Resposta do erro: {error_body}")
-                    except:
-                        pass
-                
-                raise Exception(f"Erro ao gerar resposta: Todos os modelos falharam. Último erro: {str(ultimo_erro)} (classe: {ultimo_erro.__class__.__name__})")
-    
-    # Se chegou aqui, algo deu errado
-    raise Exception(f"Erro ao gerar resposta: Nenhum modelo disponível")
+            return json.loads(candidate)
+        except Exception:
+            pass
+    raise ValueError("A resposta do modelo não é JSON válido (nem contém bloco JSON recuperável).")
 
 
-def gerar_resposta_com_chunking(texto_longo, prompt_template, temperatura=0.4):
+# -----------------------------
+# Chunking (compatibilidade)
+# -----------------------------
+def gerar_resposta_com_chunking(texto_longo: str, prompt_template: str, temperatura: float = 0.4) -> str:
     """Processa texto longo em chunks."""
     chunks = chunk_text(texto_longo, chunk_size=3000, overlap=500)
     respostas = []
-    
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
         prompt = prompt_template.format(chunk=chunk)
-        resposta = gerar_resposta(prompt, temperatura)
-        respostas.append(resposta)
-    
+        respostas.append(gerar_resposta(prompt, temperatura=temperatura))
     return combine_responses(respostas)
 
 
-def resumir_chunks(chunks, max_tokens=1000):
-    """Resume lista de chunks para reduzir tamanho."""
+def resumir_chunks(chunks: list, max_tokens: int = 1000) -> str:
+    """Resume lista de chunks e combina em texto coeso."""
     resumos = []
     for i, chunk in enumerate(chunks):
-        prompt = f"""
-        Resuma este chunk de artigo científico de forma concisa, mantendo conceitos chave, métodos e conclusões.
-        Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
+        prompt = f"""Resuma este chunk de artigo científico de forma concisa, mantendo conceitos chave, métodos e conclusões.
+Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
 
-        {chunk}
-        """
-        resumo = gerar_resposta(prompt, temperatura=0.2)
-        resumos.append(resumo)
-    
-    prompt_final = f"Combine estes resumos de chunks em um texto coeso final:\n" + "\n\n".join(resumos)
-    texto_final = gerar_resposta(prompt_final, temperatura=0.3)
-    
-    return texto_final
+{chunk}
+"""
+        resumos.append(gerar_resposta(prompt, temperatura=0.2))
+    prompt_final = "Combine estes resumos de chunks em um texto coeso final:\n\n" + "\n\n".join(resumos)
+    return gerar_resposta(prompt_final, temperatura=0.3)
