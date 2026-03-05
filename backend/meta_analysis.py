@@ -17,6 +17,7 @@ try:
         studies_for_outcome,
     )
     from .database import get_connection
+    from .meta_detector import detectar_metaanalises_possiveis
 except ImportError:
     try:
         from gpt_engine import gerar_resposta
@@ -34,6 +35,7 @@ except ImportError:
             studies_for_outcome,
         )
         from database import get_connection
+        from meta_detector import detectar_metaanalises_possiveis
     except ImportError:
         import backend.gpt_engine as gpt_engine
         import backend.chunker as chunker
@@ -47,11 +49,77 @@ except ImportError:
         )
         import backend.services.evidence_graph_service as eg_service  # type: ignore[reportMissingImports]
         from backend.database import get_connection  # type: ignore[reportMissingImports]
+        import backend.meta_detector as meta_detector  # type: ignore[reportMissingImports]
 
         gerar_resposta = gpt_engine.gerar_resposta
+        detectar_metaanalises_possiveis = meta_detector.detectar_metaanalises_possiveis
         estimate_tokens = chunker.estimate_tokens
         carregar_evidence_graph_por_projeto = eg_service.carregar_evidence_graph_por_projeto
         studies_for_outcome = eg_service.studies_for_outcome
+
+def _executar_metaanalises_dos_candidatos(graph: dict, model: str = "random_DL") -> list:
+    """
+    Para cada candidato retornado por detectar_metaanalises_possiveis, monta efeitos,
+    chama pool_effects e opcionalmente forest_plot. Retorna lista de dicts por outcome.
+    """
+    candidatos = detectar_metaanalises_possiveis(graph)
+    if not candidatos:
+        return []
+    studies = {n["id"]: n for n in (graph.get("nodes") or []) if n.get("type") == "Study"}
+    resultados = []
+    for idx, cand in enumerate(candidatos):
+        items = cand.get("items", [])
+        if len(items) < 2:
+            continue
+        efeitos = []
+        try:
+            for item in items:
+                study_id = item.get("study_id", "")
+                data = item.get("data", {})
+                label = (studies.get(study_id) or {}).get("label", study_id)
+                if cand["tipo"] == "continuous":
+                    ef = effect_smd_hedges_g(
+                        study_id,
+                        label,
+                        int(data.get("n_t", 0)),
+                        float(data.get("mean_t", 0)),
+                        float(data.get("sd_t", 0)),
+                        int(data.get("n_c", 0)),
+                        float(data.get("mean_c", 0)),
+                        float(data.get("sd_c", 0)),
+                    )
+                else:
+                    e_t = data.get("events_t", data.get("e_t", 0))
+                    e_c = data.get("events_c", data.get("e_c", 0))
+                    ef = effect_log_rr(
+                        study_id,
+                        label,
+                        int(e_t),
+                        int(data.get("n_t", 0)),
+                        int(e_c),
+                        int(data.get("n_c", 0)),
+                    )
+                ef.label = f"{label} ({cand.get('outcome_label', '')})"
+                efeitos.append(ef)
+            if not efeitos:
+                continue
+            pooled_pack = pool_effects(efeitos, model=model)
+            scale = "exp" if cand["tipo"] == "binary" else "identity"
+            forest_path = f"/tmp/forest_{cand.get('outcome_id', idx)}.png"
+            fp = forest_plot_png(pooled_pack["pooled"], efeitos, forest_path, scale=scale)
+            resultados.append({
+                "outcome_label": cand.get("outcome_label"),
+                "outcome_id": cand.get("outcome_id"),
+                "tipo": cand["tipo"],
+                "n_estudos": len(efeitos),
+                "pooled": pooled_pack["pooled"],
+                "effects": pooled_pack["effects"],
+                "forest_plot": fp,
+            })
+        except Exception as e:
+            logging.warning(f"[META_ANALYSIS] Candidato {cand.get('outcome_label')} falhou: {e}")
+    return resultados
+
 
 def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> dict:
     """
@@ -92,44 +160,68 @@ def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = No
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
         resultados_busca = None
     elif etapa == "5" or etapa == "meta":
-        # Etapa 5: metanálise numérica real (usa motor meta_stats.py + Evidence Graph)
+        # Etapa 5: metanálise numérica (meta_stats) + opcional metanálises automáticas a partir do Evidence Graph
         prompt = None
         resultados_busca = None
 
         estudos = (dados_extras or {}).get("extracted_studies_confirmed", [])
-        outcome_mode = (dados_extras or {}).get("outcome_mode", "continuous")  # continuous|rr|or
-        model = (dados_extras or {}).get("model", "random_DL")  # fixed|random_DL
+        outcome_mode = (dados_extras or {}).get("outcome_mode", "continuous")
+        model = (dados_extras or {}).get("model", "random_DL")
         label = (dados_extras or {}).get("label", "Outcome")
-
-        # Se houver project_id e outcome_label, filtrar estudos via Evidence Graph
         project_id = (dados_extras or {}).get("project_id")
-        outcome_label = (dados_extras or {}).get("outcome_label") or label
-        if project_id is not None and outcome_label and estudos:
+
+        # Se houver project_id, carregar graph e tentar metanálises automáticas (candidatos do detector)
+        graph = None
+        if project_id is not None:
             try:
                 conn = get_connection()
                 try:
                     graph = carregar_evidence_graph_por_projeto(conn, int(project_id))
                 finally:
                     conn.close()
-                if graph:
-                    study_labels_graph = set(studies_for_outcome(graph, outcome_label) or [])
-                    if study_labels_graph:
-                        estudos_filtrados = []
-                        for s in estudos:
-                            lbl = str(
-                                s.get("label")
-                                or s.get("study")
-                                or s.get("study_id")
-                                or ""
-                            ).strip()
-                            if lbl in study_labels_graph:
-                                estudos_filtrados.append(s)
-                        if estudos_filtrados:
-                            logging.warning(
-                                f"[META_ANALYSIS] Etapa 5: filtrando estudos por Evidence Graph "
-                                f"(outcome='{outcome_label}', antes={len(estudos)}, depois={len(estudos_filtrados)})"
-                            )
-                            estudos = estudos_filtrados
+            except Exception as e:
+                logging.warning(f"[META_ANALYSIS] Falha ao carregar graph (project_id={project_id}): {e}")
+
+        if graph and detectar_metaanalises_possiveis(graph):
+            auto_resultados = _executar_metaanalises_dos_candidatos(graph, model=model)
+            if auto_resultados:
+                linhas = ["Metanálises automáticas (Evidence Graph):", ""]
+                for r in auto_resultados:
+                    p = r.get("pooled", {})
+                    linhas.append(f"• {r.get('outcome_label', '')} ({r.get('tipo', '')}, n={r.get('n_estudos', 0)})")
+                    linhas.append(f"  Efeito combinado: {p.get('mu')} [IC95%: {p.get('ci_low')}–{p.get('ci_high')}]")
+                    linhas.append(f"  I²={p.get('I2')}%, Q={p.get('Q')}, p_heterogeneidade={p.get('p_heterogeneity')}")
+                    linhas.append("")
+                texto = "\n".join(linhas)
+                return {
+                    "resultado": texto,
+                    "artigos": [],
+                    "total_artigos": 0,
+                    "metaanalises_automaticas": auto_resultados,
+                }
+
+        # Fluxo habitual: usar extracted_studies_confirmed e opcional filtro por outcome no graph
+        outcome_label = (dados_extras or {}).get("outcome_label") or label
+        if graph and outcome_label and estudos:
+            try:
+                study_labels_graph = set(studies_for_outcome(graph, outcome_label) or [])
+                if study_labels_graph:
+                    estudos_filtrados = []
+                    for s in estudos:
+                        lbl = str(
+                            s.get("label")
+                            or s.get("study")
+                            or s.get("study_id")
+                            or ""
+                        ).strip()
+                        if lbl in study_labels_graph:
+                            estudos_filtrados.append(s)
+                    if estudos_filtrados:
+                        logging.warning(
+                            f"[META_ANALYSIS] Etapa 5: filtrando estudos por Evidence Graph "
+                            f"(outcome='{outcome_label}', antes={len(estudos)}, depois={len(estudos_filtrados)})"
+                        )
+                        estudos = estudos_filtrados
             except Exception as e:
                 logging.warning(f"[META_ANALYSIS] Falha ao usar Evidence Graph na Etapa 5: {e}")
 

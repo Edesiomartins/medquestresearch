@@ -49,7 +49,15 @@ def build_graph_from_extraction_json(
     nodes.append({"id": interv_id, "type": "Intervention", "label": interv_label})
     edges.append({"source": study_id_str, "target": interv_id, "relation": "tests_intervention"})
 
-    # Outcome com id canônico (sem job_id) para merge: "Blood pressure" e "blood pressure" → mesmo nó
+    n_t_meta = meta.get("intervention_group_n") or 0
+    n_c_meta = meta.get("control_group_n") or 0
+    if not n_t_meta and not n_c_meta and meta.get("total_sample_size"):
+        total = int(meta.get("total_sample_size", 0)) or 0
+        if total:
+            n_t_meta = total // 2
+            n_c_meta = total - n_t_meta
+
+    # Outcome com id canônico + Result com dados numéricos (para detectar_metaanalises_possiveis)
     for i, out in enumerate(extraction_json.get("outcomes") or []):
         if not isinstance(out, dict):
             continue
@@ -59,6 +67,41 @@ def build_graph_from_extraction_json(
         out_id = f"outcome_{canonical}"
         nodes.append({"id": out_id, "type": "Outcome", "label": name_str})
         edges.append({"source": study_id_str, "target": out_id, "relation": "reports_outcome"})
+
+        intr = out.get("intervention_results") or {}
+        ctrl = out.get("control_results") or {}
+        n_t = int(out.get("intervention_group_n") or n_t_meta or 0)
+        n_c = int(out.get("control_group_n") or n_c_meta or 0)
+        if not n_t and (intr.get("sd_or_total") or ctrl.get("sd_or_total")):
+            n_t = int(intr.get("sd_or_total") or 0) or n_t_meta
+        if not n_c and (intr.get("sd_or_total") or ctrl.get("sd_or_total")):
+            n_c = int(ctrl.get("sd_or_total") or 0) or n_c_meta
+
+        # Result node com dados para meta_stats (continuous: mean/sd/n; binary: events/n)
+        data: Dict[str, Any] = {"outcome_id": out_id}
+        mean_t = intr.get("mean_or_event")
+        sd_t = intr.get("sd_or_total")
+        mean_c = ctrl.get("mean_or_event")
+        sd_c = ctrl.get("sd_or_total")
+        if mean_t is not None and mean_c is not None and n_t and n_c:
+            try:
+                mt, st = float(mean_t), (float(sd_t) if sd_t is not None else 0.0)
+                mc, sc = float(mean_c), (float(sd_c) if sd_c is not None else 0.0)
+                if st >= 0 and sc >= 0:
+                    data.update({"mean_t": mt, "sd_t": st, "n_t": n_t, "mean_c": mc, "sd_c": sc, "n_c": n_c})
+            except (TypeError, ValueError):
+                pass
+        if not data.get("mean_t") and (intr.get("mean_or_event") is not None or ctrl.get("mean_or_event") is not None):
+            try:
+                et = int(intr.get("mean_or_event") or 0)
+                ec = int(ctrl.get("mean_or_event") or 0)
+                data.update({"events_t": et, "n_t": n_t or 1, "events_c": ec, "n_c": n_c or 1})
+            except (TypeError, ValueError):
+                pass
+        if len(data) > 1:
+            result_id = f"result_{study_id_str}_{canonical}"
+            nodes.append({"id": result_id, "type": "Result", "data": data})
+            edges.append({"source": study_id_str, "target": result_id, "relation": "has_result"})
 
     return {"nodes": nodes, "edges": edges}
 

@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -6,14 +7,24 @@ from dotenv import load_dotenv
 # Tentar importação relativa primeiro, depois absoluta
 try:
     from .chunker import chunk_text, combine_responses, estimate_tokens
+    from .model_router import escolher_modelo, MODELOS_FALLBACK
+    from .cache_llm import get_cached, set_cached
 except ImportError:
     try:
         from chunker import chunk_text, combine_responses, estimate_tokens
+        from model_router import escolher_modelo, MODELOS_FALLBACK
+        from cache_llm import get_cached, set_cached
     except ImportError:
         import backend.chunker as chunker
+        import backend.model_router as model_router
+        import backend.cache_llm as cache_llm
         chunk_text = chunker.chunk_text
         combine_responses = chunker.combine_responses
         estimate_tokens = chunker.estimate_tokens
+        escolher_modelo = model_router.escolher_modelo
+        MODELOS_FALLBACK = model_router.MODELOS_FALLBACK
+        get_cached = cache_llm.get_cached
+        set_cached = cache_llm.set_cached
 
 # Carrega chave do .env (somente em desenvolvimento/local).
 # Em produção (Railway), as variáveis já vêm do ambiente, então evitamos prints ruidosos.
@@ -31,24 +42,35 @@ else:
         # Tenta carregar do diretório atual, mas sem logar warning se não existir.
         load_dotenv()
 
+def _get_api_key(use_backup: bool = False) -> str:
+    """Chave principal: API_OPENAI_KEY_RESEARCH ou OPENROUTER_API_KEY_MAIN. Backup: OPENROUTER_API_KEY_BACKUP."""
+    if use_backup:
+        return (os.getenv("OPENROUTER_API_KEY_BACKUP") or "").strip()
+    return (os.getenv("API_OPENAI_KEY_RESEARCH") or os.getenv("OPENROUTER_API_KEY_MAIN") or "").strip()
+
+
 def _check_research_env():
-    if not os.getenv("API_OPENAI_KEY_RESEARCH"):
-        raise RuntimeError("API_OPENAI_KEY_RESEARCH não configurada")
+    if not _get_api_key(use_backup=False):
+        raise RuntimeError("API_OPENAI_KEY_RESEARCH ou OPENROUTER_API_KEY_MAIN não configurada")
 
-# Inicializa cliente OpenAI (será criado quando necessário)
+# Inicializa cliente OpenAI (será criado quando necessário); _client_use_backup indica se usamos chave backup
 client = None
+_client_use_backup = False
 
-def _get_client():
-    """Retorna o cliente OpenAI, criando se necessário. Se OPENAI_API_BASE estiver definida (ex.: OpenRouter), usa como base_url."""
-    global client
-    if client is None:
-        _check_research_env()
-        api_key = os.getenv("API_OPENAI_KEY_RESEARCH")
+def _get_client(use_backup: bool = False):
+    """Retorna o cliente OpenAI. use_backup=True usa OPENROUTER_API_KEY_BACKUP (após 401 na chave principal)."""
+    global client, _client_use_backup
+    if client is None or _client_use_backup != use_backup:
+        key = _get_api_key(use_backup=use_backup)
+        if use_backup and not key:
+            raise RuntimeError("OPENROUTER_API_KEY_BACKUP não configurada")
+        if not use_backup:
+            _check_research_env()
+        client = None
+        _client_use_backup = use_backup
+        api_key = key if use_backup else _get_api_key(use_backup=False)
         base_url = os.getenv("OPENAI_API_BASE")  # ex.: https://openrouter.ai/api/v1
         if base_url and "openrouter.ai" in base_url:
-            # Para OpenRouter, adicionar headers customizados
-            # Nota: O cliente OpenAI pode não passar esses headers automaticamente
-            # Vamos tentar configurar via default_headers
             default_headers = {
                 "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app"),
                 "X-Title": os.getenv("OPENROUTER_TITLE", "MedQuestResearch"),
@@ -59,7 +81,7 @@ def _get_client():
                     base_url=base_url,
                     default_headers=default_headers
                 )
-                logging.info(f"[GPT_ENGINE] Cliente OpenRouter configurado com headers: {list(default_headers.keys())}")
+                logging.info(f"[GPT_ENGINE] Cliente OpenRouter configurado ({'backup' if use_backup else 'main'})")
             except Exception as e:
                 logging.warning(f"[GPT_ENGINE] Erro ao configurar headers, tentando sem headers: {e}")
                 client = OpenAI(api_key=api_key, base_url=base_url)
@@ -67,18 +89,12 @@ def _get_client():
             client = OpenAI(api_key=api_key)
     return client
 
-def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
+def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None, use_backup_key: bool = False):
     """
     Chama a API do OpenRouter (ou OpenAI).
-    OpenRouter usa chat/completions com messages; outros usos podem usar responses.create.
-    
-    Args:
-        modelo: Nome do modelo
-        prompt: Texto do prompt
-        temperatura: Temperatura para geração (0-2)
-        max_output_tokens: Máximo de tokens de saída (padrão: 1000)
+    use_backup_key: usa OPENROUTER_API_KEY_BACKUP quando True (após 401 na chave principal).
     """
-    cliente = _get_client()
+    cliente = _get_client(use_backup=use_backup_key)
     base_url = os.getenv("OPENAI_API_BASE", "")
     is_openrouter = base_url and "openrouter.ai" in base_url
 
@@ -163,104 +179,103 @@ def _chamar_nova_api(modelo, prompt, temperatura=None, max_output_tokens=None):
         
         logging.error(f"[GPT_ENGINE] Traceback completo:\n{error_traceback}")
         
-        # Re-raise com mensagem mais informativa
+        # 401 = chave inválida/desativada: não tentar outros modelos com a mesma chave
+        status_code = getattr(e, "status_code", None)
+        if status_code == 401 or "401" in error_message:
+            raise Exception("API key inválida ou desativada. Verifique OPENROUTER/API_OPENAI_KEY_RESEARCH no Railway.")
         raise Exception(f"Erro ao chamar API OpenRouter com modelo '{modelo}': {error_message}")
 
-def _obter_modelos_fallback():
+def gerar_resposta(prompt, temperatura=0.7, max_output_tokens=None, tipo="geral", use_cache=True):
     """
-    Retorna lista de modelos para tentar em ordem (fallback automático).
-    Modelo principal: NVIDIA Nemotron Nano 12B 2 VL :free (gratuito no OpenRouter).
-    Pode ser configurado via OPENAI_MODEL (modelo principal) e OPENAI_MODEL_FALLBACK (modelos alternativos separados por vírgula).
-    """
-    # Modelo principal padrão: NVIDIA Nemotron Nano 12B 2 VL - variante gratuita no OpenRouter
-    modelo_principal = os.getenv("OPENAI_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
-    
-    # Modelos de fallback (separados por vírgula)
-    fallback_str = os.getenv("OPENAI_MODEL_FALLBACK", "openai/gpt-4o-mini,openai/gpt-3.5-turbo,anthropic/claude-3-haiku")
-    modelos_fallback = [m.strip() for m in fallback_str.split(",") if m.strip()]
-    
-    # Lista completa: modelo principal primeiro, depois fallbacks
-    modelos = [modelo_principal] + modelos_fallback
-    
-    # Remover duplicatas mantendo ordem
-    modelos_unicos = []
-    for modelo in modelos:
-        if modelo not in modelos_unicos:
-            modelos_unicos.append(modelo)
-    
-    return modelos_unicos
+    Gera resposta usando o modelo escolhido pelo roteador para o tipo de tarefa, com fallback e cache opcional.
 
-def gerar_resposta(prompt, temperatura=1, max_output_tokens=None):
-    """
-    Gera resposta usando modelo configurado com fallback automático.
-    
-    Se o modelo principal falhar, tenta automaticamente os modelos de fallback.
-    Se receber erro 402 (créditos insuficientes), reduz automaticamente max_output_tokens.
-    
     Args:
         prompt: Texto do prompt
-        temperatura: Temperatura para geração (0-2, padrão: 1)
-        max_output_tokens: Máximo de tokens de saída (padrão: 1000)
+        temperatura: Temperatura para geração (0-2, padrão: 0.7)
+        max_output_tokens: Máximo de tokens de saída (padrão: 2500 ou env OPENROUTER_MAX_OUTPUT_TOKENS)
+        tipo: Tipo de tarefa para o roteador (extracao, prisma, critica, explicacao, meta_analise, geral)
+        use_cache: Se True, usa cache_llm para evitar chamadas repetidas (mesmo prompt+tipo+temperatura)
     """
     _check_research_env()
-    
-    modelos = _obter_modelos_fallback()
-    cliente = _get_client()
-    
-    # Log do modelo principal configurado (para confirmar uso do Nemotron)
-    logging.info(f"[GPT_ENGINE] Modelo principal: '{modelos[0]}' | Fallbacks: {modelos[1:]}")
-    
-    # Configurar max_output_tokens inicial se não fornecido
+
+    if use_cache and prompt and len(prompt) <= 8000:
+        cached = get_cached(prompt, tipo, temperatura)
+        if cached is not None:
+            return cached
+
+    modelo_principal = escolher_modelo(tipo)
+    # Lista: modelo do roteador primeiro, depois fallbacks (sem repetir o principal)
+    modelos = [modelo_principal] + [m for m in MODELOS_FALLBACK if m != modelo_principal]
+
     if max_output_tokens is None:
-        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "1000"))
-    
+        max_output_tokens = int(os.getenv("OPENROUTER_MAX_OUTPUT_TOKENS", "2500"))
+
+    logging.warning(f"[GPT_ENGINE] tipo={tipo} -> modelo '{modelo_principal}' | fallbacks: {modelos[1:] or 'nenhum'}")
+
     ultimo_erro = None
     max_tokens_atual = max_output_tokens
-    
-    # Tentar cada modelo em ordem até um funcionar (Nemotron primeiro)
+    tried_backup_key = False
+
+    # Tentar modelo do roteador, depois fallbacks
     for i, modelo in enumerate(modelos):
         try:
             logging.warning(f"[GPT_ENGINE] Tentando modelo {i+1}/{len(modelos)}: '{modelo}' (max_tokens={max_tokens_atual})")
-            
-            # Nova chamada da API que retorna diretamente o texto
             resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
-            
             if i > 0:
                 logging.warning(f"[GPT_ENGINE] ✅ Modelo '{modelo}' funcionou (fallback)")
             else:
                 logging.warning(f"[GPT_ENGINE] ✅ Modelo principal '{modelo}' funcionou")
-            
+            if use_cache and prompt and len(prompt) <= 8000:
+                set_cached(prompt, tipo, temperatura, resposta)
             return resposta
-            
+
         except Exception as e:
             ultimo_erro = e
             import traceback
             error_traceback = traceback.format_exc()
-            
+            error_str = str(e)
+            status_code = getattr(e, "status_code", None)
+
+            # 401 = chave inválida/desativada: uma tentativa com backup (se existir), senão falha na hora
+            if status_code == 401 or "401" in error_str or "User not found" in error_str:
+                if _get_api_key(use_backup=True) and not tried_backup_key:
+                    tried_backup_key = True
+                    try:
+                        logging.warning("[GPT_ENGINE] 401 na chave principal, tentando OPENROUTER_API_KEY_BACKUP...")
+                        global client
+                        client = None
+                        resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual, use_backup_key=True)
+                        if use_cache and prompt and len(prompt) <= 8000:
+                            set_cached(prompt, tipo, temperatura, resposta)
+                        return resposta
+                    except Exception:
+                        pass
+                raise Exception("API key inválida ou desativada. Verifique a chave no Railway e no painel OpenRouter.")
+
             # Verificar se é erro 402 (créditos insuficientes)
             is_402_error = False
-            error_str = str(e).lower()
             if "402" in error_str or "credits" in error_str or "can only afford" in error_str:
                 is_402_error = True
-                # Reduzir max_output_tokens pela metade e tentar novamente com o mesmo modelo
-                if max_tokens_atual > 50:  # Não reduzir abaixo de 50
+                if max_tokens_atual > 50:
                     max_tokens_atual = max(50, max_tokens_atual // 2)
                     logging.warning(f"[GPT_ENGINE] ⚠️ Erro 402 detectado! Reduzindo max_output_tokens para {max_tokens_atual}")
-                    # Tentar novamente com o mesmo modelo e tokens reduzidos
                     try:
                         resposta = _chamar_nova_api(modelo, prompt, temperatura, max_tokens_atual)
                         logging.warning(f"[GPT_ENGINE] ✅ Sucesso após reduzir tokens para {max_tokens_atual}")
+                        if use_cache and prompt and len(prompt) <= 8000:
+                            set_cached(prompt, tipo, temperatura, resposta)
                         return resposta
                     except Exception as retry_error:
                         logging.error(f"[GPT_ENGINE] ❌ Falhou mesmo após reduzir tokens: {retry_error}")
                         ultimo_erro = retry_error
-            
+
             if not is_402_error:
                 logging.warning(f"[GPT_ENGINE] ⚠️ Modelo '{modelo}' falhou, tentando próximo...")
                 logging.error(f"[GPT_ENGINE] Erro: {str(e)} (classe: {e.__class__.__name__})")
-            
-            # Se não for o último modelo, continuar tentando
+
+            # Pausa entre modelos para evitar rate-limit/desativação pela OpenRouter
             if i < len(modelos) - 1:
+                time.sleep(1.5)
                 continue
             else:
                 # Último modelo falhou, log completo e lançar erro
