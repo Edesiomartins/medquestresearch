@@ -66,3 +66,7 @@ frontend/.next/
 frontend/out/
 frontend/dist/
 frontend/.vercel
+
+# Arquivos grandes locais (não versionar)
+frontend.zip
+*.zip
