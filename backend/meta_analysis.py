@@ -1,4 +1,6 @@
 # Tentar importação relativa primeiro, depois absoluta
+import logging
+
 try:
     from .gpt_engine import gerar_resposta
     from .chunker import estimate_tokens
@@ -10,6 +12,11 @@ try:
         pool_effects,
         forest_plot_png,
     )
+    from .services.evidence_graph_service import (
+        carregar_evidence_graph_por_projeto,
+        studies_for_outcome,
+    )
+    from .database import get_connection
 except ImportError:
     try:
         from gpt_engine import gerar_resposta
@@ -22,6 +29,11 @@ except ImportError:
             pool_effects,
             forest_plot_png,
         )
+        from services.evidence_graph_service import (
+            carregar_evidence_graph_por_projeto,
+            studies_for_outcome,
+        )
+        from database import get_connection
     except ImportError:
         import backend.gpt_engine as gpt_engine
         import backend.chunker as chunker
@@ -33,8 +45,13 @@ except ImportError:
             pool_effects,
             forest_plot_png,
         )
+        import backend.services.evidence_graph_service as eg_service  # type: ignore[reportMissingImports]
+        from backend.database import get_connection  # type: ignore[reportMissingImports]
+
         gerar_resposta = gpt_engine.gerar_resposta
         estimate_tokens = chunker.estimate_tokens
+        carregar_evidence_graph_por_projeto = eg_service.carregar_evidence_graph_por_projeto
+        studies_for_outcome = eg_service.studies_for_outcome
 
 def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = None, texto_artigo: str = None) -> dict:
     """
@@ -75,7 +92,7 @@ def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = No
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
         resultados_busca = None
     elif etapa == "5" or etapa == "meta":
-        # Etapa 5: metanálise numérica real (usa motor meta_stats.py)
+        # Etapa 5: metanálise numérica real (usa motor meta_stats.py + Evidence Graph)
         prompt = None
         resultados_busca = None
 
@@ -83,6 +100,38 @@ def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = No
         outcome_mode = (dados_extras or {}).get("outcome_mode", "continuous")  # continuous|rr|or
         model = (dados_extras or {}).get("model", "random_DL")  # fixed|random_DL
         label = (dados_extras or {}).get("label", "Outcome")
+
+        # Se houver project_id e outcome_label, filtrar estudos via Evidence Graph
+        project_id = (dados_extras or {}).get("project_id")
+        outcome_label = (dados_extras or {}).get("outcome_label") or label
+        if project_id is not None and outcome_label and estudos:
+            try:
+                conn = get_connection()
+                try:
+                    graph = carregar_evidence_graph_por_projeto(conn, int(project_id))
+                finally:
+                    conn.close()
+                if graph:
+                    study_labels_graph = set(studies_for_outcome(graph, outcome_label) or [])
+                    if study_labels_graph:
+                        estudos_filtrados = []
+                        for s in estudos:
+                            lbl = str(
+                                s.get("label")
+                                or s.get("study")
+                                or s.get("study_id")
+                                or ""
+                            ).strip()
+                            if lbl in study_labels_graph:
+                                estudos_filtrados.append(s)
+                        if estudos_filtrados:
+                            logging.warning(
+                                f"[META_ANALYSIS] Etapa 5: filtrando estudos por Evidence Graph "
+                                f"(outcome='{outcome_label}', antes={len(estudos)}, depois={len(estudos_filtrados)})"
+                            )
+                            estudos = estudos_filtrados
+            except Exception as e:
+                logging.warning(f"[META_ANALYSIS] Falha ao usar Evidence Graph na Etapa 5: {e}")
 
         efeitos = []
         for s in estudos:

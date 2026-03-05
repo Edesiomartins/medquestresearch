@@ -173,13 +173,20 @@ except ImportError:
         registrar_compra = credit_service.registrar_compra
 
 try:
-    from .services.evidence_graph_service import construir_evidence_graph_para_projeto
+    from .services.evidence_graph_service import (
+        build_graph_from_extraction_json,
+        upsert_project_evidence_graph,
+    )
 except ImportError:
     try:
-        from services.evidence_graph_service import construir_evidence_graph_para_projeto
+        from services.evidence_graph_service import (
+            build_graph_from_extraction_json,
+            upsert_project_evidence_graph,
+        )
     except ImportError:
         import backend.services.evidence_graph_service as evidence_graph_service  # type: ignore[reportMissingImports]
-        construir_evidence_graph_para_projeto = evidence_graph_service.construir_evidence_graph_para_projeto
+        build_graph_from_extraction_json = evidence_graph_service.build_graph_from_extraction_json
+        upsert_project_evidence_graph = evidence_graph_service.upsert_project_evidence_graph
 
 # ============================================
 # ✅ APLICAÇÃO FASTAPI
@@ -690,20 +697,6 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
     try:
         logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa}, tema: {tema})")
 
-        # Antes de Etapa 3: construir Evidence Graph (após confirmação humana)
-        if etapa == "3":
-            project_id = (dados_extras or {}).get("project_id")
-            usuario_id = (dados_extras or {}).get("usuario_id")
-            if project_id is not None and usuario_id is not None:
-                conn_eg = get_connection()
-                try:
-                    construir_evidence_graph_para_projeto(conn_eg, int(project_id), int(usuario_id), job_id)
-                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph construído para project_id={project_id}")
-                except Exception as e_eg:
-                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph (não bloqueante): {e_eg}")
-                finally:
-                    conn_eg.close()
-
         # Limitar texto se fornecido
         if texto_artigo:
             texto_artigo = texto_artigo[:6000]
@@ -721,31 +714,40 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
             dados_extras_atualizados['artigos'] = artigos_encontrados
             dados_extras_atualizados['total_artigos'] = total_artigos
 
-        # Etapa 2: persistir extraction JSON em analysis_json para Evidence Graph
-        analysis_json_val = None
+        # Etapa 2: persistir extraction_json em dados_extras e atualizar Evidence Graph incremental
+        parsed = None
         if etapa == "2" and resultado_texto:
             parsed = _extrair_json_do_texto(resultado_texto)
             if isinstance(parsed, dict) and (parsed.get("study_metadata") or parsed.get("outcomes")):
-                analysis_json_val = json.dumps(parsed)
+                dados_extras_atualizados["extraction_json"] = parsed
 
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
                 dados_extras_json = json.dumps(dados_extras_atualizados) if dados_extras_atualizados else None
-                if analysis_json_val is not None:
-                    cursor.execute(
-                        "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s, analysis_json=%s WHERE id=%s",
-                        ("done", resultado_texto, dados_extras_json, analysis_json_val, job_id)
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s WHERE id=%s",
-                        ("done", resultado_texto, dados_extras_json, job_id)
-                    )
+                cursor.execute(
+                    "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s WHERE id=%s",
+                    ("done", resultado_texto, dados_extras_json, job_id)
+                )
                 rowcount = cursor.rowcount
             conn.commit()
             logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}, artigos={len(artigos_encontrados)}")
+
+            # Etapa 2: ao terminar, disparar build do graph e salvar por project_id (incremental)
+            if etapa == "2" and parsed and (dados_extras or {}).get("project_id") is not None and (dados_extras or {}).get("usuario_id") is not None:
+                try:
+                    project_id = int((dados_extras or {})["project_id"])
+                    usuario_id = int((dados_extras or {})["usuario_id"])
+                    meta = parsed.get("study_metadata") or {}
+                    titulo_artigo = (meta.get("title") or meta.get("authors") or f"Estudo {job_id}").strip()[:100]
+                    year = meta.get("year") or ""
+                    study_label = f"{titulo_artigo} {year}".strip() or f"Estudo {job_id}"
+                    graph = build_graph_from_extraction_json(parsed, study_label=study_label, study_id=job_id)
+                    upsert_project_evidence_graph(conn, project_id, usuario_id, graph)
+                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph atualizado (project_id={project_id})")
+                except Exception as e_eg:
+                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph (não bloqueante): {e_eg}")
         finally:
             conn.close()
 
