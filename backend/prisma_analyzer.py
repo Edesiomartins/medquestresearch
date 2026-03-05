@@ -156,11 +156,21 @@ Formato JSON Obrigatório:
         # Parsear JSON
         try:
             analise_raw = json.loads(resposta_limpa)
-            
+
+            study_type = analise_raw.get("study_type", "not_reported")
+
+            tool = "not_reported"
+            if study_type == "RCT":
+                tool = "RoB 2"
+            elif study_type in ("Cohort", "Case_Control"):
+                tool = "Newcastle-Ottawa"
+            elif study_type in ("Systematic_Review", "Meta_Analysis"):
+                tool = "AMSTAR 2"
+
             # Converter formato novo (inglês) para formato compatível (português)
             analise = {
-                "tipo_estudo": analise_raw.get("study_type", "not_reported"),
-                "design_metodologico": f"{analise_raw.get('study_type', 'Unknown')} study",
+                "tipo_estudo": study_type,
+                "design_metodologico": f"{study_type} study",
                 "pico": analise_raw.get("pico", {}),
                 "quantitative_outcomes": analise_raw.get("quantitative_outcomes", []),
                 "checklist_prisma": analise_raw.get("prisma_checklist", {}),
@@ -171,7 +181,9 @@ Formato JSON Obrigatório:
                 "pontos_fortes": analise_raw.get("strengths", []),
                 "pontos_fracos": analise_raw.get("weaknesses", []),
                 "recomendacao": analise_raw.get("recommendation", "Exclude"),
-                "observacoes": f"Study Type: {analise_raw.get('study_type', 'Unknown')}"
+                "observacoes": f"Study Type: {study_type}",
+                "ferramenta_risco_vies_sugerida": tool,
+                "nota_importante": "PRISMA avalia completude de relato; risco de viés deve usar ferramenta apropriada (ex: RoB2/NOS/AMSTAR2).",
             }
             
         except json.JSONDecodeError:
@@ -181,10 +193,21 @@ Formato JSON Obrigatório:
             if json_match:
                 try:
                     analise_raw = json.loads(json_match.group())
+
+                    study_type = analise_raw.get("study_type", "not_reported")
+
+                    tool = "not_reported"
+                    if study_type == "RCT":
+                        tool = "RoB 2"
+                    elif study_type in ("Cohort", "Case_Control"):
+                        tool = "Newcastle-Ottawa"
+                    elif study_type in ("Systematic_Review", "Meta_Analysis"):
+                        tool = "AMSTAR 2"
+
                     # Converter formato
                     analise = {
-                        "tipo_estudo": analise_raw.get("study_type", "not_reported"),
-                        "design_metodologico": f"{analise_raw.get('study_type', 'Unknown')} study",
+                        "tipo_estudo": study_type,
+                        "design_metodologico": f"{study_type} study",
                         "pico": analise_raw.get("pico", {}),
                         "quantitative_outcomes": analise_raw.get("quantitative_outcomes", []),
                         "checklist_prisma": analise_raw.get("prisma_checklist", {}),
@@ -195,7 +218,9 @@ Formato JSON Obrigatório:
                         "pontos_fortes": analise_raw.get("strengths", []),
                         "pontos_fracos": analise_raw.get("weaknesses", []),
                         "recomendacao": analise_raw.get("recommendation", "Exclude"),
-                        "observacoes": resposta[:500]
+                        "observacoes": resposta[:500],
+                        "ferramenta_risco_vies_sugerida": tool,
+                        "nota_importante": "PRISMA avalia completude de relato; risco de viés deve usar ferramenta apropriada (ex: RoB2/NOS/AMSTAR2).",
                     }
                 except:
                     analise = _criar_analise_fallback(resposta)

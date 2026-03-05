@@ -2,13 +2,37 @@
 try:
     from .gpt_engine import gerar_resposta
     from .chunker import estimate_tokens
+    from .meta_stats import (
+        Effect,
+        effect_smd_hedges_g,
+        effect_log_rr,
+        effect_log_or,
+        pool_effects,
+        forest_plot_png,
+    )
 except ImportError:
     try:
         from gpt_engine import gerar_resposta
         from chunker import estimate_tokens
+        from meta_stats import (
+            Effect,
+            effect_smd_hedges_g,
+            effect_log_rr,
+            effect_log_or,
+            pool_effects,
+            forest_plot_png,
+        )
     except ImportError:
         import backend.gpt_engine as gpt_engine
         import backend.chunker as chunker
+        from backend.meta_stats import (  # type: ignore[reportMissingImports]
+            Effect,
+            effect_smd_hedges_g,
+            effect_log_rr,
+            effect_log_or,
+            pool_effects,
+            forest_plot_png,
+        )
         gerar_resposta = gpt_engine.gerar_resposta
         estimate_tokens = chunker.estimate_tokens
 
@@ -50,6 +74,90 @@ def gerar_meta_analise(tema: str = "", etapa: str = "1", dados_extras: dict = No
     elif etapa == "4" or etapa == "verificacao":
         prompt = _criar_prompt_etapa4(texto_artigo, dados_extras)
         resultados_busca = None
+    elif etapa == "5" or etapa == "meta":
+        # Etapa 5: metanálise numérica real (usa motor meta_stats.py)
+        prompt = None
+        resultados_busca = None
+
+        estudos = (dados_extras or {}).get("extracted_studies_confirmed", [])
+        outcome_mode = (dados_extras or {}).get("outcome_mode", "continuous")  # continuous|rr|or
+        model = (dados_extras or {}).get("model", "random_DL")  # fixed|random_DL
+        label = (dados_extras or {}).get("label", "Outcome")
+
+        efeitos = []
+        for s in estudos:
+            study_id = str(s.get("study_id") or s.get("id") or s.get("study") or "study")
+            study_label = str(s.get("label") or s.get("study") or study_id)
+
+            if outcome_mode == "continuous":
+                ef = effect_smd_hedges_g(
+                    study_id,
+                    study_label,
+                    int(s["n_t"]),
+                    float(s["mean_t"]),
+                    float(s["sd_t"]),
+                    int(s["n_c"]),
+                    float(s["mean_c"]),
+                    float(s["sd_c"]),
+                )
+            elif outcome_mode == "rr":
+                ef = effect_log_rr(
+                    study_id,
+                    study_label,
+                    int(s["e_t"]),
+                    int(s["n_t"]),
+                    int(s["e_c"]),
+                    int(s["n_c"]),
+                )
+            elif outcome_mode == "or":
+                ef = effect_log_or(
+                    study_id,
+                    study_label,
+                    int(s["e_t"]),
+                    int(s["n_t"]),
+                    int(s["e_c"]),
+                    int(s["n_c"]),
+                )
+            else:
+                raise ValueError("outcome_mode inválido. Use: continuous|rr|or")
+
+            ef.label = f"{study_label} ({label})"
+            efeitos.append(ef)
+
+        pooled_pack = pool_effects(efeitos, model=model)
+
+        forest_path = (dados_extras or {}).get("forest_path", "/tmp/forest_plot.png")
+        scale = "exp" if outcome_mode in ("rr", "or") else "identity"
+        fp = forest_plot_png(pooled_pack["pooled"], efeitos, forest_path, scale=scale)
+
+        resultado = {
+            "resultado": {
+                "pooled": pooled_pack["pooled"],
+                "effects": pooled_pack["effects"],
+                "forest_plot": fp,
+            },
+            "artigos": [],
+            "total_artigos": 0,
+        }
+
+        if (dados_extras or {}).get("gerar_texto_sugestao"):
+            resumo_numeros = {
+                "outcome_mode": outcome_mode,
+                "model": model,
+                "pooled": pooled_pack["pooled"],
+            }
+            import json as _json
+
+            prompt_txt = f"""
+Atue como redator científico. Gere uma SUGESTÃO curta para a seção de resultados da metanálise,
+usando SOMENTE estes números (não invente nada):
+{_json.dumps(resumo_numeros, ensure_ascii=False, indent=2)}
+Escreva em português brasileiro, tom impessoal.
+"""
+            sugestao = gerar_resposta(prompt_txt, temperatura=0.3)
+            resultado["resultado"]["texto_sugestao"] = sugestao
+
+        return resultado
     else:
         # Etapa padrão
         if dados_extras and "artigos_analisados" in dados_extras:
@@ -325,6 +433,12 @@ Texto do(s) artigo(s):
 # TAREFA
 Extraia os dados do(s) artigo(s) seguindo estritamente o esquema JSON fornecido abaixo. Se um valor numérico não for encontrado, use null. Não tente calcular valores ausentes. Extraia apenas o que está explicitamente escrito no texto para garantir 0% de alucinação nos dados brutos.
 
+Além disso:
+- retorne também um campo de nível superior "needs_user_confirmation": true
+- para CADA outcome extraído, inclua:
+  - "evidence_snippet": trecho EXATO (curto) do texto onde o número aparece
+  - "page_hint": se houver indicação (ex: "Page 4" ou "Tabela 2"), senão "not_reported"
+
 # ESQUEMA JSON DE EXTRAÇÃO (Standard de Ouro)
 {{
   "study_metadata": {{
@@ -369,6 +483,7 @@ Extraia os dados do(s) artigo(s) seguindo estritamente o esquema JSON fornecido 
 2. Se houver múltiplos estudos, extraia cada um separadamente.
 3. Valide se intervention_group_n + control_group_n == total_sample_size.
 4. Se p_value < 0.05 mas confidence_interval cruza a linha de nulidade, sinalize inconsistência estatística.
+5. Inclua no topo do objeto: "needs_user_confirmation": true para sinalizar que a extração deve ser revisada por um humano.
 
 IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês. Retorne o JSON estruturado seguido de uma tabela formatada para visualização.
 """
