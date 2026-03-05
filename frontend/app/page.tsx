@@ -9,7 +9,6 @@ import {
   structureMapper,
   structureVisualizer,
   verificarFatos,
-  pesquisarPerspectiva,
   analisarCritica,
   uploadPdf,
   traduzirTexto,
