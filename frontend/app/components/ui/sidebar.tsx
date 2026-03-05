@@ -156,7 +156,7 @@ export default function Sidebar({
         </Link>
         <Link
           href="/perfil"
-          className="block w-full text-center py-2 text-blue-200 hover:text-white text-sm font-medium transition-colors"
+          className="block w-full text-center py-2.5 rounded-lg text-sm font-semibold text-white border border-white/40 bg-white/5 hover:bg-white/10 hover:border-white/70 transition-colors"
         >
           Atualizar cadastro
         </Link>

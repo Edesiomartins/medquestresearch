@@ -46,7 +46,7 @@ export default function Home() {
   const router = useRouter();
 
   // 3. useAuth
-  const { token, usuario, creditos, loading, logout } = useAuth();
+  const { token, usuario, creditos, loading, logout, refreshCreditos } = useAuth();
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -477,6 +477,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         setTituloResultado(titulos[tipo] || 'Resultado');
         setLoadingResultado(false);
       }
+      // Atualizar créditos após análise bem-sucedida
+      await refreshCreditos();
     } catch (error: any) {
       setModoConfiguracao(false);
       setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`);
@@ -485,7 +487,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     } finally {
       setCardAtivo(null);
     }
-  }, [token, textoArtigo, textoProcessando]);
+  }, [token, textoArtigo, textoProcessando, refreshCreditos]);
 
   // Callback para executar análise a partir do formulário inline no ResultPanel
   const handleExecute = useCallback(async (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => {

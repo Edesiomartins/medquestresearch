@@ -97,11 +97,18 @@ export function useAuth() {
         // - creditos: total adquirido
         // - creditos_usados: já consumidos
         // - creditos_disponiveis: saldo atual
+        let creditosValor: number | null = null;
         if (typeof (res as any).creditos_disponiveis === 'number') {
-          setCreditos((res as any).creditos_disponiveis);
+          creditosValor = (res as any).creditos_disponiveis;
         } else if (typeof res.creditos === 'number') {
           // Fallback para compatibilidade antiga
-          setCreditos(res.creditos);
+          creditosValor = res.creditos;
+        }
+        if (typeof creditosValor === 'number') {
+          setCreditos(creditosValor);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('creditos', String(creditosValor));
+          }
         }
         if (res.usuario) {
           setUsuario(res.usuario);
@@ -112,6 +119,22 @@ export function useAuth() {
       console.error('Erro ao buscar dados do usuário:', error);
       clearSession();
       setLoading(false);
+    }
+  };
+
+  const refreshCreditos = async () => {
+    if (!token) return;
+    try {
+      const res = await getCreditos(token);
+      if (!res.erro && typeof (res as any).creditos_disponiveis === 'number') {
+        const valor = (res as any).creditos_disponiveis;
+        setCreditos(valor);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('creditos', String(valor));
+        }
+      }
+    } catch {
+      // em erro, não derruba sessão; apenas mantém valor atual
     }
   };
 
@@ -194,5 +217,6 @@ export function useAuth() {
     login,
     register, // 👈 agora existe
     logout,
+    refreshCreditos,
   };
 }
