@@ -172,6 +172,15 @@ except ImportError:
         consumir_creditos_total = credit_service.consumir_creditos_total
         registrar_compra = credit_service.registrar_compra
 
+try:
+    from .services.evidence_graph_service import construir_evidence_graph_para_projeto
+except ImportError:
+    try:
+        from services.evidence_graph_service import construir_evidence_graph_para_projeto
+    except ImportError:
+        import backend.services.evidence_graph_service as evidence_graph_service  # type: ignore[reportMissingImports]
+        construir_evidence_graph_para_projeto = evidence_graph_service.construir_evidence_graph_para_projeto
+
 # ============================================
 # ✅ APLICAÇÃO FASTAPI
 # ============================================
@@ -648,44 +657,98 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
         finally:
             conn.close()
 
+def _extrair_json_do_texto(texto: str):
+    """Tenta extrair um objeto JSON do texto (bloco ```json ... ``` ou primeiro {...})."""
+    if not texto or not texto.strip():
+        return None
+    texto = texto.strip()
+    # Bloco ```json ... ```
+    for marker in ("```json", "```"):
+        i = texto.find(marker)
+        if i >= 0:
+            fim = texto.find("```", i + len(marker))
+            if fim > i:
+                bloco = texto[i + len(marker):fim].strip()
+                try:
+                    return json.loads(bloco)
+                except Exception:
+                    pass
+    # Primeiro { até último }
+    inicio = texto.find("{")
+    if inicio >= 0:
+        fim = texto.rfind("}")
+        if fim > inicio:
+            try:
+                return json.loads(texto[inicio:fim + 1])
+            except Exception:
+                pass
+    return None
+
+
 def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_artigo: str = None, dados_extras: dict = None):
-    """Processa job de metanálise em background."""
+    """Processa job de metanálise em background. Fluxo: Etapa 2 → confirmação humana → Evidence Graph → Etapa 3 → 4 → 5."""
     try:
         logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa}, tema: {tema})")
-        
+
+        # Antes de Etapa 3: construir Evidence Graph (após confirmação humana)
+        if etapa == "3":
+            project_id = (dados_extras or {}).get("project_id")
+            usuario_id = (dados_extras or {}).get("usuario_id")
+            if project_id is not None and usuario_id is not None:
+                conn_eg = get_connection()
+                try:
+                    construir_evidence_graph_para_projeto(conn_eg, int(project_id), int(usuario_id), job_id)
+                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph construído para project_id={project_id}")
+                except Exception as e_eg:
+                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph (não bloqueante): {e_eg}")
+                finally:
+                    conn_eg.close()
+
         # Limitar texto se fornecido
         if texto_artigo:
             texto_artigo = texto_artigo[:6000]
-        
+
         # Chamar função de metanálise (agora retorna dict com 'resultado' e 'artigos')
         resultado_dict = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
-        
+
         resultado_texto = resultado_dict.get('resultado', '')
         artigos_encontrados = resultado_dict.get('artigos', [])
         total_artigos = resultado_dict.get('total_artigos', 0)
-        
+
         # Preparar dados extras com artigos (se houver)
         dados_extras_atualizados = dados_extras.copy() if dados_extras else {}
         if artigos_encontrados:
             dados_extras_atualizados['artigos'] = artigos_encontrados
             dados_extras_atualizados['total_artigos'] = total_artigos
-        
+
+        # Etapa 2: persistir extraction JSON em analysis_json para Evidence Graph
+        analysis_json_val = None
+        if etapa == "2" and resultado_texto:
+            parsed = _extrair_json_do_texto(resultado_texto)
+            if isinstance(parsed, dict) and (parsed.get("study_metadata") or parsed.get("outcomes")):
+                analysis_json_val = json.dumps(parsed)
+
         # Usar conexão explícita com commit explícito para garantir funcionamento em threads
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
-                # Salvar resultado e dados extras (com artigos)
                 dados_extras_json = json.dumps(dados_extras_atualizados) if dados_extras_atualizados else None
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s WHERE id=%s",
-                    ("done", resultado_texto, dados_extras_json, job_id)
-                )
+                if analysis_json_val is not None:
+                    cursor.execute(
+                        "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s, analysis_json=%s WHERE id=%s",
+                        ("done", resultado_texto, dados_extras_json, analysis_json_val, job_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE research_jobs SET status=%s, resultado=%s, dados_extras=%s WHERE id=%s",
+                        ("done", resultado_texto, dados_extras_json, job_id)
+                    )
                 rowcount = cursor.rowcount
             conn.commit()
             logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}, artigos={len(artigos_encontrados)}")
         finally:
             conn.close()
-        
+
         logging.warning(f"[RESEARCH JOB {job_id}] concluído - meta_analise")
         
     except Exception:
@@ -759,12 +822,13 @@ class InputMapa(BaseModel):
 
 class InputMetaAnalise(BaseModel):
     tema: Optional[str] = ""  # Tema agora é opcional (novo fluxo usa upload de artigos)
-    etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extração, 3=Redação, 4=Verificação
+    etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extração, 3=PRISMA/qualidade, 4=Seleção final, 5=Metanálise
     texto_artigo: Optional[str] = None  # Opcional - usado apenas nas etapas 2-4
     json_extracao: Optional[str] = None
     estilo: Optional[str] = "Vancouver"  # Vancouver ou ABNT
     manuscrito: Optional[str] = None
     artigos_analisados: Optional[str] = None  # JSON string com artigos analisados (novo fluxo)
+    project_id: Optional[int] = None  # Agrupa jobs para Evidence Graph (após confirmação humana, antes Etapa 3)
 
 # ============================================
 # ✅ HANDLER DE ERROS GLOBAL
@@ -1679,13 +1743,16 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
                 dados_extras["artigos_analisados"] = artigos
             except:
                 dados_extras["artigos_analisados"] = data.artigos_analisados
+        if data.project_id is not None:
+            dados_extras["project_id"] = data.project_id
+        dados_extras["usuario_id"] = user["id"]  # para Evidence Graph no job em background
 
-        # Criar job assíncrono
+        # Criar job assíncrono (project_id agrupa jobs para Evidence Graph)
         dados_extras_json = json.dumps(dados_extras) if dados_extras else None
         entrada_texto = data.texto_artigo if data.texto_artigo else (data.tema if data.tema else "Metanálise")
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
-            (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json)
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, project_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json, data.project_id)
         )
 
         # Iniciar processamento em background
