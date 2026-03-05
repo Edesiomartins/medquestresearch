@@ -223,13 +223,6 @@ export async function verificarFatos(
   return callAsyncApi(API_ENDPOINTS.FATOS, token, { texto_artigo }, 300000);
 }
 
-export async function pesquisarPerspectiva(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return callAsyncApi(API_ENDPOINTS.PERSPECTIVA, token, { texto_artigo }, 300000);
-}
-
 export async function gerarMapa(
   token: string,
   texto_artigo: string
