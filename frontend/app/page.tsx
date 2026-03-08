@@ -47,6 +47,125 @@ export default function Home() {
   // 3. useAuth
   const { token, usuario, creditos, loading, logout, refreshCreditos } = useAuth();
 
+  // Callbacks que precisam vir antes de useEffect/handleUpload (runAnalise é usado em handleUpload)
+  const textoProcessando = useCallback((tipo: string): string => {
+    switch (tipo) {
+      case 'structure_visualizer':
+        return 'Extraindo a estrutura do artigo…';
+      case 'structure_mapper':
+        return 'Mapeando a organização lógica do estudo…';
+      case 'fatos':
+        return 'Verificando afirmações e evidências…';
+      case 'critica':
+        return 'Aplicando leitura crítica aprofundada…';
+      case 'explicar':
+        return 'Explicando conceitos e trechos específicos…';
+      default:
+        return 'Processando análise…';
+    }
+  }, []);
+
+  const runAnalise = useCallback(async (tipo: string, trecho?: string, nivel?: string) => {
+    if (tipo !== 'meta-analise' && (!textoArtigo || !token)) {
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      return;
+    }
+    if (!token) {
+      setResultadoAtual('Usuário não autenticado.');
+      setTituloResultado('Aviso');
+      return;
+    }
+    setCardAtivo(tipo);
+    const titulos: Record<string, string> = {
+      explicar: 'Explicação do Conteúdo',
+      structure_mapper: 'Mapeamento de Estrutura',
+      structure_visualizer: 'Visualização de Estrutura',
+      fatos: 'Verificação de Fatos',
+      critica: 'Análise Crítica',
+      'meta-analise': 'Metanálise PRISMA',
+    };
+    if (tipo === 'explicar' && !trecho) {
+      setModoConfiguracao(true);
+      setTituloResultado('Explicar Conteúdo');
+      setLoadingResultado(false);
+      return;
+    }
+    if (tipo === 'critica') {
+      setModoConfiguracao(true);
+      setTituloResultado('Análise Crítica');
+      setLoadingResultado(false);
+      return;
+    }
+    if (tipo === 'meta-analise') {
+      setModoConfiguracao(false);
+      setTituloResultado('Metanálise PRISMA - Upload de Artigos');
+      setEtapasMetanalise([]);
+      setTextoArtigo(null);
+      setTextoArtigoPt(null);
+      setTraduzirErro(null);
+      setArquivosMetanalise([]);
+      setAnalisesPrisma([]);
+      setResultadoAtual(null);
+      setLoadingResultado(false);
+      return;
+    }
+    setModoConfiguracao(false);
+    const textoContextual = textoProcessando(tipo);
+    setResultadoAtual(`⏳ Análise em andamento\n\n${textoContextual}\n\nEstamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`);
+    setTituloResultado(titulos[tipo] || 'Processando...');
+    setLoadingResultado(true);
+    if (!textoArtigo) {
+      setModoConfiguracao(false);
+      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
+      setTituloResultado('Aviso');
+      setLoadingResultado(false);
+      setCardAtivo(null);
+      return;
+    }
+    try {
+      let res;
+      switch (tipo) {
+        case 'explicar':
+          res = await explicarConceito(token, textoArtigo, trecho!, nivel || 'graduação');
+          break;
+        case 'structure_mapper':
+          res = await structureMapper(token, textoArtigo);
+          break;
+        case 'structure_visualizer':
+          res = await structureVisualizer(token, textoArtigo);
+          break;
+        case 'fatos':
+          res = await verificarFatos(token, textoArtigo);
+          break;
+        default:
+          throw new Error('Tipo de análise não reconhecido');
+      }
+      setModoConfiguracao(false);
+      if (res.erro) {
+        setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
+        setTituloResultado('Erro na Análise');
+        setLoadingResultado(false);
+      } else if (res.resultado) {
+        setResultadoAtual(res.resultado);
+        setTituloResultado(titulos[tipo] || 'Resultado');
+        setLoadingResultado(false);
+      } else {
+        setResultadoAtual('Análise concluída com sucesso!');
+        setTituloResultado(titulos[tipo] || 'Resultado');
+        setLoadingResultado(false);
+      }
+      await refreshCreditos();
+    } catch (error: any) {
+      setModoConfiguracao(false);
+      setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`);
+      setTituloResultado('Erro');
+      setLoadingResultado(false);
+    } finally {
+      setCardAtivo(null);
+    }
+  }, [token, textoArtigo, textoProcessando, refreshCreditos]);
+
   // Garantir que o componente está montado no cliente
   useEffect(() => {
     setMounted(true);
@@ -348,149 +467,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         }
       }
     }, [handleUpload, handleSelecionarArquivos, cardAtivo]);
-
-  // Função para obter texto contextual por tipo de análise
-  const textoProcessando = useCallback((tipo: string): string => {
-    switch (tipo) {
-      case 'structure_visualizer':
-        return 'Extraindo a estrutura do artigo…';
-      case 'structure_mapper':
-        return 'Mapeando a organização lógica do estudo…';
-      case 'fatos':
-        return 'Verificando afirmações e evidências…';
-      case 'critica':
-        return 'Aplicando leitura crítica aprofundada…';
-      case 'explicar':
-        return 'Explicando conceitos e trechos específicos…';
-      default:
-        return 'Processando análise…';
-    }
-  }, []);
-
-  // Callback 5: Executar análise
-  const runAnalise = useCallback(async (tipo: string, trecho?: string, nivel?: string) => {
-    // Metanálise não precisa de textoArtigo - funciona apenas com tema
-    if (tipo !== 'meta-analise' && (!textoArtigo || !token)) {
-      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
-      setTituloResultado('Aviso');
-      return;
-    }
-    
-    if (!token) {
-      setResultadoAtual('Usuário não autenticado.');
-      setTituloResultado('Aviso');
-      return;
-    }
-
-    // 1. Destacar card
-    setCardAtivo(tipo);
-
-    const titulos: Record<string, string> = {
-      explicar: 'Explicação do Conteúdo',
-      structure_mapper: 'Mapeamento de Estrutura',
-      structure_visualizer: 'Visualização de Estrutura',
-      fatos: 'Verificação de Fatos',
-      critica: 'Análise Crítica',
-      'meta-analise': 'Metanálise PRISMA',
-    };
-
-    // 2. Verificar se precisa de configuração ANTES de processar
-    if (tipo === 'explicar' && !trecho) {
-      // Mostrar formulário de configuração no ResultPanel
-      setModoConfiguracao(true);
-      setTituloResultado('Explicar Conteúdo');
-      // NÃO limpar resultadoAtual - manter texto do PDF visível
-      setLoadingResultado(false);
-      return;
-    }
-
-    if (tipo === 'critica') {
-      // Mostrar formulário de configuração no ResultPanel
-      setModoConfiguracao(true);
-      setTituloResultado('Análise Crítica');
-      // NÃO limpar resultadoAtual - manter texto do PDF visível
-      setLoadingResultado(false);
-      return;
-    }
-
-    if (tipo === 'meta-analise') {
-      // Novo fluxo: mostrar área de upload múltiplo no TextWindow
-      setModoConfiguracao(false);
-      setTituloResultado('Metanálise PRISMA - Upload de Artigos');
-      setEtapasMetanalise([]); // Limpar etapas anteriores
-      setTextoArtigo(null);
-      setTextoArtigoPt(null);
-      setTraduzirErro(null);
-      setArquivosMetanalise([]); // Limpar arquivos anteriores
-      setAnalisesPrisma([]); // Limpar análises anteriores
-      setResultadoAtual(null);
-      setLoadingResultado(false);
-      return;
-    }
-
-    // 3. Para análises que não requerem configuração, mostrar estado de processamento
-    setModoConfiguracao(false);
-    const textoContextual = textoProcessando(tipo);
-    const textoProcessandoCompleto = `⏳ Análise em andamento\n\n${textoContextual}\n\nEstamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`;
-    setResultadoAtual(textoProcessandoCompleto);
-    setTituloResultado(titulos[tipo] || 'Processando...');
-    setLoadingResultado(true);
-
-    // Garantir que textoArtigo não é null (já verificado acima, mas TypeScript precisa de confirmação)
-    if (!textoArtigo) {
-      setModoConfiguracao(false);
-      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
-      setTituloResultado('Aviso');
-      setLoadingResultado(false);
-      setCardAtivo(null);
-      return;
-    }
-
-    try {
-      let res;
-      switch (tipo) {
-        case 'explicar':
-          res = await explicarConceito(token, textoArtigo, trecho!, nivel || 'graduação');
-          break;
-        case 'structure_mapper':
-          res = await structureMapper(token, textoArtigo);
-          break;
-        case 'structure_visualizer':
-          res = await structureVisualizer(token, textoArtigo);
-          break;
-        case 'fatos':
-          res = await verificarFatos(token, textoArtigo);
-          break;
-        default:
-          throw new Error('Tipo de análise não reconhecido');
-      }
-
-      // 4. Atualizar ResultPanel com resultado
-      setModoConfiguracao(false);
-      if (res.erro) {
-        setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
-        setTituloResultado('Erro na Análise');
-        setLoadingResultado(false);
-      } else if (res.resultado) {
-        setResultadoAtual(res.resultado);
-        setTituloResultado(titulos[tipo] || 'Resultado');
-        setLoadingResultado(false);
-      } else {
-        setResultadoAtual('Análise concluída com sucesso!');
-        setTituloResultado(titulos[tipo] || 'Resultado');
-        setLoadingResultado(false);
-      }
-      // Atualizar créditos após análise bem-sucedida
-      await refreshCreditos();
-    } catch (error: any) {
-      setModoConfiguracao(false);
-      setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`);
-      setTituloResultado('Erro');
-      setLoadingResultado(false);
-    } finally {
-      setCardAtivo(null);
-    }
-  }, [token, textoArtigo, textoProcessando, refreshCreditos]);
 
   // Callback para executar análise a partir do formulário inline no ResultPanel
   const handleExecute = useCallback(async (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => {
@@ -873,6 +849,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
                   etapasMetanalise={etapasMetanalise}
                   mostrarBotaoContinuarEtapas={cardAtivo === 'meta-analise' && artigosEncontrados.length > 0 && etapasMetanalise.length === 0}
                   onContinuarEtapasMetanalise={handleContinuarEtapasMetanalise}
+                  onRunAnalysis={cardAtivo ? () => runAnalise(cardAtivo) : undefined}
                   onUpdateResult={(newResult) => {
                     if (newResult === null) {
                       setModoConfiguracao(false);

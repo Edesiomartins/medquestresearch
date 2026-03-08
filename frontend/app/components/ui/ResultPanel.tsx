@@ -21,6 +21,8 @@ interface ResultPanelProps {
   temaMetanalise?: string;
   mostrarBotaoContinuarEtapas?: boolean;
   onContinuarEtapasMetanalise?: (tema?: string) => void;
+  /** Para módulos sem config (fatos, structure_mapper, structure_visualizer): executar análise após upload */
+  onRunAnalysis?: () => void;
 }
 
 export default function ResultPanel({ 
@@ -39,6 +41,7 @@ export default function ResultPanel({
   temaMetanalise = '',
   mostrarBotaoContinuarEtapas = false,
   onContinuarEtapasMetanalise,
+  onRunAnalysis,
 }: ResultPanelProps) {
   const [showChat, setShowChat] = useState(false);
   const [trecho, setTrecho] = useState('');
@@ -447,12 +450,24 @@ export default function ResultPanel({
     );
   }
 
-  // Estado inicial - nenhum resultado
+  // Estado inicial - nenhum resultado (com botão "Executar análise" quando há texto e módulo não precisa de config)
+  const podeExecutarDireto = tipoAnalise && ['fatos', 'structure_mapper', 'structure_visualizer'].includes(tipoAnalise) && textoArtigo && onRunAnalysis;
   return (
     <div className="card-elevated">
       <div className="text-center py-12 text-slate-500">
         <p className="text-lg mb-2">📋 Nenhum resultado ainda</p>
-        <p className="text-sm">Faça upload de um arquivo e escolha uma análise</p>
+        <p className="text-sm mb-4">
+          {podeExecutarDireto ? 'Arquivo carregado. Clique abaixo para executar a análise.' : 'Faça upload de um arquivo e escolha uma análise'}
+        </p>
+        {podeExecutarDireto && (
+          <button
+            type="button"
+            onClick={onRunAnalysis}
+            className="px-6 py-2.5 rounded-lg font-medium text-white bg-[#0c3d66] hover:bg-[#0a3255] transition-colors"
+          >
+            Executar análise
+          </button>
+        )}
       </div>
     </div>
   );
