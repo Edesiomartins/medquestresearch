@@ -115,6 +115,10 @@ export default function Home() {
         setTextoArtigoPt(null); // Tradução sob demanda pelo botão
         setTraduzirErro(null);
         setUploadProgress(100); // Simula conclusão
+        // Para módulos que não precisam de configuração, rodar análise após upload
+        if (cardAtivo && ['fatos', 'structure_mapper', 'structure_visualizer'].includes(cardAtivo)) {
+          runAnalise(cardAtivo);
+        }
       }
     } catch (err: any) {
       console.error("Erro no upload:", err);
@@ -123,7 +127,7 @@ export default function Home() {
     } finally {
       setLoadingResultado(false);
     }
-  }, [token, cardAtivo]);
+  }, [token, cardAtivo, runAnalise]);
 
   const handleTraduzir = useCallback(async () => {
     if (!token || !textoArtigo) return;
@@ -774,77 +778,125 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
 
   return (
     <div className="flex min-h-screen bg-mq-slate-50">
-      {/* Componente Sidebar */}
-      <Sidebar 
-        usuario={usuario} 
-        creditos={creditos} 
+      <Sidebar
+        usuario={usuario}
+        creditos={creditos}
         onLogout={logout}
-        onModuleClick={runAnalise}
       />
 
-      {/* Estrutura principal da dashboard - Duas janelas */}
-      <div className="ml-64 flex-1 flex h-screen"> {/* ml-64 para compensar a largura da sidebar */}
-        {/* JANELA ESQUERDA - Texto Extraído / Upload de Artigos */}
-        <div className="w-1/2 p-6 border-r border-mq-slate-200 overflow-hidden flex flex-col">
-          <TextWindow
-            texto={textoArtigo}
-            textoPt={textoArtigoPt}
-            loading={loadingResultado && uploadProgress > 0 && uploadProgress < 100}
-            uploadProgress={uploadProgress}
-            uploadError={uploadError}
-            onTraduzir={handleTraduzir}
-            loadingTraduzir={loadingTraduzir}
-            traduzirErro={traduzirErro}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onFileSelect={handleUpload}
-            modoMetanalise={cardAtivo === 'meta-analise'}
-            onFilesSelect={handleSelecionarArquivos}
-            onIniciarAnalise={handleIniciarAnalisePrisma}
-            arquivosSelecionados={arquivosMetanalise}
-            analisandoArtigos={loadingResultado && uploadProgress > 0}
-          />
-        </div>
-
-        {/* JANELA DIREITA - Resultados + Chat */}
-        <div className="w-1/2 p-6 overflow-hidden flex flex-col">
-          <ResultPanel
-            artigosEncontrados={artigosEncontrados}
-            totalArtigos={totalArtigos}
-            temaMetanalise={temaMetanaliseAtual}
-            loading={loadingResultado}
-            titulo={tituloResultado}
-            resultado={resultadoAtual}
-            tipoAnalise={cardAtivo || undefined}
-            textoArtigo={textoArtigo || undefined}
-            token={token || undefined}
-            modoConfiguracao={modoConfiguracao}
-            etapasMetanalise={etapasMetanalise}
-            mostrarBotaoContinuarEtapas={cardAtivo === 'meta-analise' && artigosEncontrados.length > 0 && etapasMetanalise.length === 0}
-            onContinuarEtapasMetanalise={handleContinuarEtapasMetanalise}
-            onUpdateResult={(newResult) => {
-              if (newResult === null) {
-                // Cancelar configuração - restaurar texto do PDF se existir
-                setModoConfiguracao(false);
-                setCardAtivo(null);
-                setEtapasMetanalise([]);
-                if (textoArtigo) {
-                  setResultadoAtual(textoArtigo);
-                  setTituloResultado('Texto extraído do arquivo');
-                } else {
-                  setResultadoAtual(null);
-                  setTituloResultado('');
-                }
-              } else {
-                setResultadoAtual(newResult);
-                setModoConfiguracao(false);
-              }
-            }}
-            onExecute={handleExecute}
-          />
-        </div>
-      </div>
+      {/* Área principal: grid de cards ou modal tela inteira */}
+      <main className="ml-64 flex-1 min-h-screen p-6">
+        {cardAtivo === null ? (
+          /* Grid de cards - cada card abre o modal da análise */
+          <div>
+            <h1 className="text-2xl font-bold text-[#0c3d66] mb-6">Análises disponíveis</h1>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
+                { icon: '🧠', label: 'Mapear estrutura', tipo: 'structure_mapper' },
+                { icon: '✓', label: 'Verificar fatos', tipo: 'fatos' },
+                { icon: '📚', label: 'Explicar conteúdo', tipo: 'explicar' },
+                { icon: '🔬', label: 'Análise crítica', tipo: 'critica' },
+                { icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
+              ].map((modulo) => (
+                <button
+                  key={modulo.tipo}
+                  onClick={() => {
+                    setCardAtivo(modulo.tipo);
+                    runAnalise(modulo.tipo);
+                  }}
+                  className="flex flex-col items-center justify-center p-8 rounded-xl border-2 border-slate-200 bg-white hover:border-[#0c3d66] hover:bg-[#0c3d66]/5 hover:shadow-lg transition-all text-left w-full group"
+                >
+                  <span className="text-4xl mb-3 group-hover:scale-110 transition-transform">{modulo.icon}</span>
+                  <span className="font-semibold text-slate-800 text-center">{modulo.label}</span>
+                  <span className="text-sm text-slate-500 mt-1">Clique para abrir</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* Modal tela inteira: upload (esquerda) + resultados (direita) */
+          <div className="fixed inset-0 z-50 bg-white flex flex-col" style={{ left: '16rem' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <h2 className="text-xl font-bold text-[#0c3d66]">
+                {{
+                  structure_visualizer: 'Visualizar estrutura',
+                  structure_mapper: 'Mapear estrutura',
+                  fatos: 'Verificar fatos',
+                  explicar: 'Explicar conteúdo',
+                  critica: 'Análise crítica',
+                  'meta-analise': 'Metanálise PRISMA',
+                }[cardAtivo] || cardAtivo}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setCardAtivo(null)}
+                className="px-4 py-2 rounded-lg text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors font-medium"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex-1 flex min-h-0">
+              <div className="w-1/2 p-6 border-r border-slate-200 overflow-hidden flex flex-col">
+                <TextWindow
+                  texto={textoArtigo}
+                  textoPt={textoArtigoPt}
+                  loading={loadingResultado && uploadProgress > 0 && uploadProgress < 100}
+                  uploadProgress={uploadProgress}
+                  uploadError={uploadError}
+                  onTraduzir={handleTraduzir}
+                  loadingTraduzir={loadingTraduzir}
+                  traduzirErro={traduzirErro}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onFileSelect={handleUpload}
+                  modoMetanalise={cardAtivo === 'meta-analise'}
+                  onFilesSelect={handleSelecionarArquivos}
+                  onIniciarAnalise={handleIniciarAnalisePrisma}
+                  arquivosSelecionados={arquivosMetanalise}
+                  analisandoArtigos={loadingResultado && uploadProgress > 0}
+                />
+              </div>
+              <div className="w-1/2 p-6 overflow-hidden flex flex-col">
+                <ResultPanel
+                  artigosEncontrados={artigosEncontrados}
+                  totalArtigos={totalArtigos}
+                  temaMetanalise={temaMetanaliseAtual}
+                  loading={loadingResultado}
+                  titulo={tituloResultado}
+                  resultado={resultadoAtual}
+                  tipoAnalise={cardAtivo || undefined}
+                  textoArtigo={textoArtigo || undefined}
+                  token={token || undefined}
+                  modoConfiguracao={modoConfiguracao}
+                  etapasMetanalise={etapasMetanalise}
+                  mostrarBotaoContinuarEtapas={cardAtivo === 'meta-analise' && artigosEncontrados.length > 0 && etapasMetanalise.length === 0}
+                  onContinuarEtapasMetanalise={handleContinuarEtapasMetanalise}
+                  onUpdateResult={(newResult) => {
+                    if (newResult === null) {
+                      setModoConfiguracao(false);
+                      setCardAtivo(null);
+                      setEtapasMetanalise([]);
+                      if (textoArtigo) {
+                        setResultadoAtual(textoArtigo);
+                        setTituloResultado('Texto extraído do arquivo');
+                      } else {
+                        setResultadoAtual(null);
+                        setTituloResultado('');
+                      }
+                    } else {
+                      setResultadoAtual(newResult);
+                      setModoConfiguracao(false);
+                    }
+                  }}
+                  onExecute={handleExecute}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

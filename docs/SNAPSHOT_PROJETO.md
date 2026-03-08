@@ -186,10 +186,10 @@ Polling `GET /genapi/job/{request_id}`:
 - Dashboard (`/`): upload de PDF, seleção de módulo (explicar, crítica, fatos, perspectiva, metanálise, etc.).
 - Metanálise PRISMA:
   - Modo metanálise na janela esquerda (`TextWindow`):
-    - Botão “Selecionar arquivos” (até 15 PDFs/DOCX).
-    - Botão “Iniciar Análise PRISMA” → chama `/meta_analysis/upload_articles`.
+    - Botão "Selecionar arquivos" (até 15 PDFs/DOCX).
+    - Botão "Iniciar Análise PRISMA" → chama `/meta_analysis/upload_articles`.
   - Janela direita (`ResultPanel`):
     - Mostra resumo PRISMA.
-    - Botão “Continuar para Etapa 2, 3 e 4” → chama `/meta_analysis` etapas 2–4 com `artigos_analisados`.
+    - Botão "Continuar para Etapa 2, 3 e 4" → chama `/meta_analysis` etapas 2–4 com `artigos_analisados`.
 - Página de monetização: `/planos` (consome `GET /genapi/planos` e `GET /genapi/pacotes`).
 
