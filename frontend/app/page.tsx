@@ -234,10 +234,9 @@ export default function Home() {
         setTextoArtigoPt(null); // Tradução sob demanda pelo botão
         setTraduzirErro(null);
         setUploadProgress(100); // Simula conclusão
-        // Para módulos que não precisam de configuração, rodar análise após upload
-        if (cardAtivo && ['fatos', 'structure_mapper', 'structure_visualizer'].includes(cardAtivo)) {
-          runAnalise(cardAtivo);
-        }
+        // Limpar mensagem "faça upload" para exibir o botão "Executar análise"
+        setResultadoAtual(null);
+        setTituloResultado('');
       }
     } catch (err: any) {
       console.error("Erro no upload:", err);

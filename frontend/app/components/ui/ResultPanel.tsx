@@ -463,9 +463,9 @@ export default function ResultPanel({
           <button
             type="button"
             onClick={onRunAnalysis}
-            className="px-6 py-2.5 rounded-lg font-medium text-white bg-[#0c3d66] hover:bg-[#0a3255] transition-colors"
+            className="px-6 py-3 rounded-lg font-semibold text-white bg-[#0c3d66] hover:bg-[#0a3255] transition-colors shadow-md"
           >
-            Executar análise
+            Iniciar análise
           </button>
         )}
       </div>
