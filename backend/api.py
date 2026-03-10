@@ -1,5 +1,5 @@
 # ============================================
-# ? IMPORTS E CONFIGURAÇÕES INICIAIS
+# ? IMPORTS E CONFIGURA??ES INICIAIS
 # ============================================
 
 import sys
@@ -16,7 +16,7 @@ import re
 from functools import wraps
 from psycopg2 import IntegrityError
 
-# Carregar variáveis de ambiente do arquivo .env (local). Em produção/Railway as vars vêm do ambiente.
+# Carregar vari?veis de ambiente do arquivo .env (local). Em produ??o/Railway as vars v?m do ambiente.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 try:
     from dotenv import load_dotenv
@@ -25,9 +25,9 @@ try:
         load_dotenv(env_path)
         logging.info(f"[ENV] .env carregado de: {env_path}")
     else:
-        load_dotenv()  # tenta diretório atual; em produção não existe .env e está ok
+        load_dotenv()  # tenta diret?rio atual; em produ??o n?o existe .env e est? ok
 except ImportError:
-    pass  # python-dotenv opcional em produção
+    pass  # python-dotenv opcional em produ??o
 except Exception as e:
     logging.debug(f"[ENV] Erro ao carregar .env: {e}")
 
@@ -41,22 +41,22 @@ from slowapi.middleware import SlowAPIMiddleware  # pyright: ignore[reportMissin
 from pydantic import BaseModel, validator
 from typing import Optional
 
-# process_chunks e combine_responses agora são usados apenas dentro de run_with_two_chunks
+# process_chunks e combine_responses agora s?o usados apenas dentro de run_with_two_chunks
 from docx import Document  # pyright: ignore[reportMissingImports]
 
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 # ============================================
-# ? AJUSTAR IMPORTAÇÕES PARA FUNCIONAR TANTO NA RAIZ QUANTO EM backend/
+# ? AJUSTAR IMPORTA??ES PARA FUNCIONAR TANTO NA RAIZ QUANTO EM backend/
 # ============================================
 
 # Banco de dados - tentar relativo primeiro, depois absoluto
-# Se estiver em backend/, adicionar o diretório ao path para importações absolutas funcionarem
+# Se estiver em backend/, adicionar o diret?rio ao path para importa??es absolutas funcionarem
 _parent_dir = os.path.dirname(BASE_DIR)
 if _parent_dir not in sys.path and os.path.basename(BASE_DIR) == "backend":
     sys.path.insert(0, _parent_dir)
-    # Também adicionar backend/ ao path
+    # Tamb?m adicionar backend/ ao path
     if BASE_DIR not in sys.path:
         sys.path.insert(0, BASE_DIR)
 
@@ -70,7 +70,7 @@ except ImportError:
         db_execute = database.db_execute
         get_connection = database.get_connection
     except ImportError:
-        # Última tentativa: importar do backend
+        # ?ltima tentativa: importar do backend
         import backend.database as database  # type: ignore[reportMissingImports]
         db_select = database.db_select
         db_select_one = database.db_select_one
@@ -189,7 +189,7 @@ except ImportError:
         upsert_project_evidence_graph = evidence_graph_service.upsert_project_evidence_graph
 
 # ============================================
-# ? APLICAÇÃO FASTAPI
+# ? APLICA??O FASTAPI
 # ============================================
 
 app = FastAPI(title="MedQuestResearch API", version="2.0")
@@ -197,13 +197,13 @@ app = FastAPI(title="MedQuestResearch API", version="2.0")
 # ? ROUTER COM PREFIXO /genapi PARA TODAS AS ROTAS DE API
 api_router = APIRouter(prefix="/genapi")
 
-# ? Configuração de rate limiting (adicionar primeiro)
+# ? Configura??o de rate limiting (adicionar primeiro)
 limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# ? CONFIGURAÇÃO CORS CORRETA E SIMPLES (adicionar por último para executar primeiro)
+# ? CONFIGURA??O CORS CORRETA E SIMPLES (adicionar por ?ltimo para executar primeiro)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -211,7 +211,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://medquestresearch.up.railway.app",
     ],
-    allow_credentials=False,   # ?? IMPORTANTE: você usa token no header, não cookie
+    allow_credentials=False,   # ?? IMPORTANTE: voc? usa token no header, n?o cookie
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -259,7 +259,7 @@ class MapaRequest(BaseModel):
     texto_artigo: str
 
 # ============================================
-# ? FUNÇÕES AUXILIARES
+# ? FUN??ES AUXILIARES
 # ============================================
 
 def gerar_token():
@@ -271,14 +271,11 @@ def hash_senha(senha):
 def gerar_hash_senha(senha):
     return hash_senha(senha)
 
-def gerar_hash_senha(senha):
-    return hash_senha(senha)
-
 def creditos_disponiveis(usuario):
     return max(0, usuario["creditos"] - usuario["creditos_usados"])
 
 def adicionar_creditos_usuario(usuario_id, qtd):
-    """Adiciona créditos a um usuário."""
+    """Adiciona creditos a um usuario."""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -290,13 +287,13 @@ def adicionar_creditos_usuario(usuario_id, qtd):
             conn.commit()
             return cursor.rowcount > 0
     except Exception as e:
-        print(f"? ERRO ao adicionar créditos: {e}")
+        print(f"? ERRO ao adicionar cr?ditos: {e}")
         return False
     finally:
         conn.close()
 
 def debitar_creditos(usuario_id, qtd):
-    """Debita créditos apenas se houver créditos disponíveis suficientes."""
+    """Debita creditos apenas se houver creditos disponiveis suficientes."""
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -308,7 +305,7 @@ def debitar_creditos(usuario_id, qtd):
             conn.commit()
             return cursor.rowcount > 0
     except Exception as e:
-        print(f"? ERRO ao debitar créditos: {e}")
+        print(f"? ERRO ao debitar cr?ditos: {e}")
         return False
     finally:
         conn.close()
@@ -337,28 +334,28 @@ def registrar_log(usuario_id, modulo, entrada, saida, creditos, request: Request
     """, (usuario_id, modulo, entrada, saida, creditos, ip))
 
 def read_docx(file_path):
-    """Lê o conteúdo de um arquivo DOCX e retorna como string."""
+    """L? o conte?do de um arquivo DOCX e retorna como string."""
     doc = Document(file_path)
     text = '\n'.join([p.text for p in doc.paragraphs])
     return text
 
 def get_current_user(authorization: str = Header(None)):
-    """Autenticação: extrai token do header (Bearer ou puro) e busca usuário no banco."""
+    """Autentica??o: extrai token do header (Bearer ou puro) e busca usu?rio no banco."""
     if not authorization:
-        raise HTTPException(status_code=401, detail="Não autorizado")
+        raise HTTPException(status_code=401, detail="N?o autorizado")
     if authorization.startswith("Bearer "):
         token = authorization.replace("Bearer ", "").strip()
     else:
         token = authorization.strip()
     if not token:
-        raise HTTPException(status_code=401, detail="Não autorizado")
+        raise HTTPException(status_code=401, detail="N?o autorizado")
     row = db_select_one("SELECT * FROM usuarios WHERE token = %s", (token,))
     if not row:
-        raise HTTPException(status_code=401, detail="Não autorizado")
+        raise HTTPException(status_code=401, detail="N?o autorizado")
     return dict(row)
 
 def require_api_key(authorization: str = Header(None)):
-    """Dependency para autenticação em rotas FastAPI."""
+    """Dependency para autentica??o em rotas FastAPI."""
     return get_current_user(authorization)
 
 
@@ -366,7 +363,7 @@ ADMIN_EMAIL = "prof.edesio@gmail.com"
 
 
 def require_admin(authorization: str = Header(None)):
-    """Dependency: apenas usuário admin (prof.edesio@gmail.com) pode acessar."""
+    """Dependency: apenas usu?rio admin (prof.edesio@gmail.com) pode acessar."""
     user = get_current_user(authorization)
     email = (user.get("email") or "").strip().lower()
     if email != ADMIN_EMAIL:
@@ -374,7 +371,7 @@ def require_admin(authorization: str = Header(None)):
     return user
 
 def log_t(msg):
-    """Função auxiliar para logging com timestamp."""
+    """Fun??o auxiliar para logging com timestamp."""
     logging.warning(f"[TIMER] {msg} @ {time.time():.2f}")
 
 def run_with_two_chunks(
@@ -385,7 +382,7 @@ def run_with_two_chunks(
     max_chunks: int = 2
 ):
     """
-    Executa processamento de IA em no máximo DOIS chunks,
+    Executa processamento de IA em no m?ximo DOIS chunks,
     evitando timeout no servidor.
     """
     try:
@@ -402,7 +399,7 @@ def run_with_two_chunks(
     chunks = chunk_text(texto, chunk_size=chunk_size, overlap=overlap)
     log_t("DEPOIS chunking")
 
-    # Segurança absoluta: no máximo 2 chunks
+    # Seguran?a absoluta: no m?ximo 2 chunks
     chunks = chunks[:max_chunks]
 
     respostas = []
@@ -417,20 +414,20 @@ def run_with_two_chunks(
     log_t("DEPOIS montagem resposta")
 
     aviso = (
-        "\n\n?? Nota: esta análise foi gerada a partir de uma parte do texto "
+        "\n\n?? Nota: esta an?lise foi gerada a partir de uma parte do texto "
         "para garantir rapidez e estabilidade da plataforma."
     )
 
     return texto_final + aviso
 
 # ============================================
-# ? FUNÇÕES DE PROCESSAMENTO ASSÍNCRONO
+# ? FUN??ES DE PROCESSAMENTO ASS?NCRONO
 # ============================================
 
 def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: str):
-    """Processa job de explicação de conceito em background."""
+    """Processa job de explica??o de conceito em background."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - explicar")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - explicar")
         
         # Limite defensivo
         texto_artigo = texto_artigo[:6000]
@@ -446,8 +443,8 @@ def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: s
             overlap=300
         )
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -456,19 +453,19 @@ def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: s
                     ("done", resultado, job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            conn.commit()  # Commit expl?cito na mesma conex?o
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
         
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - explicar")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - explicar")
         
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - explicar\n{erro}")
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -477,24 +474,24 @@ def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: s
                     ("failed", erro[:1000], job_id)  # Limitar tamanho do erro
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
+            conn.commit()  # Commit expl?cito na mesma conex?o
             logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
 
 def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "geral"):
-    """Processa job de análise crítica em background - SEM chunking para análise focada."""
+    """Processa job de an?lise cr?tica em background - SEM chunking para an?lise focada."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - critica (foco: {foco_analise})")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - critica (foco: {foco_analise})")
         
-        # Limitar texto drasticamente para análise focada (sem chunking)
+        # Limitar texto drasticamente para an?lise focada (sem chunking)
         texto_artigo = texto_artigo[:3000]  # Reduzido de 4000 para 3000
         
-        # Chamada direta SEM chunking - análise focada é mais rápida
+        # Chamada direta SEM chunking - an?lise focada ? mais r?pida
         resultado = aplicar_leitura_critica(texto_artigo, foco_analise)
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -503,19 +500,19 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
                     ("done", resultado, job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            conn.commit()  # Commit expl?cito na mesma conex?o
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
         
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - critica")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - critica")
         
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - critica\n{erro}")
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -524,22 +521,22 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
                     ("failed", erro[:1000], job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
+            conn.commit()  # Commit expl?cito na mesma conex?o
             logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
 
 def processar_job_fatos(job_id: int, texto_artigo: str):
-    """Processa job de verificação de fatos em background - SEM chunking."""
+    """Processa job de verifica??o de fatos em background - SEM chunking."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - fatos")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - fatos")
         
         # Limitar texto e chamar diretamente, sem chunking
         texto_artigo = texto_artigo[:4000]
         resultado = verificar_fatos(texto_artigo)
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -548,19 +545,19 @@ def processar_job_fatos(job_id: int, texto_artigo: str):
                     ("done", resultado, job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            conn.commit()  # Commit expl?cito na mesma conex?o
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
         
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - fatos")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - fatos")
         
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - fatos\n{erro}")
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -569,22 +566,22 @@ def processar_job_fatos(job_id: int, texto_artigo: str):
                     ("failed", erro[:1000], job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
+            conn.commit()  # Commit expl?cito na mesma conex?o
             logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
 
 def processar_job_mapa(job_id: int, texto_artigo: str):
-    """Processa job de visualização de estrutura em background - SEM chunking."""
+    """Processa job de visualiza??o de estrutura em background - SEM chunking."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - mapa")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - mapa")
         
         # Limitar texto e chamar diretamente, sem chunking
         texto_artigo = texto_artigo[:4000]
         resultado = visualizar_estrutura(texto_artigo)
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -593,19 +590,19 @@ def processar_job_mapa(job_id: int, texto_artigo: str):
                     ("done", resultado, job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            conn.commit()  # Commit expl?cito na mesma conex?o
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
         
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - mapa")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - mapa")
         
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - mapa\n{erro}")
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -614,7 +611,7 @@ def processar_job_mapa(job_id: int, texto_artigo: str):
                     ("failed", erro[:1000], job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
+            conn.commit()  # Commit expl?cito na mesma conex?o
             logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
@@ -622,14 +619,14 @@ def processar_job_mapa(job_id: int, texto_artigo: str):
 def processar_job_structure_mapper(job_id: int, texto_artigo: str):
     """Processa job de mapeamento de estrutura em background - SEM chunking."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - structure_mapper")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - structure_mapper")
         
         # Limitar texto e chamar diretamente, sem chunking
         texto_artigo = texto_artigo[:4000]
         resultado = gerar_mapa_estrutura(texto_artigo)
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -638,19 +635,19 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
                     ("done", resultado, job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}")
+            conn.commit()  # Commit expl?cito na mesma conex?o
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
         
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - structure_mapper")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - structure_mapper")
         
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - structure_mapper\n{erro}")
         
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
-        # autocommit=False para permitir controle explícito do commit
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
+        # autocommit=False para permitir controle expl?cito do commit
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -659,7 +656,7 @@ def processar_job_structure_mapper(job_id: int, texto_artigo: str):
                     ("failed", erro[:1000], job_id)
                 )
                 rowcount = cursor.rowcount
-            conn.commit()  # Commit explícito na mesma conexão
+            conn.commit()  # Commit expl?cito na mesma conex?o
             logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
         finally:
             conn.close()
@@ -680,7 +677,7 @@ def _extrair_json_do_texto(texto: str):
                     return json.loads(bloco)
                 except Exception:
                     pass
-    # Primeiro { até último }
+    # Primeiro { at? ?ltimo }
     inicio = texto.find("{")
     if inicio >= 0:
         fim = texto.rfind("}")
@@ -693,15 +690,15 @@ def _extrair_json_do_texto(texto: str):
 
 
 def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_artigo: str = None, dados_extras: dict = None):
-    """Processa job de metanálise em background. Fluxo: Etapa 2 ? confirmação humana ? Evidence Graph ? Etapa 3 ? 4 ? 5."""
+    """Processa job de metan?lise em background. Fluxo: Etapa 2 ? confirma??o humana ? Evidence Graph ? Etapa 3 ? 4 ? 5."""
     try:
-        logging.warning(f"[RESEARCH JOB {job_id}] início - meta_analise (etapa: {etapa}, tema: {tema})")
+        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - meta_analise (etapa: {etapa}, tema: {tema})")
 
         # Limitar texto se fornecido
         if texto_artigo:
             texto_artigo = texto_artigo[:6000]
 
-        # Chamar função de metanálise (agora retorna dict com 'resultado' e 'artigos')
+        # Chamar fun??o de metan?lise (agora retorna dict com 'resultado' e 'artigos')
         resultado_dict = gerar_meta_analise(tema=tema, etapa=etapa, texto_artigo=texto_artigo, dados_extras=dados_extras)
 
         resultado_texto = resultado_dict.get('resultado', '')
@@ -721,7 +718,7 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
             if isinstance(parsed, dict) and (parsed.get("study_metadata") or parsed.get("outcomes")):
                 dados_extras_atualizados["extraction_json"] = parsed
 
-        # Usar conexão explícita com commit explícito para garantir funcionamento em threads
+        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
         conn = get_connection()
         try:
             with conn.cursor() as cursor:
@@ -732,7 +729,7 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
                 )
                 rowcount = cursor.rowcount
             conn.commit()
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE concluído - job_id={job_id}, linhas_afetadas={rowcount}, artigos={len(artigos_encontrados)}")
+            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}, artigos={len(artigos_encontrados)}")
 
             # Etapa 2: ao terminar, disparar build do graph e salvar por project_id (incremental)
             if etapa == "2" and parsed and (dados_extras or {}).get("project_id") is not None and (dados_extras or {}).get("usuario_id") is not None:
@@ -747,11 +744,11 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
                     upsert_project_evidence_graph(conn, project_id, usuario_id, graph)
                     logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph atualizado (project_id={project_id})")
                 except Exception as e_eg:
-                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph (não bloqueante): {e_eg}")
+                    logging.warning(f"[RESEARCH JOB {job_id}] Evidence Graph (n?o bloqueante): {e_eg}")
         finally:
             conn.close()
 
-        logging.warning(f"[RESEARCH JOB {job_id}] concluído - meta_analise")
+        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - meta_analise")
         
     except Exception:
         erro = traceback.format_exc()
@@ -771,28 +768,28 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
             conn.close()
 
 # ============================================
-# ? MODELOS PYDANTIC PARA VALIDAÇÃO
+# ? MODELOS PYDANTIC PARA VALIDA??O
 # ============================================
 
 class InputTexto(BaseModel):
     texto_artigo: str
     trecho: Optional[str] = None
-    nivel: Optional[str] = "graduação"
+    nivel: Optional[str] = "gradua??o"
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("texto_artigo n?o pode estar vazio")
         return v
 
 class InputCritica(BaseModel):
     texto_artigo: str
-    foco_analise: Optional[str] = "geral"  # Método de análise crítica escolhido
+    foco_analise: Optional[str] = "geral"  # M?todo de an?lise cr?tica escolhido
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("texto_artigo n?o pode estar vazio")
         return v
 
 class InputFatos(BaseModel):
@@ -801,7 +798,7 @@ class InputFatos(BaseModel):
     @validator('texto_artigo')
     def validate_texto(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("texto_artigo n?o pode estar vazio")
         return v
 
 class InputPerspectiva(BaseModel):
@@ -810,7 +807,7 @@ class InputPerspectiva(BaseModel):
     @validator('texto_artigo')
     def validate_texto(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("texto_artigo n?o pode estar vazio")
         return v
 
 class InputMapa(BaseModel):
@@ -819,18 +816,18 @@ class InputMapa(BaseModel):
     @validator('texto_artigo')
     def validate_texto(cls, v):
         if not v or not v.strip():
-            raise ValueError("texto_artigo não pode estar vazio")
+            raise ValueError("texto_artigo n?o pode estar vazio")
         return v
 
 class InputMetaAnalise(BaseModel):
-    tema: Optional[str] = ""  # Tema agora é opcional (novo fluxo usa upload de artigos)
-    etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extração, 3=PRISMA/qualidade, 4=Seleção final, 5=Metanálise
+    tema: Optional[str] = ""  # Tema agora ? opcional (novo fluxo usa upload de artigos)
+    etapa: Optional[str] = "1"  # 1=PICO+Busca, 2=Extra??o, 3=PRISMA/qualidade, 4=Sele??o final, 5=Metan?lise
     texto_artigo: Optional[str] = None  # Opcional - usado apenas nas etapas 2-4
     json_extracao: Optional[str] = None
     estilo: Optional[str] = "Vancouver"  # Vancouver ou ABNT
     manuscrito: Optional[str] = None
     artigos_analisados: Optional[str] = None  # JSON string com artigos analisados (novo fluxo)
-    project_id: Optional[int] = None  # Agrupa jobs para Evidence Graph (após confirmação humana, antes Etapa 3)
+    project_id: Optional[int] = None  # Agrupa jobs para Evidence Graph (ap?s confirma??o humana, antes Etapa 3)
 
 # ============================================
 # ? HANDLER DE ERROS GLOBAL
@@ -838,7 +835,7 @@ class InputMetaAnalise(BaseModel):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handler global de exceções."""
+    """Handler global de exce??es."""
     import traceback
     error_detail = str(exc)
     logging.error(f"Erro global: {error_detail}\n{traceback.format_exc()}")
@@ -854,20 +851,20 @@ async def not_found_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=404,
         content={
-            "erro": "Rota não encontrada",
+            "erro": "Rota n?o encontrada",
             "path": str(request.url.path),
-            "message": "Verifique se a rota está correta e se o servidor está rodando"
+            "message": "Verifique se a rota est? correta e se o servidor est? rodando"
         }
     )
 
 # ============================================
-# ? ROTAS BÁSICAS
+# ? ROTAS B?SICAS
 # ============================================
 
 
 @app.get("/")
 def index():
-    return {"status": "Medquestresearch API está ativa ?", "version": "2.0"}
+    return {"status": "Medquestresearch API est? ativa ?", "version": "2.0"}
 
 @app.get("/ping")
 def ping():
@@ -887,29 +884,29 @@ def db_test():
 
 @app.get("/cors-test")
 def cors_test():
-    """Rota de teste para verificar se CORS está funcionando"""
+    """Rota de teste para verificar se CORS est? funcionando"""
     return {
         "status": "CORS Test",
-        "message": "Se você vê esta mensagem, CORS está funcionando!",
+        "message": "Se voc? v? esta mensagem, CORS est? funcionando!",
         "timestamp": datetime.datetime.now().isoformat()
     }
 
 @api_router.get("/test-db")
 def test_db():
-    """Rota de teste para verificar se o banco de dados está acessível"""
+    """Rota de teste para verificar se o banco de dados est? acess?vel"""
     try:
         if not os.getenv("DATABASE_URL"):
             return {
                 "ok": False,
-                "erro": "DATABASE_URL não configurada",
-                "dica": "Configure a variável DATABASE_URL no ambiente (Railway ou .env)"
+                "erro": "DATABASE_URL n?o configurada",
+                "dica": "Configure a vari?vel DATABASE_URL no ambiente (Railway ou .env)"
             }
         
         r = db_select_one("SELECT count(*) AS total FROM usuarios")
         return {
             "ok": True,
             "usuarios": r["total"],
-            "message": "Banco de dados está acessível!"
+            "message": "Banco de dados est? acess?vel!"
         }
     except Exception as e:
         return {
@@ -919,7 +916,7 @@ def test_db():
         }
 
 # ============================================
-# ? ROTAS DE ADMINISTRAÇÃO (CRÉDITOS)
+# ? ROTAS DE ADMINISTRA??O (CR?DITOS)
 # ============================================
 
 class AdicionarCreditosInput(BaseModel):
@@ -949,15 +946,15 @@ class ChatFollowUpInput(BaseModel):
 @limiter.limit("20 per minute")
 def listar_custos(request: Request, user = Depends(require_api_key)):
     """
-    Lista todos os custos configurados para cada tipo de requisição.
-    Requer autenticação de administrador.
+    Lista todos os custos configurados para cada tipo de requisi??o.
+    Requer autentica??o de administrador.
     """
     try:
         custos = get_all_costs()
         return {
             "custos": custos,
             "total_modulos": len(custos),
-            "observacao": "Valores podem ser ajustados via variáveis de ambiente CREDIT_COST_<MODULO>"
+            "observacao": "Valores podem ser ajustados via vari?veis de ambiente CREDIT_COST_<MODULO>"
         }
     except Exception as e:
         logging.error(f"Erro ao listar custos: {e}")
@@ -968,7 +965,7 @@ def listar_custos(request: Request, user = Depends(require_api_key)):
 @limiter.limit("30 per minute")
 def metricas_creditos(request: Request, user=Depends(require_admin)):
     """
-    Dashboard de métricas de créditos: auditoria, uso por módulo, compras.
+    Dashboard de m?tricas de cr?ditos: auditoria, uso por m?dulo, compras.
     Acesso restrito ao admin (prof.edesio@gmail.com).
     """
     try:
@@ -983,7 +980,7 @@ def metricas_creditos(request: Request, user=Depends(require_admin)):
         compras = next((t for t in totais_tipo if t.get("tipo") == "compra"), {})
         consumo = next((t for t in totais_tipo if t.get("tipo") == "consumo"), {})
 
-        # Uso por módulo (consumo)
+        # Uso por m?dulo (consumo)
         por_modulo = db_select(
             """
             SELECT modulo, COUNT(*) AS qtd_registros, COALESCE(SUM(custo_total), 0)::bigint AS total_creditos
@@ -994,7 +991,7 @@ def metricas_creditos(request: Request, user=Depends(require_admin)):
             """
         )
 
-        # Últimos 50 registros (auditoria)
+        # ?ltimos 50 registros (auditoria)
         ultimos = db_select(
             """
             SELECT h.id, h.usuario_id, u.email, u.nome, h.tipo, h.modulo, h.quantidade, h.custo_total, h.criado_em
@@ -1024,11 +1021,11 @@ def metricas_creditos(request: Request, user=Depends(require_admin)):
 @limiter.limit("20 per minute")
 def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = Depends(require_api_key)):
     """
-    Adiciona créditos a um usuário.
+    Adiciona creditos a um usuario.
     Pode ser identificado por ID ou email.
     """
     try:
-        # Buscar usuário por ID ou email
+        # Buscar usu?rio por ID ou email
         if data.usuario_id:
             usuario = db_select_one("SELECT id, nome, email, creditos FROM usuarios WHERE id = %s", (data.usuario_id,))
         elif data.email:
@@ -1037,11 +1034,11 @@ def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = De
             raise HTTPException(status_code=400, detail="Deve fornecer usuario_id ou email")
 
         if not usuario:
-            raise HTTPException(status_code=404, detail="Usuário não encontrado")
+            raise HTTPException(status_code=404, detail="Usu?rio n?o encontrado")
 
-        # Adicionar créditos usando função auxiliar
+        # Adicionar creditos usando funcao auxiliar
         if not adicionar_creditos_usuario(usuario["id"], data.quantidade):
-            raise HTTPException(status_code=500, detail="Erro ao atualizar créditos no banco de dados")
+            raise HTTPException(status_code=500, detail="Erro ao atualizar creditos no banco de dados")
 
         # Buscar dados atualizados
         usuario_atualizado = db_select_one(
@@ -1050,7 +1047,7 @@ def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = De
         )
 
         return {
-            "mensagem": f"Créditos adicionados com sucesso",
+            "mensagem": "Creditos adicionados com sucesso",
             "usuario": {
                 "id": usuario_atualizado["id"],
                 "nome": usuario_atualizado["nome"],
@@ -1066,10 +1063,10 @@ def adicionar_creditos(request: Request, data: AdicionarCreditosInput, user = De
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Erro ao adicionar créditos: {e}")
+        logging.error(f"Erro ao adicionar cr?ditos: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro ao adicionar créditos: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar cr?ditos: {str(e)}")
 
 @app.get("/routes")
 def list_routes():
@@ -1089,12 +1086,12 @@ def list_routes():
     }
 
 # ============================================
-# ? ROTAS DE USUÁRIO
+# ? ROTAS DE USU?RIO
 # ============================================
 
 @api_router.get("/test")
 def test_router():
-    """Rota de teste para verificar se o router está funcionando."""
+    """Rota de teste para verificar se o router est? funcionando."""
     return {"status": "Router funcionando", "prefix": "/genapi"}
 
 @api_router.post("/cadastro")
@@ -1110,10 +1107,10 @@ def cadastro(request: Request, data: CadastroInput):
             (data.nome, data.email, senha_hash)
         )
 
-        # Buscar usuário criado, gerar token e retornar (login automático pós-cadastro)
+        # Buscar usu?rio criado, gerar token e retornar (login autom?tico p?s-cadastro)
         row = db_select_one("SELECT id, nome, email, creditos, creditos_usados FROM usuarios WHERE email=%s", (data.email,))
         if not row:
-            return JSONResponse(status_code=500, content={"erro": "Erro ao criar usuário"})
+            return JSONResponse(status_code=500, content={"erro": "Erro ao criar usu?rio"})
 
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
@@ -1128,13 +1125,13 @@ def cadastro(request: Request, data: CadastroInput):
             "creditos": creditos,
             "creditos_usados": creditos_usados,
             "creditos_disponiveis": creditos_disponiveis,
-            "mensagem": "Usuário criado com sucesso"
+            "mensagem": "Usu?rio criado com sucesso"
         }
 
     except IntegrityError:
         return JSONResponse(
             status_code=400,
-            content={"erro": "Email já cadastrado"}
+            content={"erro": "Email j? cadastrado"}
         )
 
     except Exception as e:
@@ -1150,17 +1147,17 @@ def cadastro(request: Request, data: CadastroInput):
 @limiter.limit("5 per minute")
 def login(request: Request, data: LoginRequest):
     try:
-        # Verificar se o banco de dados está configurado
+        # Verificar se o banco de dados est? configurado
         if not os.getenv("DATABASE_URL"):
-            logging.error("DATABASE_URL não configurada")
+            logging.error("DATABASE_URL n?o configurada")
             raise HTTPException(
                 status_code=503,
-                detail="Banco de dados não configurado. Configure DATABASE_URL no ambiente."
+                detail="Banco de dados n?o configurado. Configure DATABASE_URL no ambiente."
             )
         
         row = db_select_one("SELECT * FROM usuarios WHERE email=%s", (data.email,))
         if not row:
-            raise HTTPException(status_code=404, detail="Email não encontrado")
+            raise HTTPException(status_code=404, detail="Email n?o encontrado")
 
         if row["senha_hash"] != hash_senha(data.senha):
             raise HTTPException(status_code=401, detail="Senha incorreta")
@@ -1187,8 +1184,8 @@ def login(request: Request, data: LoginRequest):
         raise HTTPException(status_code=500, detail=f"Erro ao fazer login: {str(e)}")
 
 # ============================================
-# Monetização: apenas compra de créditos
-# R$ 0,25/crédito; +20% de bônus acima de 300 créditos
+# Monetiza??o: apenas compra de cr?ditos
+# R$ 0,25/cr?dito; +20% de b?nus acima de 300 cr?ditos
 # ============================================
 
 PRECO_CREDITO = 0.25
@@ -1207,7 +1204,7 @@ def calcular_creditos_entregues(quantidade_comprada: int) -> int:
 
 
 def calcular_preco_reais(quantidade_comprada: int) -> float:
-    """Preço em R$ para comprar essa quantidade: valor = quantidade * PRECO_CREDITO."""
+    """Pre?o em R$ para comprar essa quantidade: valor = quantidade * PRECO_CREDITO."""
     return round(quantidade_comprada * PRECO_CREDITO, 2)
 
 
@@ -1215,25 +1212,25 @@ def calcular_preco_reais(quantidade_comprada: int) -> float:
 @limiter.limit("30 per minute")
 def listar_planos(request: Request):
     """
-    Monetização é apenas compra de créditos; não há planos de assinatura.
+    Monetiza??o ? apenas compra de cr?ditos; n?o h? planos de assinatura.
     Retorna lista vazia para compatibilidade com o frontend.
     """
-    return {"planos": [], "mensagem": "Monetização apenas por compra de créditos. Use GET /pacotes."}
+    return {"planos": [], "mensagem": "Monetiza??o apenas por compra de cr?ditos. Use GET /pacotes."}
 
 
 @api_router.get("/pacotes")
 @limiter.limit("30 per minute")
 def listar_pacotes(request: Request):
     """
-    Lista pacotes de créditos: R$ 0,25/crédito; +20% de bônus acima de 300 créditos.
+    Lista pacotes de cr?ditos: R$ 0,25/cr?dito; +20% de b?nus acima de 300 cr?ditos.
     """
     sugestoes = [
-        {"id": "50", "nome": "50 créditos", "quantidade": 50, "creditos_entregues": 50, "preco_reais": calcular_preco_reais(50)},
-        {"id": "100", "nome": "100 créditos", "quantidade": 100, "creditos_entregues": 100, "preco_reais": calcular_preco_reais(100)},
-        {"id": "300", "nome": "300 créditos", "quantidade": 300, "creditos_entregues": 300, "preco_reais": calcular_preco_reais(300)},
-        {"id": "400", "nome": "400 créditos (+20%)", "quantidade": 400, "creditos_entregues": calcular_creditos_entregues(400), "preco_reais": calcular_preco_reais(400), "destaque": True},
-        {"id": "500", "nome": "500 créditos (+20%)", "quantidade": 500, "creditos_entregues": calcular_creditos_entregues(500), "preco_reais": calcular_preco_reais(500)},
-        {"id": "1000", "nome": "1000 créditos (+20%)", "quantidade": 1000, "creditos_entregues": calcular_creditos_entregues(1000), "preco_reais": calcular_preco_reais(1000)},
+        {"id": "50", "nome": "50 cr?ditos", "quantidade": 50, "creditos_entregues": 50, "preco_reais": calcular_preco_reais(50)},
+        {"id": "100", "nome": "100 cr?ditos", "quantidade": 100, "creditos_entregues": 100, "preco_reais": calcular_preco_reais(100)},
+        {"id": "300", "nome": "300 cr?ditos", "quantidade": 300, "creditos_entregues": 300, "preco_reais": calcular_preco_reais(300)},
+        {"id": "400", "nome": "400 cr?ditos (+20%)", "quantidade": 400, "creditos_entregues": calcular_creditos_entregues(400), "preco_reais": calcular_preco_reais(400), "destaque": True},
+        {"id": "500", "nome": "500 cr?ditos (+20%)", "quantidade": 500, "creditos_entregues": calcular_creditos_entregues(500), "preco_reais": calcular_preco_reais(500)},
+        {"id": "1000", "nome": "1000 cr?ditos (+20%)", "quantidade": 1000, "creditos_entregues": calcular_creditos_entregues(1000), "preco_reais": calcular_preco_reais(1000)},
     ]
     return {
         "pacotes": sugestoes,
@@ -1248,10 +1245,10 @@ def listar_pacotes(request: Request):
 @api_router.get("/creditos")
 def creditos(user = Depends(require_api_key)):
     try:
-        # Verificar se user tem as chaves necessárias
+        # Verificar se user tem as chaves necess?rias
         if "creditos" not in user or "creditos_usados" not in user:
-            logging.error(f"Usuário sem chaves de créditos: {user.keys()}")
-            raise HTTPException(status_code=500, detail="Dados do usuário incompletos")
+            logging.error(f"Usu?rio sem chaves de cr?ditos: {user.keys()}")
+            raise HTTPException(status_code=500, detail="Dados do usu?rio incompletos")
         
         disponiveis = creditos_disponiveis(user)
         
@@ -1270,13 +1267,13 @@ def creditos(user = Depends(require_api_key)):
         logging.error(f"Erro em creditos: {e}")
         import traceback
         logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar créditos: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar cr?ditos: {str(e)}")
 
 
 @api_router.get("/perfil")
 @limiter.limit("30 per minute")
 def get_perfil(request: Request, user=Depends(require_api_key)):
-    """Retorna dados do perfil do usuário (para edição em Atualizar cadastro)."""
+    """Retorna dados do perfil do usu?rio (para edi??o em Atualizar cadastro)."""
     return {
         "id": user.get("id"),
         "nome": user.get("nome") or "",
@@ -1289,7 +1286,7 @@ def get_perfil(request: Request, user=Depends(require_api_key)):
 @api_router.patch("/perfil")
 @limiter.limit("20 per minute")
 def atualizar_perfil(request: Request, data: AtualizarPerfilInput, user=Depends(require_api_key)):
-    """Atualiza nome, email, cpf e/ou telefone do usuário. CPF e telefone são necessários para comprar créditos."""
+    """Atualiza nome, email, cpf e/ou telefone do usu?rio. CPF e telefone s?o necess?rios para comprar cr?ditos."""
     updates = []
     params = []
     if data.nome is not None:
@@ -1320,7 +1317,7 @@ def atualizar_perfil(request: Request, data: AtualizarPerfilInput, user=Depends(
 @api_router.get("/jobs")
 @limiter.limit("30 per minute")
 def listar_jobs(request: Request, user = Depends(require_api_key)):
-    """Lista todos os jobs do usuário."""
+    """Lista todos os jobs do usu?rio."""
     try:
         jobs = db_select(
             "SELECT id, modulo, status FROM research_jobs WHERE usuario_id = %s ORDER BY id DESC",
@@ -1346,7 +1343,7 @@ def listar_jobs(request: Request, user = Depends(require_api_key)):
 @api_router.get("/status/{job_id}")
 @limiter.limit("30 per minute")  # Rate limit mais permissivo para polling
 def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
-    """Verifica o status de um job de processamento assíncrono."""
+    """Verifica o status de um job de processamento ass?ncrono."""
     try:
         job = db_select_one(
             "SELECT * FROM research_jobs WHERE id = %s AND usuario_id = %s",
@@ -1354,7 +1351,7 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
         )
 
         if not job:
-            raise HTTPException(status_code=404, detail="Job não encontrado")
+            raise HTTPException(status_code=404, detail="Job n?o encontrado")
 
         response = {
             "request_id": job["id"],
@@ -1367,7 +1364,7 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
         if job["status"] == "done" and job.get("resultado"):
             response["resultado"] = job["resultado"]
             
-            # Se for metanálise e tiver dados_extras com artigos, incluir artigos na resposta
+            # Se for metan?lise e tiver dados_extras com artigos, incluir artigos na resposta
             if job.get("dados_extras"):
                 try:
                     dados_extras = json.loads(job["dados_extras"]) if isinstance(job["dados_extras"], str) else job["dados_extras"]
@@ -1375,7 +1372,7 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
                         response["artigos"] = dados_extras["artigos"]
                         response["total_artigos"] = dados_extras.get("total_artigos", len(dados_extras.get("artigos", [])))
                 except:
-                    pass  # Se não conseguir parsear, ignora
+                    pass  # Se n?o conseguir parsear, ignora
 
         # Se o job falhou, incluir o erro
         if job["status"] == "failed" and job.get("erro"):
@@ -1401,11 +1398,11 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
     print(">>> ENTROU NA ROTA /explicar")
     try:
         if not data.trecho:
-            raise HTTPException(status_code=400, detail="Campo 'trecho' é obrigatório")
+            raise HTTPException(status_code=400, detail="Campo 'trecho' ? obrigat?rio")
 
         custo = consumir_creditos(user["id"], "explicar")
 
-        # Criar job assíncrono
+        # Criar job ass?ncrono
         dados_extras = json.dumps({"trecho": data.trecho, "nivel": data.nivel})
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -1443,7 +1440,7 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
         foco_analise = data.foco_analise or "geral"
         custo = consumir_creditos(user["id"], "critica")
 
-        # Criar job assíncrono
+        # Criar job ass?ncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
             (user["id"], "critica", "processing", data.texto_artigo, custo, json.dumps({"foco_analise": foco_analise}))
@@ -1478,7 +1475,7 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
     try:
         custo = consumir_creditos(user["id"], "fatos")
 
-        # Criar job assíncrono
+        # Criar job ass?ncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
             (user["id"], "fatos", "processing", data.texto_artigo, custo)
@@ -1513,7 +1510,7 @@ def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)
     try:
         custo = consumir_creditos(user["id"], "mapa")
 
-        # Criar job assíncrono
+        # Criar job ass?ncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
             (user["id"], "mapa", "processing", data.texto_artigo, custo)
@@ -1547,7 +1544,7 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
     try:
         custo = consumir_creditos(user["id"], "structure_mapper")
 
-        # Criar job assíncrono
+        # Criar job ass?ncrono
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
             (user["id"], "structure_mapper", "processing", data.texto_artigo, custo)
@@ -1579,19 +1576,19 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
 @limiter.limit("5 per minute")
 async def rota_upload_artigos_metanalise(
     request: Request, 
-    files: list[UploadFile] = File(..., description="Lista de arquivos PDF/DOCX (máx. 25)"),
+    files: list[UploadFile] = File(..., description="Lista de arquivos PDF/DOCX (m?x. 25)"),
     user = Depends(require_api_key)
 ):
     """
-    Endpoint para upload múltiplo de artigos científicos para metanálise.
-    Aceita até 25 arquivos PDF/DOCX e faz análise PRISMA de cada um.
+    Endpoint para upload m?ltiplo de artigos cient?ficos para metan?lise.
+    Aceita at? 25 arquivos PDF/DOCX e faz an?lise PRISMA de cada um.
     """
     try:
-        # Validar número de arquivos
+        # Validar n?mero de arquivos
         if len(files) > 25:
             raise HTTPException(
                 status_code=400, 
-                detail="Máximo de 25 artigos permitidos"
+                detail="M?ximo de 25 artigos permitidos"
             )
         
         if len(files) == 0:
@@ -1605,17 +1602,17 @@ async def rota_upload_artigos_metanalise(
             if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Formato inválido: {file.filename}. Apenas PDF e DOCX são suportados."
+                    detail=f"Formato inv?lido: {file.filename}. Apenas PDF e DOCX s?o suportados."
                 )
         
-        # Cobrar créditos (custo por arquivo + análise PRISMA por artigo)
+        # Cobrar cr?ditos (custo por arquivo + an?lise PRISMA por artigo)
         custo_por_arquivo = 5  # pdf
         custo_analise_prisma = 15  # meta_etapa por artigo
         custo_total = (custo_por_arquivo + custo_analise_prisma) * len(files)
         consumir_creditos_total(user["id"], custo_total, "meta_analise_upload")
         
-        # Importar módulos necessários (compatível com uvicorn api:app a partir de /app/backend)
-        # read_docx já está definido neste módulo (api.py)
+        # Importar m?dulos necess?rios (compat?vel com uvicorn api:app a partir de /app/backend)
+        # read_docx j? est? definido neste m?dulo (api.py)
         try:
             from prisma_analyzer import analisar_artigo_prisma, gerar_resumo_analises
             from pdf_processor import extrair_texto_pdf
@@ -1642,7 +1639,7 @@ async def rota_upload_artigos_metanalise(
                 extensao = file.filename.lower().split('.')[-1]
                 temp_path = os.path.join(temp_dir, f"_temp_{secrets.token_hex(6)}_{idx}.{extensao}")
                 
-                # Salvar arquivo temporário
+                # Salvar arquivo tempor?rio
                 with open(temp_path, "wb") as f:
                     content = await file.read()
                     f.write(content)
@@ -1659,7 +1656,7 @@ async def rota_upload_artigos_metanalise(
                     if isinstance(texto_extraido, list):
                         texto_extraido = "\n\n".join(texto_extraido)
                     
-                    # Extrair título (primeiras linhas ou usar nome do arquivo)
+                    # Extrair t?tulo (primeiras linhas ou usar nome do arquivo)
                     titulo = file.filename.replace('.pdf', '').replace('.docx', '')
                     if texto_extraido:
                         linhas = texto_extraido.split('\n')[:5]
@@ -1680,7 +1677,7 @@ async def rota_upload_artigos_metanalise(
                     analises_prisma.append(analise)
                     
                 finally:
-                    # Limpar arquivo temporário
+                    # Limpar arquivo tempor?rio
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
                         
@@ -1749,9 +1746,9 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
             dados_extras["project_id"] = data.project_id
         dados_extras["usuario_id"] = user["id"]  # para Evidence Graph no job em background
 
-        # Criar job assíncrono (project_id agrupa jobs para Evidence Graph)
+        # Criar job ass?ncrono (project_id agrupa jobs para Evidence Graph)
         dados_extras_json = json.dumps(dados_extras) if dados_extras else None
-        entrada_texto = data.texto_artigo if data.texto_artigo else (data.tema if data.tema else "Metanálise")
+        entrada_texto = data.texto_artigo if data.texto_artigo else (data.tema if data.tema else "Metan?lise")
         job_id = db_insert_return_id(
             "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, project_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json, data.project_id)
@@ -1787,9 +1784,9 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
 async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depends(require_api_key)):
     try:
         if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
-            raise HTTPException(status_code=400, detail="Formato inválido. Apenas PDF e DOCX são suportados.")
+            raise HTTPException(status_code=400, detail="Formato inv?lido. Apenas PDF e DOCX s?o suportados.")
 
-        # Cobrar créditos antes de processar
+        # Cobrar cr?ditos antes de processar
         custo = consumir_creditos(user["id"], "pdf")
 
         extensao = file.filename.lower().split('.')[-1]
@@ -1809,7 +1806,7 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
             elif extensao == 'docx':
                 texto_extraido = read_docx(temp_path)
             else:
-                raise HTTPException(status_code=400, detail="Formato não suportado")
+                raise HTTPException(status_code=400, detail="Formato n?o suportado")
             
             if isinstance(texto_extraido, list):
                 texto_extraido = "\n\n".join(texto_extraido)
@@ -1834,7 +1831,7 @@ async def rota_pdf(request: Request, file: UploadFile = File(...), user = Depend
 
 
 class TraducaoInput(BaseModel):
-    """Texto a ser traduzido para português (usado pelo botão Traduzir texto)."""
+    """Texto a ser traduzido para portugu?s (usado pelo bot?o Traduzir texto)."""
     texto: str
 
 
@@ -1842,11 +1839,11 @@ class TraducaoInput(BaseModel):
 @limiter.limit("20 per minute")
 def rota_traducao(request: Request, data: TraducaoInput, user=Depends(require_api_key)):
     """
-    Traduz o texto extraído para português brasileiro (Qwen/Groq quando disponível).
-    Usado quando o usuário clica em "Traduzir texto" na aba do texto extraído.
+    Traduz o texto extra?do para portugu?s brasileiro (Qwen/Groq quando dispon?vel).
+    Usado quando o usu?rio clica em "Traduzir texto" na aba do texto extra?do.
     """
     if not data.texto or not data.texto.strip():
-        raise HTTPException(status_code=400, detail="Texto não pode estar vazio")
+        raise HTTPException(status_code=400, detail="Texto n?o pode estar vazio")
     try:
         resultado_pt = obter_versao_portugues(data.texto.strip())
         return {"resultado_pt": resultado_pt}
@@ -1858,45 +1855,45 @@ def rota_traducao(request: Request, data: TraducaoInput, user=Depends(require_ap
 @limiter.limit("20 per minute")
 def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends(require_api_key)):
     """
-    Processa mensagens de follow-up do chat, permitindo interação com respostas da IA.
+    Processa mensagens de follow-up do chat, permitindo intera??o com respostas da IA.
     """
     try:
         if not data.mensagem or not data.mensagem.strip():
-            raise HTTPException(status_code=400, detail="Mensagem não pode estar vazia")
+            raise HTTPException(status_code=400, detail="Mensagem n?o pode estar vazia")
 
         custo = consumir_creditos(user["id"], "chat_followup")
 
-        # Construir contexto do histórico
+        # Construir contexto do hist?rico
         contexto_historico = ""
         if data.historico:
-            for msg in data.historico[-5:]:  # Últimas 5 mensagens para contexto
-                role = "Usuário" if msg.get("role") == "user" else "Assistente"
+            for msg in data.historico[-5:]:  # ?ltimas 5 mensagens para contexto
+                role = "Usu?rio" if msg.get("role") == "user" else "Assistente"
                 contexto_historico += f"{role}: {msg.get('content', '')}\n\n"
 
-        # Construir prompt contextualizado baseado no tipo de análise
+        # Construir prompt contextualizado baseado no tipo de an?lise
         tipo_analise_nomes = {
-            "explicar": "Explicação de Conceito",
-            "critica": "Análise Crítica",
-            "fatos": "Verificação de Fatos",
+            "explicar": "Explica??o de Conceito",
+            "critica": "An?lise Cr?tica",
+            "fatos": "Verifica??o de Fatos",
             "mapa": "Mapa Conceitual",
             "structure_mapper": "Mapeamento de Estrutura",
-            "meta_analise": "Metanálise",
+            "meta_analise": "Metan?lise",
         }
         
         nome_analise = tipo_analise_nomes.get(data.tipo_analise, data.tipo_analise)
 
-        prompt = f"""Você é um assistente especializado em análise científica. O usuário está interagindo com uma análise do tipo: {nome_analise}.
+        prompt = f"""Voc? ? um assistente especializado em an?lise cient?fica. O usu?rio est? interagindo com uma an?lise do tipo: {nome_analise}.
 
-Contexto da análise anterior:
-{contexto_historico if contexto_historico else "Esta é a primeira interação após a análise inicial."}
+Contexto da an?lise anterior:
+{contexto_historico if contexto_historico else "Esta ? a primeira intera??o ap?s a an?lise inicial."}
 
-Texto do artigo (referência):
-{data.texto_artigo[:2000] if data.texto_artigo else "Não disponível"}
+Texto do artigo (refer?ncia):
+{data.texto_artigo[:2000] if data.texto_artigo else "N?o dispon?vel"}
 
-Mensagem do usuário:
+Mensagem do usu?rio:
 {data.mensagem}
 
-Responda de forma clara, objetiva e útil. Se o usuário pedir melhorias, sugestões ou esclarecimentos, forneça respostas práticas e acionáveis. Mantenha o foco no contexto científico e na análise realizada."""
+Responda de forma clara, objetiva e ?til. Se o usu?rio pedir melhorias, sugest?es ou esclarecimentos, forne?a respostas pr?ticas e acion?veis. Mantenha o foco no contexto cient?fico e na an?lise realizada."""
 
         # Gerar resposta usando gpt_engine
         try:
@@ -1909,7 +1906,7 @@ Responda de forma clara, objetiva e útil. Se o usuário pedir melhorias, sugestõe
                 import backend.gpt_engine as gpt_engine
                 gerar_resposta = gpt_engine.gerar_resposta
 
-        resposta = gerar_resposta(prompt, temperatura=0.7)  # Usa padrão configurado (1000 tokens)
+        resposta = gerar_resposta(prompt, temperatura=0.7)  # Usa padr?o configurado (1000 tokens)
 
         # Registrar log
         registrar_log(
@@ -1936,7 +1933,7 @@ Responda de forma clara, objetiva e útil. Se o usuário pedir melhorias, sugestõe
         raise HTTPException(status_code=500, detail=f"Erro ao processar mensagem: {str(e)}")
 
 # ============================================
-# ? INCLUIR ROUTERS NA APLICAÇÃO
+# ? INCLUIR ROUTERS NA APLICA??O
 # ============================================
 
 app.include_router(api_router)
@@ -1951,7 +1948,7 @@ except ImportError:
         from .routes.asaas_webhook import router as asaas_webhook_router
 app.include_router(asaas_webhook_router)
 
-# Checkout créditos (POST /genapi/checkout/creditos)
+# Checkout cr?ditos (POST /genapi/checkout/creditos)
 try:
     from backend.routes.checkout_creditos import router as checkout_router
 except ImportError:
@@ -1961,12 +1958,12 @@ except ImportError:
         from .routes.checkout_creditos import router as checkout_router
 app.include_router(checkout_router)
 
-# Log para debug: verificar se os routers foram incluídos
-logging.warning(f"[DEBUG] Router incluído com prefixo: /genapi")
-logging.warning(f"[DEBUG] Total de rotas após incluir routers: {len(app.routes)}")
+# Log para debug: verificar se os routers foram inclu?dos
+logging.warning(f"[DEBUG] Router inclu?do com prefixo: /genapi")
+logging.warning(f"[DEBUG] Total de rotas ap?s incluir routers: {len(app.routes)}")
 
 # ============================================
-# ? EXECUÇÃO LOCAL (para desenvolvimento)
+# ? EXECU??O LOCAL (para desenvolvimento)
 # ============================================
 if __name__ == "__main__":
     import uvicorn
