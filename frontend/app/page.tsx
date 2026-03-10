@@ -162,7 +162,7 @@ export default function Home() {
       setTituloResultado('Erro');
       setLoadingResultado(false);
     } finally {
-      setCardAtivo(null);
+      // não fechar o modal automaticamente; o usuário fecha no botão "Fechar"
     }
   }, [token, textoArtigo, textoProcessando, refreshCreditos]);
 
@@ -593,7 +593,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
 
       setTituloResultado('Metanálise PRISMA - Concluída');
       setLoadingResultado(false);
-      setCardAtivo(null);
       return;
     }
 
@@ -652,12 +651,10 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         setTituloResultado(titulo);
         setLoadingResultado(false);
       }
-      setCardAtivo(null);
     } catch (error: any) {
       setResultadoAtual(`❌ Erro: ${error.message || 'Erro desconhecido'}`);
       setTituloResultado('Erro');
       setLoadingResultado(false);
-      setCardAtivo(null);
     }
   }, [textoArtigo, token, cardAtivo]);
 
@@ -739,7 +736,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
 
     setTituloResultado('Metanálise PRISMA - Concluída');
     setLoadingResultado(false);
-    setCardAtivo(null);
   }, [token, analisesPrisma]);
 
   // Estado de carregamento inicial da autenticação
