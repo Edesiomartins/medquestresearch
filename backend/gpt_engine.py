@@ -202,10 +202,14 @@ def _is_bad_request(err: Exception) -> bool:
 
 
 def _is_transient(err: Exception) -> bool:
+    # Caso especial: limite diário de modelos FREE da OpenRouter não deve gerar backoff infinito
+    msg = str(err)
+    if "free-models-per-day" in msg:
+        return False
     return (
         isinstance(err, (RateLimitError, APIConnectionError, APITimeoutError))
-        or "timeout" in str(err).lower()
-        or "rate" in str(err).lower()
+        or "timeout" in msg.lower()
+        or "rate" in msg.lower()
     )
 
 
@@ -313,7 +317,21 @@ def gerar_resposta(
 
             except Exception as e:
                 last_error = e
-                logger.error(f"[GPT_ENGINE] ({tipo}) ❌ Erro | modelo='{model}' | tentativa {attempt}/{max_retries_per_model} | {e.__class__.__name__}: {e}")
+                logger.error(
+                    f"[GPT_ENGINE] ({tipo}) ❌ Erro | modelo='{model}' | tentativa {attempt}/{max_retries_per_model} | {e.__class__.__name__}: {e}"
+                )
+
+                # Caso especial: limite diário dos modelos gratuitos da OpenRouter.
+                # Nessa situação, apenas pulamos para o próximo modelo (pode ser um modelo pago),
+                # para permitir que o FREE seja o primário e o PAGO o fallback,
+                # sem ficar aguardando com backoff.
+                if "free-models-per-day" in str(e):
+                    logger.warning(
+                        "[GPT_ENGINE] (%s) Limite diario dos modelos gratuitos atingido para '%s'; tentando proximo modelo.",
+                        tipo,
+                        model,
+                    )
+                    break
 
                 if _is_auth(e):
                     if _get_api_key(use_backup=True) and not tried_backup:
@@ -353,9 +371,6 @@ def gerar_resposta(
 
                 logger.warning(f"[GPT_ENGINE] ({tipo}) Erro não-transiente, próximo modelo.")
                 break
-
-        if idx < len(models):
-            time.sleep(1.5)
 
     raise Exception(
         f"Erro ao gerar resposta: todos os modelos falharam. "
