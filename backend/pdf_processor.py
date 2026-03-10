@@ -436,8 +436,6 @@ def obter_versao_portugues(texto):
     """
     if not texto or not texto.strip():
         return texto
-    if not _precisa_traduzir_para_pt(texto):
-        return texto
     try:
         chunk_size = 2000
         chunks = []
