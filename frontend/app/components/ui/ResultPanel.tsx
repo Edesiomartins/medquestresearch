@@ -309,6 +309,7 @@ export default function ResultPanel({
   if (resultado && !showChat) {
     // Se for metanálise e tiver etapas, mostrar progresso das etapas também
     const mostrarEtapas = tipoAnalise === 'meta-analise' && etapasMetanalise.length > 0;
+    const blocos = resultado.split(/\n{2,}/g).filter((b) => b.trim().length > 0);
     
     return (
       <div className="card-elevated flex flex-col h-full">
@@ -399,8 +400,12 @@ export default function ResultPanel({
         )}
         
         <div className="prose max-w-none flex-1 overflow-hidden flex flex-col">
-          <div className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed wrap-break-word overflow-y-auto flex-1">
-            {resultado}
+          <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-x-auto font-sans leading-relaxed wrap-break-word overflow-y-auto flex-1">
+            {blocos.map((bloco, idx) => (
+              <p key={idx} className="mb-3 whitespace-pre-wrap">
+                {bloco}
+              </p>
+            ))}
           </div>
         </div>
       </div>
