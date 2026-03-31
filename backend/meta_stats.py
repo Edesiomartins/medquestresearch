@@ -126,7 +126,7 @@ def effect_log_or(
     yi = math.log((a * d) / (b * c))
     vi = (1 / a) + (1 / b) + (1 / c) + (1 / d)
     ci_low, ci_high = _norm_ci(yi, vi)
-    return Effect(study_id=study_id, label=label, yi=yi, vi=vi, ci_low=ci_high, ci_high=ci_high)
+    return Effect(study_id=study_id, label=label, yi=yi, vi=vi, ci_low=ci_low, ci_high=ci_high)
 
 
 # -----------------------------

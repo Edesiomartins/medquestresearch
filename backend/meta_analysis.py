@@ -719,3 +719,178 @@ Atue como Editor-Chefe de um periódico médico de alto fator de impacto e Espec
 IMPORTANTE: Responda SEMPRE em português brasileiro, mesmo que o artigo esteja em inglês.
 """
     return prompt
+
+
+PROMPTS_SECAO = {
+    "resumo": """
+Você é um especialista em redação científica. Com base nos dados da meta-análise abaixo,
+escreva um RESUMO ESTRUTURADO seguindo as diretrizes PRISMA 2020.
+
+O resumo deve conter:
+- Objetivo
+- Critérios de elegibilidade
+- Fontes de informação
+- Método de síntese
+- Resultados principais (com dados quantitativos quando disponíveis)
+- Limitações
+- Conclusão
+
+Dados da meta-análise:
+{contexto}
+
+Escreva em {idioma}. Use linguagem científica formal. Máximo 350 palavras.
+""",
+    "introducao": """
+Você é um especialista em redação de artigos de revisão sistemática.
+Escreva a INTRODUÇÃO do artigo de meta-análise com base nos dados abaixo.
+
+A introdução deve:
+1. Contextualizar o problema clínico/científico
+2. Apresentar a lacuna de conhecimento
+3. Justificar a necessidade da meta-análise
+4. Declarar claramente o objetivo e a questão PICO
+
+Dados disponíveis:
+{contexto}
+
+Escreva em {idioma}. Linguagem científica, sem bullets, em prosa fluente.
+""",
+    "metodos": """
+Você é um especialista em metodologia de revisões sistemáticas (Cochrane, PRISMA 2020).
+Escreva a seção de MÉTODOS do artigo com base nos dados abaixo.
+
+Inclua:
+1. Protocolo e registro (se disponível)
+2. Critérios de elegibilidade
+3. Fontes de informação e estratégia de busca
+4. Processo de seleção de estudos
+5. Extração de dados
+6. Avaliação do risco de viés
+7. Método de síntese estatística (modelo, heterogeneidade, I²)
+
+Dados disponíveis:
+{contexto}
+
+Escreva em {idioma}. Linguagem científica, sem bullets, em prosa fluente.
+""",
+    "resultados": """
+Você é um especialista em bioestatística e revisões sistemáticas.
+Escreva a seção de RESULTADOS do artigo com base nos dados abaixo.
+
+Inclua:
+1. Seleção dos estudos (fluxo PRISMA)
+2. Características dos estudos incluídos
+3. Risco de viés dos estudos
+4. Resultados das sínteses (valores numéricos disponíveis: RR/OR/SMD, IC95%, I², p-valor)
+5. Análises de sensibilidade (se disponíveis)
+
+Dados disponíveis:
+{contexto}
+
+Escreva em {idioma}. Linguagem científica formal.
+""",
+    "discussao": """
+Você é um especialista em medicina baseada em evidências.
+Escreva a seção de DISCUSSÃO do artigo com base nos dados abaixo.
+
+Inclua:
+1. Principais achados
+2. Comparação com literatura
+3. Possíveis explicações para heterogeneidade
+4. Limitações do estudo
+5. Implicações para prática clínica
+6. Implicações para pesquisa futura
+7. Conclusão final
+
+Dados disponíveis:
+{contexto}
+
+Escreva em {idioma}. Linguagem científica formal, em prosa.
+""",
+}
+
+
+def montar_contexto_projeto(project_id: int, conn) -> str:
+    """
+    Consolida dados de jobs concluídos e do evidence graph para uso na escrita do artigo.
+    """
+    rows = conn.execute(
+        """
+        SELECT modulo, resultado, dados_extras, analysis_json
+        FROM research_jobs
+        WHERE project_id = %s AND status = 'done'
+        ORDER BY id ASC
+        """,
+        (project_id,),
+    ).fetchall()
+
+    partes = [f"PROJECT_ID: {project_id}"]
+    for row in rows:
+        modulo = row.get("modulo", "desconhecido")
+        if row.get("resultado"):
+            partes.append(f"=== MODULO: {modulo} ===\n{str(row['resultado'])[:3000]}")
+        if row.get("analysis_json"):
+            partes.append(f"=== ANALYSIS_JSON: {modulo} ===\n{str(row['analysis_json'])[:3000]}")
+        if row.get("dados_extras"):
+            partes.append(f"=== DADOS_EXTRAS: {modulo} ===\n{str(row['dados_extras'])[:3000]}")
+
+    graph_row = conn.execute(
+        "SELECT graph_data FROM evidence_graphs WHERE project_id = %s",
+        (project_id,),
+    ).fetchone()
+    if graph_row and graph_row.get("graph_data"):
+        try:
+            import json as _json
+
+            graph_data = graph_row["graph_data"]
+            graph = _json.loads(graph_data) if isinstance(graph_data, str) else graph_data
+            studies = [n for n in (graph.get("nodes") or []) if n.get("type") == "Study"]
+            partes.append(f"=== EVIDENCE_GRAPH: estudos={len(studies)} ===")
+            for s in studies[:20]:
+                partes.append(
+                    f"- {s.get('label') or s.get('id') or 'Study'} | year={s.get('year') or ''} | n={s.get('n') or ''}"
+                )
+        except Exception as e:
+            logging.warning(f"[META_ANALYSIS] Falha ao interpretar evidence_graph: {e}")
+
+    return "\n\n".join(partes).strip()
+
+
+def escrever_secao_artigo(
+    project_id: int,
+    tema: str,
+    secao: str,
+    estilo_referencia: str = "Vancouver",
+    idioma: str = "pt",
+    instrucoes_adicionais: str = "",
+    model: str = "qwen/qwen-2.5-7b-instruct",
+) -> str:
+    """
+    Gera uma seção do artigo científico usando dados consolidados do projeto.
+    """
+    conn = get_connection()
+    try:
+        contexto = montar_contexto_projeto(project_id, conn)
+    finally:
+        conn.close()
+
+    if not contexto:
+        return "Erro: Nenhum dado encontrado para o projeto. Execute as etapas anteriores antes de gerar o artigo."
+
+    secao_norm = (secao or "").strip().lower()
+    prompt_template = PROMPTS_SECAO.get(secao_norm)
+    if not prompt_template:
+        return f"Erro: Seção '{secao}' não reconhecida."
+
+    idioma_texto = "português científico brasileiro" if idioma == "pt" else "scientific English"
+    prompt = prompt_template.format(contexto=contexto[:7000], idioma=idioma_texto)
+    prompt += f"\n\nTema do projeto: {tema or 'não informado'}"
+    prompt += f"\nEstilo de referência: {estilo_referencia}"
+    if instrucoes_adicionais:
+        prompt += f"\nInstruções adicionais: {instrucoes_adicionais}"
+
+    try:
+        return gerar_resposta(prompt, model=model, max_tokens=2200, temperatura=0.5)
+    except Exception as e:
+        logging.error(f"[META_ANALYSIS] Erro ao escrever seção '{secao_norm}': {e}")
+        return f"Erro ao gerar seção '{secao_norm}': {e}"

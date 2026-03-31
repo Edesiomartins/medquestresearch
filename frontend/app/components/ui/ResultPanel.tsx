@@ -1,7 +1,7 @@
 // app/components/ui/ResultPanel.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ChatInterface from './ChatInterface';
 import ArticleSelector, { Artigo } from './ArticleSelector';
 
@@ -49,6 +49,31 @@ export default function ResultPanel({
   const [focoAnalise, setFocoAnalise] = useState('geral');
   const [temaInput, setTemaInput] = useState(''); // Estado local para o input do formulário
   const [temaContinuar, setTemaContinuar] = useState(''); // Tema opcional para "Continuar Etapas"
+  const [elapsed, setElapsed] = useState(0);
+  const [erroTimestamp, setErroTimestamp] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loading) {
+      setElapsed(0);
+      return;
+    }
+    const interval = setInterval(() => setElapsed((prev) => prev + 1), 1000);
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  const isErro =
+    !!resultado &&
+    (
+      resultado.startsWith('Erro') ||
+      resultado.startsWith('❌') ||
+      resultado.toLowerCase().includes('falhou')
+    );
+
+  useEffect(() => {
+    if (isErro) {
+      setErroTimestamp(new Date().toLocaleString('pt-BR'));
+    }
+  }, [isErro]);
 
   // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
@@ -280,9 +305,11 @@ export default function ResultPanel({
     return (
       <div className="card-elevated">
         <div className="py-8">
-          <div className="text-center mb-6">
-            <div className="animate-pulse-blue text-4xl mb-4">⏳</div>
-            <div className="whitespace-pre-wrap text-base text-slate-700 font-sans leading-relaxed">
+          <div className="text-center mb-6 flex flex-col items-center gap-3">
+            <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+            <p className="text-slate-700 font-medium">{titulo || 'Processando análise...'}</p>
+            <p className="text-xs text-slate-500">{elapsed}s decorridos</p>
+            <div className="whitespace-pre-wrap text-sm text-slate-600 font-sans leading-relaxed mt-2">
               {resultado}
             </div>
           </div>
@@ -292,14 +319,24 @@ export default function ResultPanel({
   }
 
   // Estado: error - mostrar erro formatado
-  if (resultado && resultado.startsWith('❌')) {
+  if (isErro) {
     return (
       <div className="card-elevated">
-        <h2 className="text-2xl font-bold text-red-600 mb-4">{titulo}</h2>
-        <div className="prose max-w-none">
-          <div className="whitespace-pre-wrap text-sm text-red-700 bg-red-50 p-4 rounded-lg border border-red-200 overflow-x-auto font-sans leading-relaxed">
-            {resultado}
-          </div>
+        <h2 className="text-2xl font-bold text-red-700 mb-4">{titulo || 'Falha no processamento'}</h2>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <p className="text-red-700 font-medium">⚠️ Falha no processamento</p>
+          <p className="text-red-600 text-sm mt-1 whitespace-pre-wrap">{resultado}</p>
+          {erroTimestamp && (
+            <p className="text-red-500 text-xs mt-2">Ocorrido em: {erroTimestamp}</p>
+          )}
+          {onRunAnalysis && (
+            <button
+              onClick={onRunAnalysis}
+              className="mt-3 px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors text-sm font-medium"
+            >
+              Tentar novamente
+            </button>
+          )}
         </div>
       </div>
     );
@@ -320,7 +357,7 @@ export default function ResultPanel({
         {mostrarBotaoContinuarEtapas && onContinuarEtapasMetanalise && (
           <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
             <p className="text-sm text-slate-700 mb-3">
-              Os artigos foram analisados com PRISMA. Para gerar a extração de dados, redação técnica e verificação final, clique abaixo.
+              Os artigos foram analisados com PRISMA. Para gerar a extração de dados e a redação técnica, clique abaixo.
             </p>
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex-1 min-w-[200px]">
@@ -341,7 +378,7 @@ export default function ResultPanel({
                 onClick={() => onContinuarEtapasMetanalise(temaContinuar.trim() || undefined)}
                 className="px-4 py-2 bg-[#0c3d66] text-white rounded-lg hover:bg-[#0a3255] transition-colors font-medium text-sm"
               >
-                Continuar para Etapa 2, 3 e 4
+                Continuar para Etapas 2 e 3
               </button>
             </div>
           </div>

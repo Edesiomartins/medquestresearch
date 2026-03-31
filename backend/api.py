@@ -13,6 +13,7 @@ import threading
 import traceback
 import json
 import re
+import bcrypt
 from functools import wraps
 from psycopg2 import IntegrityError
 
@@ -140,14 +141,16 @@ except ImportError:
         obter_versao_portugues = pdf_processor.obter_versao_portugues
 
 try:
-    from .meta_analysis import gerar_meta_analise
+    from .meta_analysis import gerar_meta_analise, escrever_secao_artigo
 except ImportError:
     try:
         import meta_analysis
         gerar_meta_analise = meta_analysis.gerar_meta_analise
+        escrever_secao_artigo = meta_analysis.escrever_secao_artigo
     except ImportError:
         import backend.meta_analysis as meta_analysis  # type: ignore[reportMissingImports]
         gerar_meta_analise = meta_analysis.gerar_meta_analise
+        escrever_secao_artigo = meta_analysis.escrever_secao_artigo
 
 try:
     from .credit_costs import get_credit_cost, get_all_costs
@@ -216,6 +219,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def recover_stuck_jobs_on_startup():
+    """
+    Na inicialização, marca jobs antigos em processing como failed e
+    garante coluna started_at para controle de timeout.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    ALTER TABLE research_jobs
+                    ADD COLUMN IF NOT EXISTS started_at TIMESTAMP
+                    """
+                )
+            except Exception as e:
+                logging.warning(f"[STARTUP] Não foi possível garantir coluna started_at: {e}")
+
+            cur.execute(
+                """
+                UPDATE research_jobs
+                SET started_at = COALESCE(started_at, criado_em, NOW())
+                WHERE status = 'processing' AND started_at IS NULL
+                """
+            )
+
+            cur.execute(
+                """
+                UPDATE research_jobs
+                SET status = 'failed',
+                    erro = COALESCE(erro, 'Processamento interrompido por reinicialização do servidor. Tente novamente.'),
+                    resultado = COALESCE(resultado, 'Processamento interrompido por reinicialização do servidor. Tente novamente.')
+                WHERE status = 'processing'
+                  AND COALESCE(started_at, criado_em) < NOW() - INTERVAL '10 minutes'
+                """
+            )
+        conn.commit()
+    except Exception as e:
+        logging.error(f"[STARTUP] Falha ao recuperar jobs travados: {e}")
+    finally:
+        conn.close()
+
 # ============================================
 # ? MODELOS PYDANTIC
 # ============================================
@@ -266,7 +313,22 @@ def gerar_token():
     return secrets.token_hex(32)
 
 def hash_senha(senha):
-    return hashlib.sha256(senha.encode()).hexdigest()
+    return bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _is_sha256_legacy(hash_armazenado: str) -> bool:
+    if not hash_armazenado or len(hash_armazenado) != 64:
+        return False
+    return all(c in "0123456789abcdef" for c in hash_armazenado.lower())
+
+
+def verificar_senha(senha: str, hash_armazenado: str) -> bool:
+    if _is_sha256_legacy(hash_armazenado):
+        return hashlib.sha256(senha.encode("utf-8")).hexdigest() == hash_armazenado
+    try:
+        return bcrypt.checkpw(senha.encode("utf-8"), hash_armazenado.encode("utf-8"))
+    except Exception:
+        return False
 
 def gerar_hash_senha(senha):
     return hash_senha(senha)
@@ -829,6 +891,15 @@ class InputMetaAnalise(BaseModel):
     artigos_analisados: Optional[str] = None  # JSON string com artigos analisados (novo fluxo)
     project_id: Optional[int] = None  # Agrupa jobs para Evidence Graph (ap?s confirma??o humana, antes Etapa 3)
 
+
+class EscreverArtigoRequest(BaseModel):
+    project_id: int
+    tema: str
+    secao: str = "completo"  # resumo|introducao|metodos|resultados|discussao|completo
+    estilo_referencia: str = "Vancouver"
+    idioma: str = "pt"
+    instrucoes_adicionais: str = ""
+
 # ============================================
 # ? HANDLER DE ERROS GLOBAL
 # ============================================
@@ -1159,8 +1230,14 @@ def login(request: Request, data: LoginRequest):
         if not row:
             raise HTTPException(status_code=404, detail="Email n?o encontrado")
 
-        if row["senha_hash"] != hash_senha(data.senha):
+        senha_hash = row.get("senha_hash", "")
+        if not verificar_senha(data.senha, senha_hash):
             raise HTTPException(status_code=401, detail="Senha incorreta")
+
+        # Migração transparente: hash legado SHA256 -> bcrypt no login bem-sucedido
+        if _is_sha256_legacy(senha_hash):
+            novo_hash = hash_senha(data.senha)
+            db_execute("UPDATE usuarios SET senha_hash=%s WHERE id=%s", (novo_hash, row["id"]))
 
         token = gerar_token()
         db_execute("UPDATE usuarios SET token=%s WHERE id=%s", (token, row["id"]))
@@ -1355,6 +1432,7 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
 
         response = {
             "request_id": job["id"],
+            "project_id": job.get("project_id"),
             "status": job["status"],
             "modulo": job.get("modulo", ""),
             "created_at": job.get("created_at", "").isoformat() if job.get("created_at") else None
@@ -1405,7 +1483,7 @@ def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api
         # Criar job ass?ncrono
         dados_extras = json.dumps({"trecho": data.trecho, "nivel": data.nivel})
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, started_at) VALUES (%s, %s, %s, %s, %s, %s, NOW())",
             (user["id"], "explicar", "processing", data.texto_artigo, custo, dados_extras)
         )
 
@@ -1442,7 +1520,7 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
 
         # Criar job ass?ncrono
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras) VALUES (%s, %s, %s, %s, %s, %s)",
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, started_at) VALUES (%s, %s, %s, %s, %s, %s, NOW())",
             (user["id"], "critica", "processing", data.texto_artigo, custo, json.dumps({"foco_analise": foco_analise}))
         )
 
@@ -1477,7 +1555,7 @@ def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_ke
 
         # Criar job ass?ncrono
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
             (user["id"], "fatos", "processing", data.texto_artigo, custo)
         )
 
@@ -1512,7 +1590,7 @@ def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)
 
         # Criar job ass?ncrono
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
             (user["id"], "mapa", "processing", data.texto_artigo, custo)
         )
 
@@ -1546,7 +1624,7 @@ def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(requ
 
         # Criar job ass?ncrono
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos) VALUES (%s, %s, %s, %s, %s)",
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
             (user["id"], "structure_mapper", "processing", data.texto_artigo, custo)
         )
 
@@ -1584,6 +1662,8 @@ async def rota_upload_artigos_metanalise(
     Aceita at? 25 arquivos PDF/DOCX e faz an?lise PRISMA de cada um.
     """
     try:
+        project_id = int(time.time())
+
         # Validar n?mero de arquivos
         if len(files) > 25:
             raise HTTPException(
@@ -1704,6 +1784,7 @@ async def rota_upload_artigos_metanalise(
         
         return {
             "resultado": "Artigos processados e analisados com sucesso",
+            "project_id": project_id,
             "total_artigos": len(artigos_processados),
             "artigos": artigos_processados,
             "resumo_analises": resumo
@@ -1742,16 +1823,16 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
                 dados_extras["artigos_analisados"] = artigos
             except:
                 dados_extras["artigos_analisados"] = data.artigos_analisados
-        if data.project_id is not None:
-            dados_extras["project_id"] = data.project_id
+        project_id = data.project_id if data.project_id is not None else int(time.time())
+        dados_extras["project_id"] = project_id
         dados_extras["usuario_id"] = user["id"]  # para Evidence Graph no job em background
 
         # Criar job ass?ncrono (project_id agrupa jobs para Evidence Graph)
         dados_extras_json = json.dumps(dados_extras) if dados_extras else None
         entrada_texto = data.texto_artigo if data.texto_artigo else (data.tema if data.tema else "Metan?lise")
         job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, project_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json, data.project_id)
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, project_id, started_at) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())",
+            (user["id"], "meta_analise", "processing", entrada_texto, custo, dados_extras_json, project_id)
         )
 
         # Iniciar processamento em background
@@ -1766,6 +1847,7 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
         return JSONResponse(
             content={
                 "request_id": job_id,
+                "project_id": project_id,
                 "status": "processing",
                 "etapa": data.etapa
             },
@@ -1777,6 +1859,110 @@ def rota_meta_analise(request: Request, data: InputMetaAnalise, user = Depends(r
         import traceback
         print("ERRO NA ROTA /meta_analise")
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
+
+
+@api_router.post("/meta_analysis/escrever_artigo")
+@limiter.limit("6 per minute")
+def escrever_artigo_metanalise(request: Request, dados: EscreverArtigoRequest, user=Depends(require_api_key)):
+    """
+    Etapa 5: escrita de seção/artigo completo com base no project_id da metanálise.
+    """
+    try:
+        secao = (dados.secao or "completo").strip().lower()
+        custo = 15 if secao == "completo" else 5
+
+        disponivel = creditos_disponiveis(user)
+        if disponivel < custo:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Créditos insuficientes. Necessário: {custo}, disponível: {disponivel}",
+            )
+
+        conn = get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id FROM research_jobs
+                    WHERE project_id = %s AND usuario_id = %s
+                    LIMIT 1
+                    """,
+                    (dados.project_id, user["id"]),
+                )
+                projeto = cursor.fetchone()
+                if not projeto:
+                    raise HTTPException(status_code=404, detail="Projeto não encontrado para este usuário.")
+        finally:
+            conn.close()
+
+        entrada = json.dumps(
+            {
+                "project_id": dados.project_id,
+                "tema": dados.tema,
+                "secao": secao,
+                "estilo_referencia": dados.estilo_referencia,
+                "idioma": dados.idioma,
+                "instrucoes_adicionais": dados.instrucoes_adicionais,
+            },
+            ensure_ascii=False,
+        )
+
+        job_id = db_insert_return_id(
+            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, project_id, started_at) VALUES (%s, %s, %s, %s, %s, %s, NOW())",
+            (user["id"], "escrever_artigo", "processing", entrada, custo, dados.project_id),
+        )
+
+        if not debitar_creditos(user["id"], custo):
+            raise HTTPException(status_code=402, detail="Créditos insuficientes para executar esta ação.")
+
+        def _processar_escrita():
+            conn_local = get_connection()
+            try:
+                secoes = ["resumo", "introducao", "metodos", "resultados", "discussao"] if secao == "completo" else [secao]
+                partes = []
+                for s in secoes:
+                    texto = escrever_secao_artigo(
+                        project_id=dados.project_id,
+                        tema=dados.tema,
+                        secao=s,
+                        estilo_referencia=dados.estilo_referencia,
+                        idioma=dados.idioma,
+                        instrucoes_adicionais=dados.instrucoes_adicionais,
+                    )
+                    partes.append(f"## {s.upper()}\n\n{texto}")
+
+                resultado = "\n\n---\n\n".join(partes)
+                with conn_local.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
+                        ("done", resultado, job_id),
+                    )
+                conn_local.commit()
+            except Exception as e:
+                with conn_local.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
+                        ("failed", str(e), job_id),
+                    )
+                conn_local.commit()
+            finally:
+                conn_local.close()
+
+        threading.Thread(target=_processar_escrita, daemon=True).start()
+
+        return JSONResponse(
+            content={
+                "request_id": job_id,
+                "project_id": dados.project_id,
+                "status": "processing",
+                "custo": custo,
+            },
+            status_code=202,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
 @api_router.post("/pdf")

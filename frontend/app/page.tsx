@@ -142,7 +142,14 @@ export default function Home() {
           throw new Error('Tipo de análise não reconhecido');
       }
       setModoConfiguracao(false);
-      if (res.erro) {
+      if (res.redirect === '/planos') {
+        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
+        setUploadError(msg);
+        setResultadoAtual(`❌ ${msg}`);
+        setTituloResultado('Créditos insuficientes');
+        setLoadingResultado(false);
+        router.push('/planos');
+      } else if (res.erro) {
         setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
         setTituloResultado('Erro na Análise');
         setLoadingResultado(false);
@@ -164,7 +171,7 @@ export default function Home() {
     } finally {
       // não fechar o modal automaticamente; o usuário fecha no botão "Fechar"
     }
-  }, [token, textoArtigo, textoProcessando, refreshCreditos]);
+  }, [token, textoArtigo, textoProcessando, refreshCreditos, router]);
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -226,7 +233,12 @@ export default function Home() {
 
       const res = await uploadPdf(token, file);
 
-      if (res.erro) {
+      if (res.redirect === '/planos') {
+        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
+        setUploadError(msg);
+        setTituloResultado('Créditos insuficientes');
+        router.push('/planos');
+      } else if (res.erro) {
         setUploadError(res.erro);
         setTituloResultado('Erro ao processar arquivo');
       } else {
@@ -245,7 +257,7 @@ export default function Home() {
     } finally {
       setLoadingResultado(false);
     }
-  }, [token, cardAtivo, runAnalise]);
+  }, [token, cardAtivo, runAnalise, router]);
 
   const handleTraduzir = useCallback(async () => {
     if (!token || !textoArtigo) return;
@@ -303,7 +315,13 @@ export default function Home() {
       setUploadProgress(10);
       const res = await uploadArtigosMetanalise(token, files);
 
-      if (res.erro) {
+      if (res.redirect === '/planos') {
+        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
+        setUploadError(msg);
+        setTituloResultado('Créditos insuficientes');
+        setUploadProgress(0);
+        router.push('/planos');
+      } else if (res.erro) {
         setUploadError(res.erro);
         setTituloResultado('Erro ao processar artigos');
         setUploadProgress(0);
@@ -347,7 +365,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     } finally {
       setLoadingResultado(false);
     }
-  }, [token, arquivosMetanalise]);
+  }, [token, arquivosMetanalise, router]);
 
   // Callback para upload múltiplo (metanálise) - DEPRECATED, usar handleIniciarAnalisePrisma
   const handleUploadMultiplo = useCallback(async (files: File[]) => {
@@ -386,7 +404,13 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       setUploadProgress(10);
       const res = await uploadArtigosMetanalise(token, files);
 
-      if (res.erro) {
+      if (res.redirect === '/planos') {
+        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
+        setUploadError(msg);
+        setTituloResultado('Créditos insuficientes');
+        setUploadProgress(0);
+        router.push('/planos');
+      } else if (res.erro) {
         setUploadError(res.erro);
         setTituloResultado('Erro ao processar artigos');
         setUploadProgress(0);
@@ -430,7 +454,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     } finally {
       setLoadingResultado(false);
     }
-  }, [token]);
+  }, [token, router]);
 
   // Callback 2: Evento de arrastar sobre
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -510,13 +534,12 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         '1': 'Etapa 1: Estruturação PICO e Busca na Literatura',
         '2': 'Etapa 2: Extração de Dados',
         '3': 'Etapa 3: Redação Técnica (PRISMA)',
-        '4': 'Etapa 4: Verificação Final',
       };
 
       const estilo = 'Vancouver';
       let resultadoAcumulado = '';
 
-      for (let etapa = 1; etapa <= 4; etapa++) {
+      for (let etapa = 1; etapa <= 3; etapa++) {
         const etapaStr = etapa.toString();
         const tituloEtapa = nomesEtapa[etapaStr] || `Etapa ${etapa}`;
         
@@ -637,7 +660,14 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       }
 
       // Atualizar ResultPanel com resultado
-      if (res.erro) {
+      if (res.redirect === '/planos') {
+        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
+        setUploadError(msg);
+        setResultadoAtual(`❌ ${msg}`);
+        setTituloResultado('Créditos insuficientes');
+        setLoadingResultado(false);
+        router.push('/planos');
+      } else if (res.erro) {
         setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
         setTituloResultado('Erro na Análise');
         setLoadingResultado(false);
@@ -656,7 +686,7 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       setTituloResultado('Erro');
       setLoadingResultado(false);
     }
-  }, [textoArtigo, token, cardAtivo]);
+  }, [textoArtigo, token, cardAtivo, router]);
 
   // Continuar para Etapas 2, 3 e 4 da metanálise (após análise PRISMA dos artigos)
   const handleContinuarEtapasMetanalise = useCallback(async (tema?: string) => {
@@ -672,12 +702,11 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     const nomesEtapa: Record<string, string> = {
       '2': 'Etapa 2: Extração de Dados',
       '3': 'Etapa 3: Redação Técnica (PRISMA)',
-      '4': 'Etapa 4: Verificação Final',
     };
     const estilo = 'Vancouver';
     let resultadoAcumulado = '';
 
-    for (let etapa = 2; etapa <= 4; etapa++) {
+    for (let etapa = 2; etapa <= 3; etapa++) {
       const etapaStr = etapa.toString();
       const tituloEtapa = nomesEtapa[etapaStr] || `Etapa ${etapa}`;
 

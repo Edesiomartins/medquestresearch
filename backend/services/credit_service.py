@@ -21,6 +21,8 @@ CUSTOS = {
     "perspectiva": 15,
     "meta_etapa": 15,
     "meta_upload": 5,
+    "escrever_artigo": 5,
+    "escrever_artigo_completo": 15,
     "mapa": 8,
     "structure_mapper": 6,
     "meta_analise": 12,

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
-import { metaAnalysis } from '@/app/lib/api';
+import { metaAnalysis, escreverArtigoMetaAnalise } from '@/app/lib/api';
 import Sidebar from '@/app/components/ui/sidebar';
 import ResultWindowsManager from '@/app/components/ui/ResultWindowsManager';
 import { ResultWindowData } from '@/app/components/ui/ResultWindow';
@@ -19,6 +19,12 @@ export default function MetaAnaliseClient() {
   
   const [executando, setExecutando] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [secaoArtigo, setSecaoArtigo] = useState('completo');
+  const [estiloRef, setEstiloRef] = useState('Vancouver');
+  const [idiomaArtigo, setIdiomaArtigo] = useState('pt');
+  const [instrucoes, setInstrucoes] = useState('');
+  const [etapa4Concluida, setEtapa4Concluida] = useState(false);
 
   // ✅ GARANTIR HIDRATAÇÃO CORRETA
   useEffect(() => {
@@ -41,7 +47,7 @@ export default function MetaAnaliseClient() {
   }
 
   const executarEtapa = useCallback(
-    async (etapa: string, temaTexto: string, estilo: string = 'Vancouver') => {
+    async (etapa: string, temaTexto: string, estilo: string = 'Vancouver', projectIdArg?: number | null) => {
       if (!token || !temaTexto.trim()) {
         return;
       }
@@ -81,6 +87,7 @@ export default function MetaAnaliseClient() {
           etapa,
           texto_artigo: '',
           estilo,
+          project_id: projectIdArg ?? projectId ?? undefined,
         });
 
         if (res.erro) {
@@ -95,6 +102,12 @@ export default function MetaAnaliseClient() {
             };
           });
         } else if (res.resultado) {
+          if (res.project_id) {
+            setProjectId(res.project_id);
+          }
+          if (etapa === '4') {
+            setEtapa4Concluida(true);
+          }
           setResultWindows(prev => {
             const janela = prev[windowId];
             if (!janela) return prev;
@@ -105,6 +118,7 @@ export default function MetaAnaliseClient() {
             };
           });
         }
+        return res.project_id as number | undefined;
       } catch (error: any) {
         setResultWindows(prev => {
           const janela = prev[windowId];
@@ -120,21 +134,101 @@ export default function MetaAnaliseClient() {
         setEtapaAtual(null);
       }
     },
-    [token]
+    [token, projectId]
   );
 
   const executarTodasEtapas = useCallback(async () => {
     if (!tema.trim() || !token) return;
 
     const estilo = 'Vancouver';
+    let projetoCorrente: number | null = projectId;
 
     for (let etapa = 1; etapa <= 4; etapa++) {
-      await executarEtapa(etapa.toString(), tema, estilo);
+      const pid = await executarEtapa(etapa.toString(), tema, estilo, projetoCorrente);
+      if (pid) {
+        projetoCorrente = pid;
+      }
       if (etapa < 4) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
-  }, [tema, token, executarEtapa]);
+  }, [tema, token, executarEtapa, projectId]);
+
+  const executarEscritaArtigo = useCallback(async () => {
+    if (!token || !projectId || !tema.trim()) return;
+    setExecutando(true);
+
+    const windowId = `artigo_${secaoArtigo}_${Date.now()}`;
+    const titulo = secaoArtigo === 'completo' ? 'Artigo Científico Completo' : `Artigo — ${secaoArtigo}`;
+
+    setResultWindows(prev => ({
+      ...prev,
+      [windowId]: {
+        id: windowId,
+        tipo: 'escrever_artigo',
+        titulo,
+        resultado: `⏳ Gerando ${titulo}...\n\nAguarde enquanto o artigo é redigido com base nos dados extraídos.`,
+        loading: true,
+        timestamp: Date.now(),
+      }
+    }));
+
+    try {
+      const data = await escreverArtigoMetaAnalise(token, {
+        project_id: projectId,
+        tema,
+        secao: secaoArtigo,
+        estilo_referencia: estiloRef,
+        idioma: idiomaArtigo,
+        instrucoes_adicionais: instrucoes,
+      });
+      if (data.erro) {
+        throw new Error(data.erro);
+      }
+      const jobId = data.request_id;
+      if (!jobId) {
+        throw new Error('Resposta inválida da API ao iniciar escrita.');
+      }
+
+      const poll = setInterval(async () => {
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/genapi/job/${jobId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const job = await response.json();
+          if (job.status === 'done' || job.status === 'failed') {
+            clearInterval(poll);
+            setResultWindows(prev => ({
+              ...prev,
+              [windowId]: {
+                ...prev[windowId],
+                resultado: job.resultado || `❌ Erro: ${job.erro || 'Falha ao gerar artigo'}`,
+                loading: false
+              }
+            }));
+            setExecutando(false);
+          }
+        } catch (e: any) {
+          clearInterval(poll);
+          setResultWindows(prev => ({
+            ...prev,
+            [windowId]: {
+              ...prev[windowId],
+              resultado: `❌ Erro: ${e.message || 'Falha no polling'}`,
+              loading: false
+            }
+          }));
+          setExecutando(false);
+        }
+      }, 5000);
+    } catch (err: any) {
+      setResultWindows(prev => ({
+        ...prev,
+        [windowId]: { ...prev[windowId], resultado: `❌ Erro: ${err.message}`, loading: false }
+      }));
+      setExecutando(false);
+    }
+  }, [token, projectId, tema, secaoArtigo, estiloRef, idiomaArtigo, instrucoes]);
 
   const handleUpdateWindow = useCallback((id: string, updates: Partial<ResultWindowData>) => {
     // ✅ Onde você atualiza: usar objeto
@@ -269,6 +363,62 @@ export default function MetaAnaliseClient() {
               </div>
             </div>
           </div>
+
+          {etapa4Concluida && projectId && (
+            <div className="card-elevated p-6 mb-8">
+              <h3 className="text-xl font-bold text-[#0c3d66] mb-3">
+                Etapa 5 — Escrever Artigo Científico
+              </h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Gera uma seção ou o artigo completo com base nas etapas anteriores.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Seção</label>
+                  <select value={secaoArtigo} onChange={e => setSecaoArtigo(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value="completo">Artigo Completo</option>
+                    <option value="resumo">Resumo Estruturado</option>
+                    <option value="introducao">Introdução</option>
+                    <option value="metodos">Métodos</option>
+                    <option value="resultados">Resultados</option>
+                    <option value="discussao">Discussão</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Estilo de Referência</label>
+                  <select value={estiloRef} onChange={e => setEstiloRef(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value="Vancouver">Vancouver</option>
+                    <option value="ABNT">ABNT</option>
+                    <option value="APA">APA</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Idioma</label>
+                  <select value={idiomaArtigo} onChange={e => setIdiomaArtigo(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <option value="pt">Português</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
+              </div>
+
+              <textarea
+                placeholder="Instruções adicionais (opcional)"
+                value={instrucoes}
+                onChange={e => setInstrucoes(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4"
+                rows={3}
+              />
+
+              <button
+                onClick={executarEscritaArtigo}
+                disabled={executando}
+                className="px-6 py-3 bg-[#0c3d66] text-white rounded-lg hover:bg-[#0a3255] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {secaoArtigo === 'completo' ? '✍️ Gerar Artigo Completo (15 créditos)' : `✍️ Gerar ${secaoArtigo} (5 créditos)`}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

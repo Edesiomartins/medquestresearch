@@ -15,4 +15,5 @@ slowapi
 google-generativeai
 groq
 requests
+bcrypt
 

@@ -77,8 +77,24 @@ export default function ResultWindow({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-slate-200 p-3 bg-slate-50 rounded-b-lg text-xs text-slate-500">
-        {new Date(windowData.timestamp).toLocaleTimeString('pt-BR')}
+      <div className="border-t border-slate-200 p-3 bg-slate-50 rounded-b-lg text-xs text-slate-500 flex items-center justify-between gap-2">
+        <span>{new Date(windowData.timestamp).toLocaleTimeString('pt-BR')}</span>
+        {windowData.tipo === 'escrever_artigo' && windowData.resultado && !windowData.loading && (
+          <button
+            onClick={() => {
+              const blob = new Blob([windowData.resultado], { type: 'text/plain;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `artigo_metanalise_${Date.now()}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors"
+          >
+            ⬇ Baixar .txt
+          </button>
+        )}
       </div>
     </div>
   );

@@ -17,7 +17,9 @@ export interface ApiResponse<T = any> {
   usuario?: any;
   creditos?: number;
   request_id?: number;
+  project_id?: number;
   status?: string;
+  redirect?: string;
   detalhes?: string;
   artigos?: any[]; // Artigos encontrados (para metanálise)
   total_artigos?: number; // Total de artigos encontrados
@@ -91,13 +93,21 @@ async function apiCall<T = any>(
   }
 
   const response = await authenticatedFetch(endpoint, options, token, timeout);
+  const payload = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
-    throw new Error(errorData.erro || `Erro ${response.status}`);
+  if (response.status === 402) {
+    return {
+      erro: (payload as any).erro || (payload as any).detail || 'Créditos insuficientes. Adquira mais créditos para continuar.',
+      redirect: '/planos',
+      status: '402',
+    } as T;
   }
 
-  return await response.json();
+  if (!response.ok) {
+    throw new Error((payload as any).erro || (payload as any).detail || `Erro ${response.status}`);
+  }
+
+  return payload as T;
 }
 
 // Função para polling de status de jobs assíncronos
@@ -251,9 +261,17 @@ export async function uploadPdf(token: string, file: File): Promise<ApiResponse>
       }
     );
 
+    if (response.status === 402) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        erro: (errorData as any).erro || (errorData as any).detail || 'Créditos insuficientes. Adquira mais créditos para continuar.',
+        redirect: '/planos',
+        status: '402',
+      };
+    }
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
-      return { erro: errorData.erro || `Erro ${response.status}` };
+      return { erro: (errorData as any).erro || (errorData as any).detail || `Erro ${response.status}` };
     }
 
     return await response.json();
@@ -344,6 +362,7 @@ export interface MetaAnaliseParams {
   estilo?: string; // 'Vancouver' ou 'ABNT'
   manuscrito?: string;
   artigos_analisados?: any; // Artigos analisados (novo fluxo)
+  project_id?: number;
 }
 
 export async function metaAnalysis(
@@ -360,6 +379,7 @@ export async function metaAnalysis(
       : params.json_extracao,
     estilo: params.estilo || 'Vancouver',
     manuscrito: params.manuscrito,
+    project_id: params.project_id,
   };
   
   // Adicionar artigos analisados se fornecido (novo fluxo)
@@ -409,15 +429,36 @@ export async function uploadArtigosMetanalise(
       }
     );
 
+    if (response.status === 402) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        erro: (errorData as any).erro || (errorData as any).detail || 'Créditos insuficientes. Adquira mais créditos para continuar.',
+        redirect: '/planos',
+        status: '402',
+      };
+    }
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ erro: `Erro ${response.status}` }));
-      return { erro: errorData.erro || `Erro ${response.status}` };
+      return { erro: (errorData as any).erro || (errorData as any).detail || `Erro ${response.status}` };
     }
 
     return await response.json();
   } catch (error: any) {
     return { erro: `Erro: ${error.message || 'Erro desconhecido'}` };
   }
+}
+
+export interface EscreverArtigoParams {
+  project_id: number;
+  tema: string;
+  secao: string;
+  estilo_referencia: string;
+  idioma: string;
+  instrucoes_adicionais?: string;
+}
+
+export async function escreverArtigoMetaAnalise(token: string, params: EscreverArtigoParams): Promise<ApiResponse> {
+  return callAsyncApi('/genapi/meta_analysis/escrever_artigo', token, params, 300000);
 }
 
 // ============================================

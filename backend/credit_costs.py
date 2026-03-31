@@ -38,6 +38,8 @@ DEFAULT_COSTS: Dict[str, int] = {
     # Metanálise (mais complexo)
     "meta_analise": 12,               # Metanálise completa
     "meta_analysis": 12,              # Alias para meta_analise
+    "escrever_artigo": 5,             # Escrita de seção de artigo
+    "escrever_artigo_completo": 15,   # Escrita do artigo completo
     
     # Upload de PDF
     "pdf": 3,                         # Upload e processamento de PDF
