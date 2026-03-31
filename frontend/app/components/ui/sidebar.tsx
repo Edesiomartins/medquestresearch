@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { listarJobs, obterJob, JobItem } from '@/app/lib/api';
 
 interface Usuario {
   id?: string;
@@ -15,6 +16,8 @@ interface SidebarProps {
   creditos: number;
   onLogout: () => void;
   onRefreshCreditos?: () => void;
+  token?: string;
+  onJobSelect?: (job: { id: number; modulo: string; status: string; resultado?: string; project_id?: number }) => void;
 }
 
 export default function Sidebar({
@@ -22,12 +25,49 @@ export default function Sidebar({
   creditos,
   onLogout,
   onRefreshCreditos,
+  token,
+  onJobSelect,
 }: SidebarProps) {
   const [mounted, setMounted] = useState(false);
+  const [jobsRecentes, setJobsRecentes] = useState<JobItem[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    const carregarJobs = async () => {
+      if (!token) return;
+      setLoadingJobs(true);
+      const res = await listarJobs(token);
+      if (res.data?.jobs) {
+        setJobsRecentes(res.data.jobs.slice(0, 5));
+      } else {
+        setJobsRecentes([]);
+      }
+      setLoadingJobs(false);
+    };
+    carregarJobs();
+  }, [token, creditos]);
+
+  const handleAbrirJob = async (job: JobItem) => {
+    if (!token || !onJobSelect) return;
+    const detalhe = await obterJob(token, job.id);
+    onJobSelect({
+      id: job.id,
+      modulo: job.modulo,
+      status: (detalhe.status as string) || job.status,
+      resultado: detalhe.resultado || detalhe.erro || '',
+      project_id: detalhe.project_id,
+    });
+  };
+
+  const statusIcon = (status: string) => {
+    if (status === 'done') return '✅';
+    if (status === 'failed' || status === 'error') return '❌';
+    return '⏳';
+  };
 
   if (!mounted) {
     return (
@@ -81,7 +121,7 @@ export default function Sidebar({
       </div>
 
       {/* LINKS: Comprar créditos, Atualizar dados */}
-      <div className="flex-1 px-6 space-y-3">
+      <div className="px-6 space-y-3">
         <Link
           href="/planos"
           className="block w-full text-center py-3 rounded-lg text-sm font-semibold text-[#0c3d66] bg-white hover:bg-slate-100 shadow-md transition-colors border border-white/30"
@@ -102,6 +142,32 @@ export default function Sidebar({
             Admin (métricas)
           </Link>
         )}
+      </div>
+
+      <div className="px-6 py-4">
+        <p className="text-blue-200 text-xs mb-2">Histórico recente</p>
+        <div className="space-y-2">
+          {loadingJobs && <p className="text-[11px] text-blue-100/80">Carregando...</p>}
+          {!loadingJobs && jobsRecentes.length === 0 && (
+            <p className="text-[11px] text-blue-100/80">Sem jobs recentes.</p>
+          )}
+          {!loadingJobs &&
+            jobsRecentes.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                onClick={() => handleAbrirJob(job)}
+                className="w-full text-left px-2 py-2 rounded bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <p className="text-[11px] text-white truncate">
+                  {statusIcon(job.status)} {job.modulo.split('_').join(' ')}
+                </p>
+                <p className="text-[10px] text-blue-100/80">
+                  #{job.id} {job.created_at ? `• ${new Date(job.created_at).toLocaleDateString('pt-BR')}` : ''}
+                </p>
+              </button>
+            ))}
+        </div>
       </div>
 
       {/* RODAPÉ - Logout */}

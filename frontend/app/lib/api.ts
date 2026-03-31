@@ -30,6 +30,13 @@ export interface ApiResponse<T = any> {
   }; // Resumo PRISMA (upload artigos metanálise)
 }
 
+export interface JobItem {
+  id: number;
+  modulo: string;
+  status: string;
+  created_at?: string | null;
+}
+
 export interface ExplicarConceitoResponse extends ApiResponse {
   resultado?: string;
 }
@@ -155,6 +162,48 @@ export async function pollJobStatus(
       }
       return { erro: error.message || 'Erro ao verificar status do job' };
     }
+  }
+}
+
+export async function listarJobs(token: string): Promise<ApiResponse<{ jobs: JobItem[] }>> {
+  try {
+    const response = await authenticatedFetch(API_ENDPOINTS.JOBS, { method: 'GET' }, token, 30000);
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 402) {
+      return {
+        erro: (data as any).erro || (data as any).detail || 'Créditos insuficientes. Adquira mais créditos para continuar.',
+        redirect: '/planos',
+        status: '402',
+      };
+    }
+    if (response.status === 429) {
+      return { erro: 'Muitas requisições. Aguarde alguns instantes e tente novamente.' };
+    }
+    if (!response.ok) {
+      return { erro: (data as any).erro || (data as any).detail || `Erro ${response.status}` };
+    }
+    if (Array.isArray(data)) {
+      return { data: { jobs: data as JobItem[] } };
+    }
+    return { data: { jobs: ((data as any).jobs || []) as JobItem[] } };
+  } catch (error: any) {
+    return { erro: error.message || 'Erro ao listar jobs' };
+  }
+}
+
+export async function obterJob(token: string, jobId: number): Promise<ApiResponse> {
+  try {
+    const response = await authenticatedFetch(`${API_ENDPOINTS.JOB_STATUS}/${jobId}`, { method: 'GET' }, token, 30000);
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      return { erro: 'Muitas requisições. Aguarde alguns instantes e tente novamente.' };
+    }
+    if (!response.ok) {
+      return { erro: (data as any).erro || (data as any).detail || `Erro ${response.status}` };
+    }
+    return data as ApiResponse;
+  } catch (error: any) {
+    return { erro: error.message || 'Erro ao consultar job' };
   }
 }
 

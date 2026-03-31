@@ -14,6 +14,7 @@ import {
   traduzirTexto,
   metaAnalysis,
   uploadArtigosMetanalise,
+  obterJob,
 } from '@/app/lib/api';
 import ResultPanel from '@/app/components/ui/ResultPanel';
 import TextWindow from '@/app/components/ui/TextWindow';
@@ -46,6 +47,27 @@ export default function Home() {
 
   // 3. useAuth
   const { token, usuario, creditos, loading, logout, refreshCreditos } = useAuth();
+
+  const handleJobSelectFromSidebar = useCallback(async (job: { id: number; modulo: string; status: string; resultado?: string; project_id?: number }) => {
+    if (!token) return;
+    const detalhe = await obterJob(token, job.id);
+    const modulo = (job.modulo || '').toLowerCase();
+    const mapaModulo: Record<string, string> = {
+      explicar: 'explicar',
+      critica: 'critica',
+      fatos: 'fatos',
+      mapa: 'structure_visualizer',
+      structure_mapper: 'structure_mapper',
+      meta_analise: 'meta-analise',
+      escrever_artigo: 'meta-analise',
+    };
+    const card = mapaModulo[modulo] || 'meta-analise';
+    setCardAtivo(card);
+    setModoConfiguracao(false);
+    setLoadingResultado(false);
+    setTituloResultado(`Job #${job.id} — ${modulo.split('_').join(' ')}`);
+    setResultadoAtual((detalhe.resultado as string) || (detalhe.erro as string) || job.resultado || 'Sem resultado para este job.');
+  }, [token]);
 
   // Callbacks que precisam vir antes de useEffect/handleUpload (runAnalise é usado em handleUpload)
   const textoProcessando = useCallback((tipo: string): string => {
@@ -782,6 +804,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         usuario={usuario}
         creditos={creditos}
         onLogout={logout}
+        token={token || undefined}
+        onJobSelect={handleJobSelectFromSidebar}
       />
 
       {/* Área principal: grid de cards ou modal tela inteira */}

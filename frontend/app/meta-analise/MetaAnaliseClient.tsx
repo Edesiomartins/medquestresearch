@@ -258,6 +258,7 @@ export default function MetaAnaliseClient() {
         usuario={usuario}
         creditos={creditos}
         onLogout={logout}
+        token={token || undefined}
       />
 
       <div className="ml-64 flex-1 p-8">

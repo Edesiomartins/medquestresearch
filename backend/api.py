@@ -13,7 +13,10 @@ import threading
 import traceback
 import json
 import re
-import bcrypt
+try:
+    import bcrypt
+except ImportError:
+    bcrypt = None
 from functools import wraps
 from psycopg2 import IntegrityError
 
@@ -191,11 +194,26 @@ except ImportError:
         build_graph_from_extraction_json = evidence_graph_service.build_graph_from_extraction_json
         upsert_project_evidence_graph = evidence_graph_service.upsert_project_evidence_graph
 
+try:
+    from .cache_llm import limpar_cache_antigo
+except ImportError:
+    try:
+        from cache_llm import limpar_cache_antigo
+    except ImportError:
+        try:
+            import backend.cache_llm as cache_llm  # type: ignore[reportMissingImports]
+            limpar_cache_antigo = cache_llm.limpar_cache_antigo
+        except Exception:
+            limpar_cache_antigo = None
+
 # ============================================
 # ? APLICA??O FASTAPI
 # ============================================
 
 app = FastAPI(title="MedQuestResearch API", version="2.0")
+
+if bcrypt is None:
+    logging.warning("[SECURITY] bcrypt não está instalado; usando fallback legado com SHA256. Instale bcrypt no ambiente de produção.")
 
 # ? ROUTER COM PREFIXO /genapi PARA TODAS AS ROTAS DE API
 api_router = APIRouter(prefix="/genapi")
@@ -263,6 +281,12 @@ def recover_stuck_jobs_on_startup():
     finally:
         conn.close()
 
+    try:
+        if callable(limpar_cache_antigo):
+            limpar_cache_antigo()
+    except Exception as e:
+        logging.warning(f"[STARTUP] Falha ao limpar cache LLM antigo: {e}")
+
 # ============================================
 # ? MODELOS PYDANTIC
 # ============================================
@@ -313,6 +337,9 @@ def gerar_token():
     return secrets.token_hex(32)
 
 def hash_senha(senha):
+    # Fallback para manter app funcional caso bcrypt não esteja disponível no ambiente.
+    if bcrypt is None:
+        return hashlib.sha256(senha.encode("utf-8")).hexdigest()
     return bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
@@ -325,6 +352,9 @@ def _is_sha256_legacy(hash_armazenado: str) -> bool:
 def verificar_senha(senha: str, hash_armazenado: str) -> bool:
     if _is_sha256_legacy(hash_armazenado):
         return hashlib.sha256(senha.encode("utf-8")).hexdigest() == hash_armazenado
+    if bcrypt is None:
+        # Sem bcrypt instalado, não é possível validar hash bcrypt.
+        return False
     try:
         return bcrypt.checkpw(senha.encode("utf-8"), hash_armazenado.encode("utf-8"))
     except Exception:
@@ -1397,7 +1427,7 @@ def listar_jobs(request: Request, user = Depends(require_api_key)):
     """Lista todos os jobs do usu?rio."""
     try:
         jobs = db_select(
-            "SELECT id, modulo, status FROM research_jobs WHERE usuario_id = %s ORDER BY id DESC",
+            "SELECT id, modulo, status, created_at FROM research_jobs WHERE usuario_id = %s ORDER BY id DESC",
             (user["id"],)
         )
 
@@ -1406,7 +1436,8 @@ def listar_jobs(request: Request, user = Depends(require_api_key)):
             {
                 "id": job["id"],
                 "modulo": job.get("modulo", ""),
-                "status": job["status"]
+                "status": job["status"],
+                "created_at": job.get("created_at").isoformat() if job.get("created_at") else None,
             }
             for job in jobs
         ]
