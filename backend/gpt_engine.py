@@ -110,7 +110,21 @@ def _parse_models() -> List[str]:
     models.extend([m for m in fallbacks if m and m not in models])
     if not models:
         models = list(MODELOS_FALLBACK)
-    return models
+    return _prioritize_models(models)
+
+
+def _prioritize_models(models: List[str]) -> List[str]:
+    """
+    Garante motores principais estáveis no topo da lista.
+    Pode ser sobrescrito por ENV.
+    """
+    primary = _env("OPENAI_MODEL_PRIMARY", "qwen/qwen3.6-plus-preview:free")
+    secondary = _env("OPENAI_MODEL_SECONDARY", "nvidia/nemotron-3-super-120b-a12b:free")
+    ordered: List[str] = []
+    for m in [primary, secondary] + list(models):
+        if m and m not in ordered:
+            ordered.append(m)
+    return ordered
 
 
 # -----------------------------
@@ -162,6 +176,8 @@ APP_TITLE = _env("OPENROUTER_APP_TITLE", "MedQuestResearch") or "MedQuestResearc
 
 _client: Optional[OpenAI] = None
 _client_use_backup = False
+_MODEL_COOLDOWN_UNTIL: Dict[str, float] = {}
+_MODEL_COOLDOWN_SECONDS = int(_env("OPENROUTER_MODEL_COOLDOWN_SECONDS", "900") or 900)
 
 
 def _get_client(use_backup: bool = False) -> OpenAI:
@@ -210,6 +226,18 @@ def _is_transient(err: Exception) -> bool:
         isinstance(err, (RateLimitError, APIConnectionError, APITimeoutError))
         or "timeout" in msg.lower()
         or "rate" in msg.lower()
+    )
+
+
+def _is_provider_offline_error(err: Exception) -> bool:
+    """
+    Detecta indisponibilidade de provedor/modelo (ex.: OpenInference ngrok offline).
+    """
+    msg = str(err).lower()
+    return (
+        "err_ngrok_3200" in msg
+        or "openinference.ngrok.io is offline" in msg
+        or ("provider returned error" in msg and "404" in msg and "openinference" in msg)
     )
 
 
@@ -269,10 +297,10 @@ def gerar_resposta(
     # Lista de modelos: ENV ou model_router por tipo
     models_from_env = _parse_models() if _env("OPENAI_MODEL") else None
     if models_from_env and len(models_from_env) > 0:
-        models = models_from_env
+        models = _prioritize_models(models_from_env)
     else:
         primarios = modelos_para_tipo(tipo)
-        models = list(primarios) + [m for m in MODELOS_FALLBACK if m not in primarios]
+        models = _prioritize_models(list(primarios) + [m for m in MODELOS_FALLBACK if m not in primarios])
 
     # Cache global (prompt+tipo+temp) para evitar rodar a lista inteira
     if use_cache and len(prompt) <= 8000:
@@ -287,6 +315,15 @@ def gerar_resposta(
     tried_backup = False
 
     for idx, model in enumerate(models, start=1):
+        cooldown_until = _MODEL_COOLDOWN_UNTIL.get(model, 0.0)
+        now = time.time()
+        if cooldown_until > now:
+            remaining = int(cooldown_until - now)
+            logger.warning(
+                f"[GPT_ENGINE] ({tipo}) Pulando modelo '{model}' por cooldown ({remaining}s restantes)."
+            )
+            continue
+
         logger.warning(f"[GPT_ENGINE] ({tipo}) Tentando modelo {idx}/{len(models)}: '{model}' (max_tokens={max_tokens})")
 
         cache_k = _cache_key(model, prompt, temperatura, max_tokens)
@@ -361,6 +398,14 @@ def gerar_resposta(
 
                 if _is_bad_request(e):
                     logger.warning(f"[GPT_ENGINE] ({tipo}) BadRequest (400), próximo modelo.")
+                    break
+
+                if _is_provider_offline_error(e):
+                    _MODEL_COOLDOWN_UNTIL[model] = time.time() + _MODEL_COOLDOWN_SECONDS
+                    logger.warning(
+                        f"[GPT_ENGINE] ({tipo}) Provedor/modelo '{model}' indisponível (404/offline). "
+                        f"Aplicando cooldown de {_MODEL_COOLDOWN_SECONDS}s e tentando próximo."
+                    )
                     break
 
                 if _is_transient(e):

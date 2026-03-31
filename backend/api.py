@@ -12,7 +12,6 @@ import logging
 import threading
 import traceback
 import json
-import re
 try:
     import bcrypt
 except ImportError:
@@ -247,6 +246,7 @@ def recover_stuck_jobs_on_startup():
     conn = get_connection()
     try:
         with conn.cursor() as cur:
+            tempo_base_col = "created_at"
             try:
                 cur.execute(
                     """
@@ -257,22 +257,42 @@ def recover_stuck_jobs_on_startup():
             except Exception as e:
                 logging.warning(f"[STARTUP] Não foi possível garantir coluna started_at: {e}")
 
+            try:
+                cur.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'research_jobs'
+                      AND column_name IN ('created_at', 'criado_em')
+                    """
+                )
+                cols = [r.get("column_name") for r in (cur.fetchall() or [])]
+                if "created_at" in cols:
+                    tempo_base_col = "created_at"
+                elif "criado_em" in cols:
+                    tempo_base_col = "criado_em"
+                else:
+                    tempo_base_col = "created_at"
+            except Exception:
+                tempo_base_col = "created_at"
+
             cur.execute(
-                """
+                f"""
                 UPDATE research_jobs
-                SET started_at = COALESCE(started_at, criado_em, NOW())
+                SET started_at = COALESCE(started_at, {tempo_base_col}, NOW())
                 WHERE status = 'processing' AND started_at IS NULL
                 """
             )
 
             cur.execute(
-                """
+                f"""
                 UPDATE research_jobs
                 SET status = 'failed',
                     erro = COALESCE(erro, 'Processamento interrompido por reinicialização do servidor. Tente novamente.'),
                     resultado = COALESCE(resultado, 'Processamento interrompido por reinicialização do servidor. Tente novamente.')
                 WHERE status = 'processing'
-                  AND COALESCE(started_at, criado_em) < NOW() - INTERVAL '10 minutes'
+                  AND COALESCE(started_at, {tempo_base_col}) < NOW() - INTERVAL '10 minutes'
                 """
             )
         conn.commit()

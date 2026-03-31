@@ -2,18 +2,26 @@
 # Configuração recomendada: listas por categoria + fallback geral.
 
 MODELOS_EXTRACTION = [
+    "qwen/qwen3.6-plus-preview:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-nano-9b-v2:free",
 ]
 
 MODELOS_ANALYSIS = [
+    "qwen/qwen3.6-plus-preview:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "openai/gpt-oss-20b:free",
 ]
 
 MODELOS_WRITING = [
+    "qwen/qwen3.6-plus-preview:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "z-ai/glm-4.5-air:free",
 ]
 
 MODELOS_FALLBACK = [
+    "qwen/qwen3.6-plus-preview:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "openai/gpt-oss-20b:free",
     "nvidia/nemotron-nano-9b-v2:free",
     "z-ai/glm-4.5-air:free",
