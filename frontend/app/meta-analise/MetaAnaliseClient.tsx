@@ -266,10 +266,15 @@ export default function MetaAnaliseClient() {
           <h1 className="text-3xl font-bold text-[#0c3d66] mb-2">
             Metanálise PRISMA
           </h1>
-          <p className="text-slate-600 mb-8">
+          <p className="text-slate-600 mb-4">
             Crie revisões sistemáticas e metanálises seguindo o protocolo PRISMA 2020.
             O sistema executará buscas na literatura (PubMed, LILACS, Cochrane) e guiará você através das etapas.
           </p>
+          <div className="mb-8 rounded-lg border border-[#0c3d66]/20 bg-[#0c3d66]/5 px-4 py-3 text-sm text-slate-700">
+            <strong className="text-[#0c3d66]">Foco do produto:</strong> extração reprodutível (PICO, desfechos, números),
+            síntese de evidência e redação alinhada ao PRISMA. Quanto mais específico o tema (população, intervenção,
+            comparador e desfechos), melhor a busca e as etapas seguintes.
+          </div>
 
           {/* Formulário de Tema */}
           <div className="card-elevated p-6 mb-8">

@@ -15,16 +15,12 @@ except ImportError:
 # Custos por módulo (créditos por unidade)
 CUSTOS = {
     "pdf": 5,
-    "explicar": 10,
-    "fatos": 5,
     "critica": 12,
     "perspectiva": 15,
     "meta_etapa": 15,
     "meta_upload": 5,
     "escrever_artigo": 5,
     "escrever_artigo_completo": 15,
-    "mapa": 8,
-    "structure_mapper": 6,
     "meta_analise": 12,
     "chat_followup": 1,
 }
@@ -37,9 +33,7 @@ def _custo_modulo(modulo: str, quantidade: int = 1) -> int:
         # Aliases
         alias = {
             "critical_analysis": "critica",
-            "fact_checker": "fatos",
             "perspective_research": "perspectiva",
-            "structure_visualizer": "mapa",
             "meta_analysis": "meta_analise",
         }
         m = alias.get(m, m)

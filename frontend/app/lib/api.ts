@@ -37,10 +37,6 @@ export interface JobItem {
   created_at?: string | null;
 }
 
-export interface ExplicarConceitoResponse extends ApiResponse {
-  resultado?: string;
-}
-
 // ============================================
 // Autenticação e usuário
 // ============================================
@@ -250,22 +246,8 @@ async function callAsyncApi(
 }
 
 // ============================================
-// Funções de IA - Versões Antigas
+// Funções de IA
 // ============================================
-
-export async function explicarConceito(
-  token: string,
-  texto_artigo: string,
-  trecho: string,
-  nivel: string = 'graduação'
-): Promise<ExplicarConceitoResponse> {
-  return callAsyncApi(
-    API_ENDPOINTS.EXPLICAR,
-    token,
-    { texto_artigo, trecho, nivel },
-    300000
-  ) as Promise<ExplicarConceitoResponse>;
-}
 
 export async function analisarCritica(
   token: string,
@@ -273,20 +255,6 @@ export async function analisarCritica(
   foco_analise: string = "geral"
 ): Promise<ApiResponse> {
   return callAsyncApi(API_ENDPOINTS.CRITICA, token, { texto_artigo, foco_analise }, 300000);
-}
-
-export async function verificarFatos(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return callAsyncApi(API_ENDPOINTS.FATOS, token, { texto_artigo }, 300000);
-}
-
-export async function gerarMapa(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.MAPA, 'POST', { texto_artigo }, token, 300000); // 5 minutos
 }
 
 export async function uploadPdf(token: string, file: File): Promise<ApiResponse> {
@@ -350,53 +318,14 @@ export async function traduzirTexto(token: string, texto: string): Promise<ApiRe
 }
 
 // ============================================
-// Funções Research - Versões Novas (Recomendadas)
+// Funções Research
 // ============================================
-
-export async function explainConcept(
-  token: string,
-  texto_artigo: string,
-  trecho: string,
-  nivel: string = 'graduação'
-): Promise<ExplicarConceitoResponse> {
-  return apiCall<ExplicarConceitoResponse>(
-    API_ENDPOINTS.EXPLAIN_CONCEPT,
-    'POST',
-    { texto_artigo, trecho, nivel },
-    token
-  );
-}
 
 export async function criticalAnalysis(
   token: string,
   texto_artigo: string
 ): Promise<ApiResponse> {
   return apiCall(API_ENDPOINTS.CRITICAL_ANALYSIS, 'POST', { texto_artigo }, token);
-}
-
-export async function factChecker(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return apiCall(API_ENDPOINTS.FACT_CHECKER, 'POST', { texto_artigo }, token);
-}
-
-// ============================================
-// Funções de Estrutura
-// ============================================
-
-export async function structureMapper(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return callAsyncApi('/genapi/structure_mapper', token, { texto_artigo }, 300000);
-}
-
-export async function structureVisualizer(
-  token: string,
-  texto_artigo: string
-): Promise<ApiResponse> {
-  return callAsyncApi('/genapi/structure_visualizer', token, { texto_artigo }, 300000);
 }
 
 // ============================================

@@ -44,7 +44,6 @@ from slowapi.middleware import SlowAPIMiddleware  # pyright: ignore[reportMissin
 from pydantic import BaseModel, validator
 from typing import Optional
 
-# process_chunks e combine_responses agora s?o usados apenas dentro de run_with_two_chunks
 from docx import Document  # pyright: ignore[reportMissingImports]
 
 if BASE_DIR not in sys.path:
@@ -81,16 +80,6 @@ except ImportError:
         get_connection = database.get_connection
 
 try:
-    from .explain_concept import explicar_conceito
-except ImportError:
-    try:
-        import explain_concept
-        explicar_conceito = explain_concept.explicar_conceito
-    except ImportError:
-        import backend.explain_concept as explain_concept  # type: ignore[reportMissingImports]
-        explicar_conceito = explain_concept.explicar_conceito
-
-try:
     from .critical_analysis import aplicar_leitura_critica
 except ImportError:
     try:
@@ -99,36 +88,6 @@ except ImportError:
     except ImportError:
         import backend.critical_analysis as critical_analysis  # pyright: ignore[reportMissingImports]
         aplicar_leitura_critica = critical_analysis.aplicar_leitura_critica
-
-try:
-    from .Fact_checker import verificar_fatos
-except ImportError:
-    try:
-        import Fact_checker
-        verificar_fatos = Fact_checker.verificar_fatos
-    except ImportError:
-        import backend.Fact_checker as Fact_checker  # type: ignore[reportMissingImports]
-        verificar_fatos = Fact_checker.verificar_fatos
-
-try:
-    from .structure_visualizer import visualizar_estrutura
-except ImportError:
-    try:
-        import structure_visualizer
-        visualizar_estrutura = structure_visualizer.visualizar_estrutura
-    except ImportError:
-        import backend.structure_visualizer as structure_visualizer  # type: ignore[reportMissingImports]
-        visualizar_estrutura = structure_visualizer.visualizar_estrutura
-
-try:
-    from .structure_mapper import gerar_mapa_estrutura
-except ImportError:
-    try:
-        import structure_mapper
-        gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
-    except ImportError:
-        import backend.structure_mapper as structure_mapper  # type: ignore[reportMissingImports]
-        gerar_mapa_estrutura = structure_mapper.gerar_mapa_estrutura
 
 try:
     from .pdf_processor import extrair_texto_pdf, obter_versao_portugues
@@ -329,26 +288,6 @@ class AtualizarPerfilInput(BaseModel):
     telefone: Optional[str] = None
 
 
-class ExplicarRequest(BaseModel):
-    texto_artigo: str
-    trecho: str
-    nivel: str
-
-class CriticaRequest(BaseModel):
-    texto_artigo: str
-    pergunta: Optional[str] = None
-
-class FatosRequest(BaseModel):
-    texto_artigo: str
-    afirmacoes: list
-
-class PerspectivaRequest(BaseModel):
-    texto_artigo: str
-    pergunta: str
-
-class MapaRequest(BaseModel):
-    texto_artigo: str
-
 # ============================================
 # ? FUN??ES AUXILIARES
 # ============================================
@@ -482,114 +421,9 @@ def require_admin(authorization: str = Header(None)):
         raise HTTPException(status_code=403, detail="Acesso restrito ao administrador.")
     return user
 
-def log_t(msg):
-    """Fun??o auxiliar para logging com timestamp."""
-    logging.warning(f"[TIMER] {msg} @ {time.time():.2f}")
-
-def run_with_two_chunks(
-    texto: str,
-    process_func,
-    chunk_size: int = 1800,
-    overlap: int = 300,
-    max_chunks: int = 2
-):
-    """
-    Executa processamento de IA em no m?ximo DOIS chunks,
-    evitando timeout no servidor.
-    """
-    try:
-        from .chunker import chunk_text, combine_responses
-    except ImportError:
-        try:
-            from chunker import chunk_text, combine_responses
-        except ImportError:
-            import backend.chunker as _chunker
-            chunk_text = _chunker.chunk_text
-            combine_responses = _chunker.combine_responses
-
-    log_t("ANTES chunking")
-    chunks = chunk_text(texto, chunk_size=chunk_size, overlap=overlap)
-    log_t("DEPOIS chunking")
-
-    # Seguran?a absoluta: no m?ximo 2 chunks
-    chunks = chunks[:max_chunks]
-
-    respostas = []
-    for i, chunk in enumerate(chunks, 1):
-        log_t(f"ANTES OpenAI chunk {i}")
-        resposta = process_func(chunk)
-        log_t(f"DEPOIS OpenAI chunk {i}")
-        respostas.append(resposta)
-
-    log_t("ANTES montagem resposta")
-    texto_final = combine_responses(respostas)
-    log_t("DEPOIS montagem resposta")
-
-    aviso = (
-        "\n\n?? Nota: esta an?lise foi gerada a partir de uma parte do texto "
-        "para garantir rapidez e estabilidade da plataforma."
-    )
-
-    return texto_final + aviso
-
 # ============================================
 # ? FUN??ES DE PROCESSAMENTO ASS?NCRONO
 # ============================================
-
-def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: str):
-    """Processa job de explica??o de conceito em background."""
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - explicar")
-        
-        # Limite defensivo
-        texto_artigo = texto_artigo[:6000]
-        
-        def processar_chunk(chunk):
-            return explicar_conceito(chunk, trecho, nivel)
-        
-        # Chamada pesada
-        resultado = run_with_two_chunks(
-            texto_artigo,
-            processar_chunk,
-            chunk_size=1800,
-            overlap=300
-        )
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-        
-        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - explicar")
-        
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - explicar\n{erro}")
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
-                    ("failed", erro[:1000], job_id)  # Limitar tamanho do erro
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
 
 def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "geral"):
     """Processa job de an?lise cr?tica em background - SEM chunking para an?lise focada."""
@@ -622,141 +456,6 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - critica\n{erro}")
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
-                    ("failed", erro[:1000], job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-
-def processar_job_fatos(job_id: int, texto_artigo: str):
-    """Processa job de verifica??o de fatos em background - SEM chunking."""
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - fatos")
-        
-        # Limitar texto e chamar diretamente, sem chunking
-        texto_artigo = texto_artigo[:4000]
-        resultado = verificar_fatos(texto_artigo)
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-        
-        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - fatos")
-        
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - fatos\n{erro}")
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
-                    ("failed", erro[:1000], job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-
-def processar_job_mapa(job_id: int, texto_artigo: str):
-    """Processa job de visualiza??o de estrutura em background - SEM chunking."""
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - mapa")
-        
-        # Limitar texto e chamar diretamente, sem chunking
-        texto_artigo = texto_artigo[:4000]
-        resultado = visualizar_estrutura(texto_artigo)
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-        
-        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - mapa")
-        
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - mapa\n{erro}")
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, erro=%s WHERE id=%s",
-                    ("failed", erro[:1000], job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.error(f"[RESEARCH JOB {job_id}] UPDATE erro - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-
-def processar_job_structure_mapper(job_id: int, texto_artigo: str):
-    """Processa job de mapeamento de estrutura em background - SEM chunking."""
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] in?cio - structure_mapper")
-        
-        # Limitar texto e chamar diretamente, sem chunking
-        texto_artigo = texto_artigo[:4000]
-        resultado = gerar_mapa_estrutura(texto_artigo)
-        
-        # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
-        # autocommit=False para permitir controle expl?cito do commit
-        conn = get_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE research_jobs SET status=%s, resultado=%s WHERE id=%s",
-                    ("done", resultado, job_id)
-                )
-                rowcount = cursor.rowcount
-            conn.commit()  # Commit expl?cito na mesma conex?o
-            logging.warning(f"[RESEARCH JOB {job_id}] UPDATE conclu?do - job_id={job_id}, linhas_afetadas={rowcount}")
-        finally:
-            conn.close()
-        
-        logging.warning(f"[RESEARCH JOB {job_id}] conclu?do - structure_mapper")
-        
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - structure_mapper\n{erro}")
         
         # Usar conex?o expl?cita com commit expl?cito para garantir funcionamento em threads
         # autocommit=False para permitir controle expl?cito do commit
@@ -883,47 +582,9 @@ def processar_job_meta_analise(job_id: int, tema: str, etapa: str = "1", texto_a
 # ? MODELOS PYDANTIC PARA VALIDA??O
 # ============================================
 
-class InputTexto(BaseModel):
-    texto_artigo: str
-    trecho: Optional[str] = None
-    nivel: Optional[str] = "gradua??o"
-
-    @validator('texto_artigo')
-    def validate_texto(cls, v):
-        if not v or not v.strip():
-            raise ValueError("texto_artigo n?o pode estar vazio")
-        return v
-
 class InputCritica(BaseModel):
     texto_artigo: str
     foco_analise: Optional[str] = "geral"  # M?todo de an?lise cr?tica escolhido
-
-    @validator('texto_artigo')
-    def validate_texto(cls, v):
-        if not v or not v.strip():
-            raise ValueError("texto_artigo n?o pode estar vazio")
-        return v
-
-class InputFatos(BaseModel):
-    texto_artigo: str
-
-    @validator('texto_artigo')
-    def validate_texto(cls, v):
-        if not v or not v.strip():
-            raise ValueError("texto_artigo n?o pode estar vazio")
-        return v
-
-class InputPerspectiva(BaseModel):
-    texto_artigo: str
-
-    @validator('texto_artigo')
-    def validate_texto(cls, v):
-        if not v or not v.strip():
-            raise ValueError("texto_artigo n?o pode estar vazio")
-        return v
-
-class InputMapa(BaseModel):
-    texto_artigo: str
 
     @validator('texto_artigo')
     def validate_texto(cls, v):
@@ -1519,48 +1180,6 @@ def status_job(request: Request, job_id: int, user = Depends(require_api_key)):
 # ? ROTAS DE IA
 # ============================================
 
-@api_router.post("/explicar")
-@api_router.post("/explain_concept")
-@limiter.limit("10 per minute")
-def rota_explicar(request: Request, data: InputTexto, user = Depends(require_api_key)):
-    log_t("INICIO REQUEST")
-    print(">>> ENTROU NA ROTA /explicar")
-    try:
-        if not data.trecho:
-            raise HTTPException(status_code=400, detail="Campo 'trecho' ? obrigat?rio")
-
-        custo = consumir_creditos(user["id"], "explicar")
-
-        # Criar job ass?ncrono
-        dados_extras = json.dumps({"trecho": data.trecho, "nivel": data.nivel})
-        job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, dados_extras, started_at) VALUES (%s, %s, %s, %s, %s, %s, NOW())",
-            (user["id"], "explicar", "processing", data.texto_artigo, custo, dados_extras)
-        )
-
-        # Iniciar processamento em background
-        threading.Thread(
-            target=processar_job_explicar,
-            args=(job_id, data.texto_artigo, data.trecho, data.nivel),
-            daemon=True
-        ).start()
-
-        log_t("FIM REQUEST")
-        return JSONResponse(
-            content={
-                "request_id": job_id,
-                "status": "processing"
-            },
-            status_code=202
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print("ERRO NA ROTA /explicar")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-
 @api_router.post("/critica")
 @api_router.post("/critical_analysis")
 @limiter.limit("10 per minute")
@@ -1594,110 +1213,6 @@ def rota_critica(request: Request, data: InputCritica, user = Depends(require_ap
     except Exception as e:
         import traceback
         print("ERRO NA ROTA /critica")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-
-@api_router.post("/fatos")
-@api_router.post("/fact_checker")
-@limiter.limit("10 per minute")
-def rota_fatos(request: Request, data: InputFatos, user = Depends(require_api_key)):
-    try:
-        custo = consumir_creditos(user["id"], "fatos")
-
-        # Criar job ass?ncrono
-        job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
-            (user["id"], "fatos", "processing", data.texto_artigo, custo)
-        )
-
-        # Iniciar processamento em background
-        threading.Thread(
-            target=processar_job_fatos,
-            args=(job_id, data.texto_artigo),
-            daemon=True
-        ).start()
-
-        return JSONResponse(
-            content={
-                "request_id": job_id,
-                "status": "processing"
-            },
-            status_code=202
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print("ERRO NA ROTA /fatos")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-
-@api_router.post("/mapa")
-@api_router.post("/structure_visualizer")
-@limiter.limit("10 per minute")
-def rota_mapa(request: Request, data: InputMapa, user = Depends(require_api_key)):
-    try:
-        custo = consumir_creditos(user["id"], "mapa")
-
-        # Criar job ass?ncrono
-        job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
-            (user["id"], "mapa", "processing", data.texto_artigo, custo)
-        )
-
-        # Iniciar processamento em background
-        threading.Thread(
-            target=processar_job_mapa,
-            args=(job_id, data.texto_artigo),
-            daemon=True
-        ).start()
-
-        return JSONResponse(
-            content={
-                "request_id": job_id,
-                "status": "processing"
-            },
-            status_code=202
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print("ERRO NA ROTA /mapa")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
-
-@api_router.post("/structure_mapper")
-@limiter.limit("10 per minute")
-def rota_structure_mapper(request: Request, data: InputMapa, user = Depends(require_api_key)):
-    try:
-        custo = consumir_creditos(user["id"], "structure_mapper")
-
-        # Criar job ass?ncrono
-        job_id = db_insert_return_id(
-            "INSERT INTO research_jobs (usuario_id, modulo, status, entrada, creditos, started_at) VALUES (%s, %s, %s, %s, %s, NOW())",
-            (user["id"], "structure_mapper", "processing", data.texto_artigo, custo)
-        )
-
-        # Iniciar processamento em background
-        threading.Thread(
-            target=processar_job_structure_mapper,
-            args=(job_id, data.texto_artigo),
-            daemon=True
-        ).start()
-
-        return JSONResponse(
-            content={
-                "request_id": job_id,
-                "status": "processing"
-            },
-            status_code=202
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print("ERRO NA ROTA /structure_mapper")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
 
@@ -2109,12 +1624,11 @@ def rota_chat_followup(request: Request, data: ChatFollowUpInput, user = Depends
 
         # Construir prompt contextualizado baseado no tipo de an?lise
         tipo_analise_nomes = {
-            "explicar": "Explica??o de Conceito",
             "critica": "An?lise Cr?tica",
-            "fatos": "Verifica??o de Fatos",
-            "mapa": "Mapa Conceitual",
-            "structure_mapper": "Mapeamento de Estrutura",
+            "critical_analysis": "An?lise Cr?tica",
             "meta_analise": "Metan?lise",
+            "meta_analysis": "Metan?lise",
+            "meta-analise": "Metan?lise",
         }
         
         nome_analise = tipo_analise_nomes.get(data.tipo_analise, data.tipo_analise)

@@ -50,18 +50,13 @@ export const API_ENDPOINTS = {
   PLANOS: '/genapi/planos',
   PACOTES: '/genapi/pacotes',
   
-  // Rotas de IA (versões antigas - mantidas para compatibilidade)
-  EXPLICAR: '/genapi/explicar',
+  // Rotas de IA
   CRITICA: '/genapi/critica',
-  FATOS: '/genapi/fatos',
-  MAPA: '/genapi/mapa',
   PDF: '/genapi/pdf',
   TRADUCAO: '/genapi/traducao',
   
-  // Rotas Research (novas - recomendadas)
+  // Rotas Research
   CRITICAL_ANALYSIS: '/genapi/critical_analysis',
-  EXPLAIN_CONCEPT: '/genapi/explain_concept',
-  FACT_CHECKER: '/genapi/fact_checker',
   META_ANALYSIS: '/genapi/meta_analysis',
   META_ANALYSE: '/genapi/meta_analise', // Alias para compatibilidade
   

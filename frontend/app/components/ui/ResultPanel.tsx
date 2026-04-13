@@ -15,13 +15,12 @@ interface ResultPanelProps {
   onUpdateResult?: (newResult: string | null) => void;
   modoConfiguracao?: boolean;
   etapasMetanalise?: Array<{ etapa: number; titulo: string; resultado: string; loading: boolean }>;
-  onExecute?: (parametros: { trecho?: string; nivel?: string; focoAnalise?: string; temaMetanalise?: string }) => void;
+  onExecute?: (parametros: { focoAnalise?: string; temaMetanalise?: string }) => void;
   artigosEncontrados?: Artigo[];
   totalArtigos?: number;
   temaMetanalise?: string;
   mostrarBotaoContinuarEtapas?: boolean;
   onContinuarEtapasMetanalise?: (tema?: string) => void;
-  /** Para módulos sem config (fatos, structure_mapper, structure_visualizer): executar análise após upload */
   onRunAnalysis?: () => void;
 }
 
@@ -44,8 +43,6 @@ export default function ResultPanel({
   onRunAnalysis,
 }: ResultPanelProps) {
   const [showChat, setShowChat] = useState(false);
-  const [trecho, setTrecho] = useState('');
-  const [nivel, setNivel] = useState('graduação');
   const [focoAnalise, setFocoAnalise] = useState('geral');
   const [temaInput, setTemaInput] = useState(''); // Estado local para o input do formulário
   const [temaContinuar, setTemaContinuar] = useState(''); // Tema opcional para "Continuar Etapas"
@@ -77,79 +74,7 @@ export default function ResultPanel({
 
   // Modo de configuração - mostrar formulário inline (mantendo texto do PDF visível abaixo)
   if (modoConfiguracao && tipoAnalise) {
-    if (tipoAnalise === 'explicar') {
-      return (
-        <div className="card-elevated flex flex-col h-full">
-          <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Explicar Conteúdo</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Digite o termo, conceito ou trecho específico que deseja que seja explicado.
-          </p>
-          <div className="space-y-4 mb-6">
-            <div>
-              <label htmlFor="trecho" className="block text-sm font-medium text-slate-700 mb-2">
-                Termo ou conteúdo a explicar *
-              </label>
-              <textarea
-                id="trecho"
-                value={trecho}
-                onChange={(e) => setTrecho(e.target.value)}
-                placeholder="Ex: 'metodologia do estudo', 'resultados principais', 'conceito X'..."
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] outline-none resize-none"
-                rows={3}
-              />
-            </div>
-            <div>
-              <label htmlFor="nivel" className="block text-sm font-medium text-slate-700 mb-2">
-                Nível de explicação
-              </label>
-              <select
-                id="nivel"
-                value={nivel}
-                onChange={(e) => setNivel(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] outline-none"
-              >
-                <option value="leigo">Leigo</option>
-                <option value="graduação">Graduação</option>
-                <option value="pós-graduação">Pós-graduação</option>
-                <option value="especialista">Especialista</option>
-              </select>
-            </div>
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                onClick={() => {
-                  if (onUpdateResult) {
-                    onUpdateResult(null);
-                  }
-                }}
-                className="px-4 py-2 text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  if (trecho.trim() && onExecute) {
-                    onExecute({ trecho: trecho.trim(), nivel });
-                  }
-                }}
-                disabled={!trecho.trim()}
-                className="px-4 py-2 bg-[#2563eb] text-white rounded-lg hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Explicar
-              </button>
-            </div>
-          </div>
-          {/* Mostrar texto do PDF abaixo do formulário se existir */}
-          {resultado && (
-            <div className="mt-6 pt-6 border-t border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">Texto do Artigo (Referência)</h3>
-              <div className="whitespace-pre-wrap text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 overflow-y-auto max-h-[300px] font-sans leading-relaxed">
-                {resultado}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    } else if (tipoAnalise === 'critica') {
+    if (tipoAnalise === 'critica') {
       return (
         <div className="card-elevated flex flex-col h-full">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Análise Crítica</h2>
@@ -243,8 +168,8 @@ export default function ResultPanel({
         <div className="card-elevated flex flex-col h-full">
           <h2 className="text-2xl font-bold text-[#0c3d66] mb-4">Metanálise PRISMA</h2>
           <p className="text-sm text-slate-600 mb-4">
-            Digite o tema da metanálise que deseja realizar. O sistema executará automaticamente todas as 4 etapas:
-            estruturação PICO e busca na literatura, extração de dados, redação técnica (PRISMA) e verificação final.
+            Informe o tema da revisão. O fluxo principal executa as etapas 1 a 3 (PICO e busca, extração estruturada e redação PRISMA).
+            Para análise completa com vários PDFs, use também a página dedicada <strong>Metanálise</strong> no menu.
           </p>
           <div className="space-y-4 mb-6">
             <div>
@@ -480,24 +405,14 @@ export default function ResultPanel({
     );
   }
 
-  // Estado inicial - nenhum resultado (com botão "Executar análise" quando há texto e módulo não precisa de config)
-  const podeExecutarDireto = tipoAnalise && ['fatos', 'structure_mapper', 'structure_visualizer'].includes(tipoAnalise) && textoArtigo && onRunAnalysis;
+  // Estado inicial - nenhum resultado
   return (
     <div className="card-elevated">
       <div className="text-center py-12 text-slate-500">
         <p className="text-lg mb-2">📋 Nenhum resultado ainda</p>
         <p className="text-sm mb-4">
-          {podeExecutarDireto ? 'Arquivo carregado. Clique abaixo para executar a análise.' : 'Faça upload de um arquivo e escolha uma análise'}
+          Faça upload de um arquivo e configure a análise crítica ou a metanálise PRISMA.
         </p>
-        {podeExecutarDireto && (
-          <button
-            type="button"
-            onClick={onRunAnalysis}
-            className="px-6 py-3 rounded-lg font-semibold text-white bg-[#0c3d66] hover:bg-[#0a3255] transition-colors shadow-md"
-          >
-            Iniciar análise
-          </button>
-        )}
       </div>
     </div>
   );

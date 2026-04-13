@@ -371,6 +371,11 @@ Foram realizadas buscas nas seguintes bases de dados:
 # TAREFA
 Com base no tema fornecido e nos resultados da busca bibliográfica, você deve:
 
+**Requisitos de rigor (obrigatório):**
+- PICO deve ser reprodutível: população, intervenção, comparador e desfechos mensuráveis em uma frase de pergunta clínica.
+- Critérios de inclusão/exclusão devem ser verificáveis a partir do título/resumo (evite adjetivos vagos como “bons estudos”).
+- A estratégia de busca deve poder ser copiada para as bases (termos + operadores booleanos por linha).
+
 1. **Gerar a pergunta estruturada PICO:**
    - P (Paciente/População): Quem?
    - I (Intervenção): O quê?

@@ -14,26 +14,13 @@ from typing import Dict, Optional
 # Estes valores podem ser ajustados posteriormente conforme necessário
 
 DEFAULT_COSTS: Dict[str, int] = {
-    # Análises básicas
-    "explicar": 5,                    # Explicar conceito
-    "explain_concept": 5,             # Alias para explicar
-    
     # Análises críticas
     "critica": 7,                     # Análise crítica
     "critical_analysis": 7,           # Alias para critica
     
-    # Verificação de fatos
-    "fatos": 5,                       # Verificação de fatos
-    "fact_checker": 5,                # Alias para fatos
-    
     # Pesquisa de perspectivas
     "perspectiva": 10,                 # Pesquisa de perspectivas (mais caro por usar API externa)
     "perspective_research": 10,        # Alias para perspectiva
-    
-    # Visualização e mapeamento
-    "mapa": 8,                        # Mapa conceitual
-    "structure_visualizer": 8,        # Alias para mapa
-    "structure_mapper": 6,            # Mapeador de estrutura
     
     # Metanálise (mais complexo)
     "meta_analise": 12,               # Metanálise completa
@@ -77,7 +64,6 @@ def get_credit_cost(modulo: str) -> int:
         return DEFAULT_COSTS[modulo]
     
     # Se não encontrou, tentar encontrar por alias ou similaridade
-    # Ex: "explain_concept" -> "explicar"
     for key, value in DEFAULT_COSTS.items():
         if key.startswith(modulo) or modulo in key:
             return value
@@ -153,7 +139,7 @@ def get_cost_for_route(route_name: str) -> int:
     Normaliza o nome da rota para o formato do módulo.
     
     Args:
-        route_name: Nome da rota (ex: "/explain_concept", "explain_concept")
+        route_name: Nome da rota (ex: "/critica", "critica")
     
     Returns:
         Custo em créditos

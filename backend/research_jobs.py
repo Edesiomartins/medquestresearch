@@ -12,44 +12,12 @@ except ImportError:
         from backend.database import get_connection  # type: ignore[reportMissingImports]
 
 try:
-    from .explain_concept import explicar_conceito
-except ImportError:
-    try:
-        from explain_concept import explicar_conceito
-    except ImportError:
-        from backend.explain_concept import explicar_conceito  # type: ignore[reportMissingImports]
-
-try:
     from .critical_analysis import aplicar_leitura_critica
 except ImportError:
     try:
         from critical_analysis import aplicar_leitura_critica
     except ImportError:
         from backend.critical_analysis import aplicar_leitura_critica  # type: ignore[reportMissingImports]
-
-try:
-    from .Fact_checker import verificar_fatos
-except ImportError:
-    try:
-        from Fact_checker import verificar_fatos
-    except ImportError:
-        from backend.Fact_checker import verificar_fatos  # type: ignore[reportMissingImports]
-
-try:
-    from .structure_visualizer import visualizar_estrutura
-except ImportError:
-    try:
-        from structure_visualizer import visualizar_estrutura
-    except ImportError:
-        from backend.structure_visualizer import visualizar_estrutura  # type: ignore[reportMissingImports]
-
-try:
-    from .structure_mapper import gerar_mapa_estrutura
-except ImportError:
-    try:
-        from structure_mapper import gerar_mapa_estrutura
-    except ImportError:
-        from backend.structure_mapper import gerar_mapa_estrutura  # type: ignore[reportMissingImports]
 
 try:
     from .meta_analysis import gerar_meta_analise
@@ -153,28 +121,6 @@ def run_with_two_chunks(
     return texto_final + aviso
 
 
-def processar_job_explicar(job_id: int, texto_artigo: str, trecho: str, nivel: str) -> None:
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] inicio - explicar")
-        texto_artigo = texto_artigo[:6000]
-
-        def processar_chunk(chunk: str) -> str:
-            return explicar_conceito(chunk, trecho, nivel)
-
-        resultado = run_with_two_chunks(
-            texto_artigo,
-            processar_chunk,
-            chunk_size=1800,
-            overlap=300,
-        )
-        _update_job_success(job_id, resultado)
-        logging.warning(f"[RESEARCH JOB {job_id}] concluido - explicar")
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - explicar\n{erro}")
-        _update_job_failure(job_id, erro)
-
-
 def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "geral") -> None:
     try:
         logging.warning(f"[RESEARCH JOB {job_id}] inicio - critica (foco: {foco_analise})")
@@ -184,42 +130,6 @@ def processar_job_critica(job_id: int, texto_artigo: str, foco_analise: str = "g
     except Exception:
         erro = traceback.format_exc()
         logging.error(f"[RESEARCH JOB {job_id}] erro - critica\n{erro}")
-        _update_job_failure(job_id, erro)
-
-
-def processar_job_fatos(job_id: int, texto_artigo: str) -> None:
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] inicio - fatos")
-        resultado = verificar_fatos(texto_artigo[:4000])
-        _update_job_success(job_id, resultado)
-        logging.warning(f"[RESEARCH JOB {job_id}] concluido - fatos")
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - fatos\n{erro}")
-        _update_job_failure(job_id, erro)
-
-
-def processar_job_mapa(job_id: int, texto_artigo: str) -> None:
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] inicio - mapa")
-        resultado = visualizar_estrutura(texto_artigo[:4000])
-        _update_job_success(job_id, resultado)
-        logging.warning(f"[RESEARCH JOB {job_id}] concluido - mapa")
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - mapa\n{erro}")
-        _update_job_failure(job_id, erro)
-
-
-def processar_job_structure_mapper(job_id: int, texto_artigo: str) -> None:
-    try:
-        logging.warning(f"[RESEARCH JOB {job_id}] inicio - structure_mapper")
-        resultado = gerar_mapa_estrutura(texto_artigo[:4000])
-        _update_job_success(job_id, resultado)
-        logging.warning(f"[RESEARCH JOB {job_id}] concluido - structure_mapper")
-    except Exception:
-        erro = traceback.format_exc()
-        logging.error(f"[RESEARCH JOB {job_id}] erro - structure_mapper\n{erro}")
         _update_job_failure(job_id, erro)
 
 

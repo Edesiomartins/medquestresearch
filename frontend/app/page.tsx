@@ -5,10 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
 import {
-  explicarConceito,
-  structureMapper,
-  structureVisualizer,
-  verificarFatos,
   analisarCritica,
   uploadPdf,
   traduzirTexto,
@@ -53,15 +49,12 @@ export default function Home() {
     const detalhe = await obterJob(token, job.id);
     const modulo = (job.modulo || '').toLowerCase();
     const mapaModulo: Record<string, string> = {
-      explicar: 'explicar',
       critica: 'critica',
-      fatos: 'fatos',
-      mapa: 'structure_visualizer',
-      structure_mapper: 'structure_mapper',
       meta_analise: 'meta-analise',
       escrever_artigo: 'meta-analise',
     };
-    const card = mapaModulo[modulo] || 'meta-analise';
+    const legados = ['explicar', 'fatos', 'mapa', 'structure_mapper', 'structure_visualizer'];
+    const card = mapaModulo[modulo] || (legados.includes(modulo) ? 'critica' : 'meta-analise');
     setCardAtivo(card);
     setModoConfiguracao(false);
     setLoadingResultado(false);
@@ -70,24 +63,7 @@ export default function Home() {
   }, [token]);
 
   // Callbacks que precisam vir antes de useEffect/handleUpload (runAnalise é usado em handleUpload)
-  const textoProcessando = useCallback((tipo: string): string => {
-    switch (tipo) {
-      case 'structure_visualizer':
-        return 'Extraindo a estrutura do artigo…';
-      case 'structure_mapper':
-        return 'Mapeando a organização lógica do estudo…';
-      case 'fatos':
-        return 'Verificando afirmações e evidências…';
-      case 'critica':
-        return 'Aplicando leitura crítica aprofundada…';
-      case 'explicar':
-        return 'Explicando conceitos e trechos específicos…';
-      default:
-        return 'Processando análise…';
-    }
-  }, []);
-
-  const runAnalise = useCallback(async (tipo: string, trecho?: string, nivel?: string) => {
+  const runAnalise = useCallback(async (tipo: string) => {
     if (tipo !== 'meta-analise' && (!textoArtigo || !token)) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
       setTituloResultado('Aviso');
@@ -99,20 +75,6 @@ export default function Home() {
       return;
     }
     setCardAtivo(tipo);
-    const titulos: Record<string, string> = {
-      explicar: 'Explicação do Conteúdo',
-      structure_mapper: 'Mapeamento de Estrutura',
-      structure_visualizer: 'Visualização de Estrutura',
-      fatos: 'Verificação de Fatos',
-      critica: 'Análise Crítica',
-      'meta-analise': 'Metanálise PRISMA',
-    };
-    if (tipo === 'explicar' && !trecho) {
-      setModoConfiguracao(true);
-      setTituloResultado('Explicar Conteúdo');
-      setLoadingResultado(false);
-      return;
-    }
     if (tipo === 'critica') {
       setModoConfiguracao(true);
       setTituloResultado('Análise Crítica');
@@ -132,68 +94,8 @@ export default function Home() {
       setLoadingResultado(false);
       return;
     }
-    setModoConfiguracao(false);
-    const textoContextual = textoProcessando(tipo);
-    setResultadoAtual(`⏳ Análise em andamento\n\n${textoContextual}\n\nEstamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.`);
-    setTituloResultado(titulos[tipo] || 'Processando...');
-    setLoadingResultado(true);
-    if (!textoArtigo) {
-      setModoConfiguracao(false);
-      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
-      setTituloResultado('Aviso');
-      setLoadingResultado(false);
-      setCardAtivo(null);
-      return;
-    }
-    try {
-      let res;
-      switch (tipo) {
-        case 'explicar':
-          res = await explicarConceito(token, textoArtigo, trecho!, nivel || 'graduação');
-          break;
-        case 'structure_mapper':
-          res = await structureMapper(token, textoArtigo);
-          break;
-        case 'structure_visualizer':
-          res = await structureVisualizer(token, textoArtigo);
-          break;
-        case 'fatos':
-          res = await verificarFatos(token, textoArtigo);
-          break;
-        default:
-          throw new Error('Tipo de análise não reconhecido');
-      }
-      setModoConfiguracao(false);
-      if (res.redirect === '/planos') {
-        const msg = res.erro || 'Créditos insuficientes. Clique para adquirir mais créditos.';
-        setUploadError(msg);
-        setResultadoAtual(`❌ ${msg}`);
-        setTituloResultado('Créditos insuficientes');
-        setLoadingResultado(false);
-        router.push('/planos');
-      } else if (res.erro) {
-        setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${res.erro}`);
-        setTituloResultado('Erro na Análise');
-        setLoadingResultado(false);
-      } else if (res.resultado) {
-        setResultadoAtual(res.resultado);
-        setTituloResultado(titulos[tipo] || 'Resultado');
-        setLoadingResultado(false);
-      } else {
-        setResultadoAtual('Análise concluída com sucesso!');
-        setTituloResultado(titulos[tipo] || 'Resultado');
-        setLoadingResultado(false);
-      }
-      await refreshCreditos();
-    } catch (error: any) {
-      setModoConfiguracao(false);
-      setResultadoAtual(`❌ Ocorreu um erro durante a análise.\n\nDetalhes técnicos:\n${error.message || 'Erro desconhecido'}`);
-      setTituloResultado('Erro');
-      setLoadingResultado(false);
-    } finally {
-      // não fechar o modal automaticamente; o usuário fecha no botão "Fechar"
-    }
-  }, [token, textoArtigo, textoProcessando, refreshCreditos, router]);
+    setCardAtivo(null);
+  }, [token, textoArtigo]);
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -523,10 +425,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
 
     const tipo = cardAtivo;
     const titulos: Record<string, string> = {
-      explicar: 'Explicação do Conteúdo',
-      structure_mapper: 'Mapeamento de Estrutura',
-      structure_visualizer: 'Visualização de Estrutura',
-      fatos: 'Verificação de Fatos',
       critica: 'Análise Crítica',
       'meta-analise': 'Metanálise PRISMA',
     };
@@ -648,8 +546,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
       return;
     }
 
-    // Garantir que textoArtigo não é null para tipos que precisam dele
-    if ((tipo === 'explicar' || tipo === 'critica') && !textoArtigo) {
+    // Garantir que textoArtigo não é null para análise crítica
+    if (tipo === 'critica' && !textoArtigo) {
       setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
       setTituloResultado('Aviso');
       setModoConfiguracao(false);
@@ -658,24 +556,20 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
     }
 
     // Mostrar estado de processamento
-    let textoProcessando = '⏳ Análise em andamento\n\n';
-    if (tipo === 'explicar' && parametros.trecho) {
-      textoProcessando += `Explicando: "${parametros.trecho}"\n\n`;
-    } else if (tipo === 'critica' && parametros.focoAnalise) {
-      textoProcessando += `Aplicando análise crítica: ${nomesFoco[parametros.focoAnalise] || 'Análise Crítica'}…\n\n`;
+    let textoProc = '⏳ Análise em andamento\n\n';
+    if (tipo === 'critica' && parametros.focoAnalise) {
+      textoProc += `Aplicando análise crítica: ${nomesFoco[parametros.focoAnalise] || 'Análise Crítica'}…\n\n`;
     }
-    textoProcessando += 'Estamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.';
+    textoProc += 'Estamos processando o artigo.\nEste tipo de análise pode levar alguns minutos.\n\nVocê pode aguardar ou continuar usando a plataforma.';
 
-    setResultadoAtual(textoProcessando);
+    setResultadoAtual(textoProc);
     setTituloResultado(titulos[tipo] || 'Processando...');
     setLoadingResultado(true);
     setModoConfiguracao(false);
 
     try {
       let res;
-      if (tipo === 'explicar' && parametros.trecho && textoArtigo) {
-        res = await explicarConceito(token, textoArtigo, parametros.trecho, parametros.nivel || 'graduação');
-      } else if (tipo === 'critica' && parametros.focoAnalise && textoArtigo) {
+      if (tipo === 'critica' && parametros.focoAnalise && textoArtigo) {
         res = await analisarCritica(token, textoArtigo, parametros.focoAnalise);
       } else {
         return;
@@ -702,13 +596,14 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
         setResultadoAtual(res.resultado || 'Análise concluída');
         setTituloResultado(titulo);
         setLoadingResultado(false);
+        await refreshCreditos();
       }
     } catch (error: any) {
       setResultadoAtual(`❌ Erro: ${error.message || 'Erro desconhecido'}`);
       setTituloResultado('Erro');
       setLoadingResultado(false);
     }
-  }, [textoArtigo, token, cardAtivo, router]);
+  }, [textoArtigo, token, cardAtivo, router, refreshCreditos]);
 
   // Continuar para Etapas 2, 3 e 4 da metanálise (após análise PRISMA dos artigos)
   const handleContinuarEtapasMetanalise = useCallback(async (tema?: string) => {
@@ -814,12 +709,8 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
           /* Grid de cards - cada card abre o modal da análise */
           <div>
             <h1 className="text-2xl font-bold text-[#0c3d66] mb-6">Análises disponíveis</h1>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl">
               {[
-                { icon: '🗺️', label: 'Visualizar estrutura', tipo: 'structure_visualizer' },
-                { icon: '🧠', label: 'Mapear estrutura', tipo: 'structure_mapper' },
-                { icon: '✓', label: 'Verificar fatos', tipo: 'fatos' },
-                { icon: '📚', label: 'Explicar conteúdo', tipo: 'explicar' },
                 { icon: '🔬', label: 'Análise crítica', tipo: 'critica' },
                 { icon: '📑', label: 'Metanálise PRISMA', tipo: 'meta-analise' },
               ].map((modulo) => (
@@ -844,10 +735,6 @@ Total de artigos analisados: ${res.total_artigos || res.artigos?.length || 0}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
               <h2 className="text-xl font-bold text-[#0c3d66]">
                 {{
-                  structure_visualizer: 'Visualizar estrutura',
-                  structure_mapper: 'Mapear estrutura',
-                  fatos: 'Verificar fatos',
-                  explicar: 'Explicar conteúdo',
                   critica: 'Análise crítica',
                   'meta-analise': 'Metanálise PRISMA',
                 }[cardAtivo] || cardAtivo}

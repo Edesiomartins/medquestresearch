@@ -22,7 +22,6 @@ interface Regra {
 
 const USO_CREDITOS = [
   { icon: '📄', label: 'Upload PDF/DOCX', creditos: 3 },
-  { icon: '💡', label: 'Explicar conteúdo / Verificar fatos', creditos: 5 },
   { icon: '🔍', label: 'Análise crítica', creditos: 7 },
   { icon: '🌍', label: 'Perspectivas científicas', creditos: 10 },
   { icon: '📊', label: 'Metanálise (por etapa)', creditos: 12 },
