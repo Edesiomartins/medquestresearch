@@ -64,11 +64,6 @@ export default function Home() {
 
   // Callbacks que precisam vir antes de useEffect/handleUpload (runAnalise é usado em handleUpload)
   const runAnalise = useCallback(async (tipo: string) => {
-    if (tipo !== 'meta-analise' && (!textoArtigo || !token)) {
-      setResultadoAtual('Por favor, faça upload de um arquivo primeiro.');
-      setTituloResultado('Aviso');
-      return;
-    }
     if (!token) {
       setResultadoAtual('Usuário não autenticado.');
       setTituloResultado('Aviso');
@@ -76,9 +71,11 @@ export default function Home() {
     }
     setCardAtivo(tipo);
     if (tipo === 'critica') {
+      // Sempre abrir o painel de escolha do método; o texto do PDF pode vir depois do upload.
       setModoConfiguracao(true);
       setTituloResultado('Análise Crítica');
       setLoadingResultado(false);
+      setResultadoAtual(null);
       return;
     }
     if (tipo === 'meta-analise') {
@@ -95,7 +92,7 @@ export default function Home() {
       return;
     }
     setCardAtivo(null);
-  }, [token, textoArtigo]);
+  }, [token]);
 
   // Garantir que o componente está montado no cliente
   useEffect(() => {
@@ -170,9 +167,12 @@ export default function Home() {
         setTextoArtigoPt(null); // Tradução sob demanda pelo botão
         setTraduzirErro(null);
         setUploadProgress(100); // Simula conclusão
-        // Limpar mensagem "faça upload" para exibir o botão "Executar análise"
         setResultadoAtual(null);
         setTituloResultado('');
+        // Garantir que o painel de configuração (ex.: métodos de análise crítica) continue visível após o upload
+        if (cardAtivo === 'critica') {
+          setModoConfiguracao(true);
+        }
       }
     } catch (err: any) {
       console.error("Erro no upload:", err);
@@ -181,7 +181,7 @@ export default function Home() {
     } finally {
       setLoadingResultado(false);
     }
-  }, [token, cardAtivo, runAnalise, router]);
+  }, [token, cardAtivo, router]);
 
   const handleTraduzir = useCallback(async () => {
     if (!token || !textoArtigo) return;
