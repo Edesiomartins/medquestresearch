@@ -466,3 +466,37 @@ export async function chatFollowUp(
     token
   );
 }
+
+export interface HelpChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function helpChat(
+  token: string,
+  message: string,
+  history: HelpChatMessage[],
+): Promise<ApiResponse<{ answer: string; model_tier: string }>> {
+  try {
+    const response = await authenticatedFetch(
+      '/api/help/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          history,
+        }),
+      },
+      token,
+      120000,
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { erro: (data as any).detail || (data as any).erro || `Erro ${response.status}` };
+    }
+    return { data: data as { answer: string; model_tier: string } };
+  } catch (error: any) {
+    return { erro: error.message || 'Erro ao consultar chatbot de ajuda.' };
+  }
+}

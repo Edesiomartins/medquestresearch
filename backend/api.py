@@ -1721,6 +1721,16 @@ except ImportError:
         from .routers.meta import router as meta_v2_router
 app.include_router(meta_v2_router)
 
+# Help chatbot (OpenRouter free)
+try:
+    from backend.routers.help import router as help_router
+except ImportError:
+    try:
+        from routers.help import router as help_router
+    except ImportError:
+        from .routers.help import router as help_router
+app.include_router(help_router)
+
 # Log para debug: verificar se os routers foram inclu?dos
 logging.warning(f"[DEBUG] Router inclu?do com prefixo: /genapi")
 logging.warning(f"[DEBUG] Total de rotas ap?s incluir routers: {len(app.routes)}")

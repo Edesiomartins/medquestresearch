@@ -516,3 +516,65 @@ Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
         resumos.append(gerar_resposta(prompt, temperatura=0.2))
     prompt_final = "Combine estes resumos de chunks em um texto coeso final:\n\n" + "\n\n".join(resumos)
     return gerar_resposta(prompt_final, temperatura=0.3)
+
+
+def gerar_resposta_openrouter_free_chat(
+    user_message: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    max_output_tokens: int = 900,
+    timeout_s: int = 60,
+) -> str:
+    """
+    Chat de suporte usando somente modelos FREE da OpenRouter.
+    Não usa fallback pago para manter custo zero quando disponível.
+    """
+    _check_research_env()
+    message = (user_message or "").strip()
+    if not message:
+        raise ValueError("Mensagem vazia.")
+
+    free_models = [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "deepseek/deepseek-r1:free",
+        "qwen/qwen3-14b:free",
+    ]
+
+    system_prompt = (
+        "Você é um assistente de suporte do MedquestResearch. "
+        "Responda em português brasileiro, com clareza e objetividade. "
+        "Ajude o usuário a entender funcionalidades, fluxo de metanálise, "
+        "interpretação de warnings e uso de exportações. "
+        "Se faltar dado para confirmar algo, diga explicitamente."
+    )
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    for item in (history or [])[-8:]:
+        role = (item.get("role") or "").strip().lower()
+        content = (item.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": message})
+
+    last_error: Optional[Exception] = None
+    for model in free_models:
+        try:
+            client = _get_client(use_backup=False)
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=min(max_output_tokens, 1200),
+                timeout=timeout_s,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            if text:
+                return text
+        except Exception as error:
+            last_error = error
+            logger.warning(f"[GPT_ENGINE] chat_free falhou em '{model}': {error}")
+            continue
+
+    raise Exception(
+        "Não foi possível responder com os modelos free da OpenRouter no momento. "
+        f"Último erro: {last_error}"
+    )

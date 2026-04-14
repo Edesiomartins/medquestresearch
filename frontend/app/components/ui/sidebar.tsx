@@ -134,6 +134,12 @@ export default function Sidebar({
         >
           Atualizar dados
         </Link>
+        <Link
+          href="/manual"
+          className="block w-full text-center py-2.5 rounded-lg text-sm font-semibold text-white border border-white/40 bg-white/5 hover:bg-white/10 hover:border-white/70 transition-colors"
+        >
+          Manual e ajuda
+        </Link>
         {(usuario?.email || '').trim().toLowerCase() === 'prof.edesio@gmail.com' && (
           <Link
             href="/admin"

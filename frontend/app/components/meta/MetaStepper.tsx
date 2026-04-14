@@ -8,9 +8,10 @@ interface StepItem {
 interface MetaStepperProps {
   steps: StepItem[];
   activeKey: string;
+  onStepClick?: (stepKey: string) => void;
 }
 
-export default function MetaStepper({ steps, activeKey }: MetaStepperProps) {
+export default function MetaStepper({ steps, activeKey, onStepClick }: MetaStepperProps) {
   const activeIndex = steps.findIndex((item) => item.key === activeKey);
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -19,14 +20,16 @@ export default function MetaStepper({ steps, activeKey }: MetaStepperProps) {
           const done = index < activeIndex;
           const active = index === activeIndex;
           return (
-            <div
+            <button
               key={step.key}
+              type="button"
+              onClick={() => onStepClick?.(step.key)}
               className={`rounded-lg border p-3 text-sm ${
                 active ? 'border-blue-500 bg-blue-50 text-blue-900' : done ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-slate-200 text-slate-500'
-              }`}
+              } ${onStepClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
             >
               <p className="font-semibold">{step.label}</p>
-            </div>
+            </button>
           );
         })}
       </div>

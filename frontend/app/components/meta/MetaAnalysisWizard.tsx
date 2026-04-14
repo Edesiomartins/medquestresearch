@@ -49,6 +49,24 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
     [],
   );
 
+  const canNavigateTo = (target: WizardStep): boolean => {
+    if (target === 'upload') return true;
+    if (target === 'review') return !!projectId && studies.length > 0;
+    if (target === 'analysis') return !!projectId && studies.length > 0;
+    if (target === 'results') return !!result;
+    return false;
+  };
+
+  const handleStepClick = (stepKey: string) => {
+    const target = stepKey as WizardStep;
+    if (!canNavigateTo(target)) {
+      setError('Essa etapa ainda não está disponível com os dados atuais.');
+      return;
+    }
+    setError(null);
+    setStep(target);
+  };
+
   const handleUpload = async (files: File[]) => {
     setLoading(true);
     setError(null);
@@ -165,7 +183,7 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
 
   return (
     <div className="space-y-5">
-      <MetaStepper steps={steps} activeKey={step} />
+      <MetaStepper steps={steps} activeKey={step} onStepClick={handleStepClick} />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
