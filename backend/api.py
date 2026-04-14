@@ -1711,6 +1711,16 @@ except ImportError:
         from .routes.checkout_creditos import router as checkout_router
 app.include_router(checkout_router)
 
+# Meta-analysis v2 (pipeline estruturado)
+try:
+    from backend.routers.meta import router as meta_v2_router
+except ImportError:
+    try:
+        from routers.meta import router as meta_v2_router
+    except ImportError:
+        from .routers.meta import router as meta_v2_router
+app.include_router(meta_v2_router)
+
 # Log para debug: verificar se os routers foram inclu?dos
 logging.warning(f"[DEBUG] Router inclu?do com prefixo: /genapi")
 logging.warning(f"[DEBUG] Total de rotas ap?s incluir routers: {len(app.routes)}")

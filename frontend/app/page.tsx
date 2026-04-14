@@ -79,16 +79,7 @@ export default function Home() {
       return;
     }
     if (tipo === 'meta-analise') {
-      setModoConfiguracao(false);
-      setTituloResultado('Metanálise PRISMA - Upload de Artigos');
-      setEtapasMetanalise([]);
-      setTextoArtigo(null);
-      setTextoArtigoPt(null);
-      setTraduzirErro(null);
-      setArquivosMetanalise([]);
-      setAnalisesPrisma([]);
-      setResultadoAtual(null);
-      setLoadingResultado(false);
+      router.push('/meta-analise');
       return;
     }
     setCardAtivo(null);

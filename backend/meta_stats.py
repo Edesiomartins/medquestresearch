@@ -4,6 +4,19 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
 
+try:
+    from .statistics.core import StudyEffectInput, compute_meta_analysis
+except Exception:
+    try:
+        from statistics.core import StudyEffectInput, compute_meta_analysis  # type: ignore
+    except Exception:
+        from backend.statistics.core import StudyEffectInput, compute_meta_analysis  # type: ignore
+
+try:
+    from scipy import stats as scipy_stats  # type: ignore
+except Exception:
+    scipy_stats = None
+
 # matplotlib é opcional; se não estiver instalado, ainda calculamos todos os números
 try:
     import matplotlib.pyplot as plt  # type: ignore
@@ -26,6 +39,19 @@ class Effect:
 def _norm_ci(yi: float, vi: float) -> Tuple[float, float]:
     se = math.sqrt(vi)
     return yi - 1.96 * se, yi + 1.96 * se
+
+
+def _norm_sf(value: float) -> float:
+    return 1.0 - (0.5 * (1 + math.erf(value / math.sqrt(2.0))))
+
+
+def _chi2_sf(value: float, dof: int) -> float:
+    if dof <= 0:
+        return 1.0
+    if scipy_stats is not None:
+        return float(scipy_stats.chi2.sf(value, dof))
+    z = ((value / dof) ** (1 / 3) - (1 - 2 / (9 * dof))) / math.sqrt(2 / (9 * dof))
+    return _norm_sf(z)
 
 
 # -----------------------------
@@ -148,17 +174,26 @@ def _fixed_pool(effects: List[Effect]) -> Dict[str, Any]:
     if Q > 0 and df > 0:
         I2 = max(0.0, (Q - df) / Q) * 100.0
 
+    se = math.sqrt(var_mu)
+    z_value = mu / se if se > 0 else 0.0
+    p_value = 2.0 * _norm_sf(abs(z_value))
+    p_heterogeneity = _chi2_sf(Q, df)
+
     return {
         "model": "fixed",
         "k": len(effects),
         "mu": mu,
         "var": var_mu,
+        "se": se,
         "ci_low": ci_low,
         "ci_high": ci_high,
+        "z_value": z_value,
+        "p_value": p_value,
         "Q": Q,
         "df": df,
         "I2": I2,
         "tau2": 0.0,
+        "p_heterogeneity": p_heterogeneity,
     }
 
 
@@ -181,18 +216,26 @@ def _random_dl_pool(effects: List[Effect]) -> Dict[str, Any]:
     var_mu = 1.0 / w_star if w_star > 0 else float("nan")
     ci_low, ci_high = _norm_ci(mu, var_mu)
 
+    se = math.sqrt(var_mu) if var_mu > 0 else float("nan")
+    z_value = mu / se if se and se > 0 else 0.0
+    p_value = 2.0 * _norm_sf(abs(z_value))
+    p_heterogeneity = _chi2_sf(Q, df)
     I2 = fixed["I2"]
     return {
         "model": "random_DL",
         "k": len(effects),
         "mu": mu,
         "var": var_mu,
+        "se": se,
         "ci_low": ci_low,
         "ci_high": ci_high,
+        "z_value": z_value,
+        "p_value": p_value,
         "Q": Q,
         "df": df,
         "I2": I2,
         "tau2": tau2,
+        "p_heterogeneity": p_heterogeneity,
     }
 
 
@@ -207,6 +250,35 @@ def pool_effects(
 
     if model == "fixed":
         pooled = _fixed_pool(effects)
+    elif model in ("random_DL", "random"):
+        pooled = _random_dl_pool(effects)
+    elif model in ("random_REML", "random_PM"):
+        inputs = [
+            StudyEffectInput(
+                study_id=row.study_id,
+                citation=row.label,
+                effect=row.yi,
+                variance=row.vi,
+            )
+            for row in effects
+        ]
+        enhanced = compute_meta_analysis(inputs, model=model)
+        pooled = {
+            "model": enhanced.model,
+            "k": len(effects),
+            "mu": enhanced.pooled_effect,
+            "var": enhanced.pooled_variance,
+            "se": enhanced.se,
+            "ci_low": enhanced.ci_low,
+            "ci_high": enhanced.ci_high,
+            "z_value": enhanced.z_value,
+            "p_value": enhanced.p_value,
+            "Q": enhanced.Q,
+            "df": enhanced.df,
+            "I2": enhanced.I2,
+            "tau2": enhanced.tau2,
+            "p_heterogeneity": enhanced.p_heterogeneity,
+        }
     else:
         pooled = _random_dl_pool(effects)
 
