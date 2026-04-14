@@ -127,3 +127,19 @@ Como corrigir:
 Use o chatbot da página `/manual` para dúvidas operacionais e metodológicas.
 O histórico do chat é persistido por usuário autenticado e pode ser limpo pelo botão "Limpar".
 
+## 9. Glossário de siglas e termos
+
+- **PRISMA**: Preferred Reporting Items for Systematic Reviews and Meta-Analyses; diretriz de transparência para revisões sistemáticas.
+- **PICO**: Paciente/População, Intervenção, Comparador e Outcome (desfecho); estrutura da pergunta clínica.
+- **SMD**: Standardized Mean Difference (diferença média padronizada), para desfechos contínuos.
+- **RR**: Risk Ratio (razão de risco), comparação de risco entre grupos.
+- **OR**: Odds Ratio (razão de chances), comparação de odds/chances entre grupos.
+- **IC95%**: Intervalo de confiança de 95%, faixa plausível da estimativa.
+- **I²**: Percentual de heterogeneidade entre estudos não explicada pelo acaso.
+- **tau²**: Variância entre estudos em modelos de efeitos aleatórios.
+- **DL**: DerSimonian-Laird, método clássico para heterogeneidade.
+- **REML**: Restricted Maximum Likelihood, método de estimação de tau².
+- **PM**: Paule-Mandel, método alternativo para estimar tau².
+- **Egger**: teste para investigar assimetria de funnel plot (viés de publicação).
+- **Begg**: teste de correlação para avaliar viés de publicação.
+

@@ -7,6 +7,22 @@ import Sidebar from '@/app/components/ui/sidebar';
 import HelpAssistant from '@/app/components/ui/HelpAssistant';
 import { useAuth } from '@/app/lib/hooks/useAuth';
 
+const GLOSSARY: Array<{ sigla: string; significado: string }> = [
+  { sigla: 'PRISMA', significado: 'Preferred Reporting Items for Systematic Reviews and Meta-Analyses; diretriz de transparência para revisões sistemáticas.' },
+  { sigla: 'PICO', significado: 'Paciente/População, Intervenção, Comparador e Outcome (desfecho); estrutura para formular pergunta clínica.' },
+  { sigla: 'SMD', significado: 'Standardized Mean Difference (diferença média padronizada), usada em desfechos contínuos.' },
+  { sigla: 'RR', significado: 'Risk Ratio (razão de risco), compara riscos entre grupo intervenção e comparador.' },
+  { sigla: 'OR', significado: 'Odds Ratio (razão de chances), compara odds/chances entre grupos.' },
+  { sigla: 'IC95%', significado: 'Intervalo de confiança de 95%; faixa de plausibilidade da estimativa de efeito.' },
+  { sigla: 'I²', significado: 'Percentual da heterogeneidade entre estudos não explicada pelo acaso.' },
+  { sigla: 'tau²', significado: 'Variância entre estudos em modelos de efeitos aleatórios.' },
+  { sigla: 'DL', significado: 'DerSimonian-Laird, método clássico para estimar heterogeneidade em efeitos aleatórios.' },
+  { sigla: 'REML', significado: 'Restricted Maximum Likelihood; método para estimar tau² com boa robustez.' },
+  { sigla: 'PM', significado: 'Paule-Mandel; método alternativo para estimativa da heterogeneidade (tau²).' },
+  { sigla: 'Egger', significado: 'Teste estatístico para investigar assimetria no funnel plot (possível viés de publicação).' },
+  { sigla: 'Begg', significado: 'Teste de correlação para avaliar viés de publicação.' },
+];
+
 export default function ManualPage() {
   const router = useRouter();
   const { token, usuario, creditos, loading, logout } = useAuth();
@@ -75,6 +91,31 @@ export default function ManualPage() {
                 <li>DOCX: manuscrito consolidado.</li>
                 <li>ZIP de submissão: DOCX + JSON + CSV + plots SVG + narrativa + README.</li>
               </ul>
+            </article>
+
+            <article id="glossario" className="rounded-xl border border-slate-200 bg-white p-5">
+              <h2 className="mb-2 text-lg font-semibold text-slate-800">Glossário completo de siglas</h2>
+              <p className="mb-3 text-sm text-slate-600">
+                Use esta tabela para interpretar os termos estatísticos e metodológicos exibidos no app.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500">
+                      <th className="border-b pb-2 pr-3">Sigla</th>
+                      <th className="border-b pb-2">Significado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {GLOSSARY.map((item) => (
+                      <tr key={item.sigla} className="border-b border-slate-100 align-top">
+                        <td className="py-2 pr-3 font-semibold text-slate-800">{item.sigla}</td>
+                        <td className="py-2 text-slate-700">{item.significado}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </article>
           </section>
 
