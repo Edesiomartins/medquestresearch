@@ -47,11 +47,9 @@ def validate_reviewed_studies(studies: List[StudyExtraction]) -> Tuple[List[Stud
 
         item = study.copy(deep=True)
         if item.included and valid_outcomes == 0:
-            item.included = False
-            if not item.exclusion_reason:
-                item.exclusion_reason = "Sem dados quantitativos válidos após revisão."
+            # Mantém a decisão do revisor humano; apenas sinaliza limitação quantitativa.
             notes.append(
-                f"{item.study_id} foi marcado como excluído automaticamente por falta de dados utilizáveis."
+                f"{item.study_id} está incluído, mas sem dados numéricos completos para pooling quantitativo."
             )
         elif not item.included and not item.exclusion_reason:
             item.exclusion_reason = "Excluído na revisão manual."

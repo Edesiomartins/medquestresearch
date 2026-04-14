@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { analyzeMeta, exportMetaDocx, exportMetaZip, reviewMetaStudies, uploadMetaFiles } from '@/app/lib/meta-api';
 import type { MetaAnalysisResponse, StudyExtraction } from '@/app/types/meta';
@@ -26,6 +27,7 @@ interface MetaAnalysisWizardProps {
 type WizardStep = 'upload' | 'review' | 'analysis' | 'results';
 
 export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
+  const router = useRouter();
   const [step, setStep] = useState<WizardStep>('upload');
   const [projectId, setProjectId] = useState<string>('');
   const [question, setQuestion] = useState('');
@@ -165,7 +167,27 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
     <div className="space-y-5">
       <MetaStepper steps={steps} activeKey={step} />
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setStep('review')}
+              className="rounded bg-white px-3 py-1 text-xs font-semibold text-red-700 border border-red-200 hover:bg-red-100"
+            >
+              Voltar para revisão
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Fechar e ir ao dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       {step === 'upload' && <StudyUploadPanel loading={loading} onUpload={handleUpload} />}
 
