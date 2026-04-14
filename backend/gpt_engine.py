@@ -521,6 +521,8 @@ Foque em {max_tokens} tokens. Chunk {i+1}/{len(chunks)}:
 def gerar_resposta_openrouter_free_chat(
     user_message: str,
     history: Optional[List[Dict[str, str]]] = None,
+    knowledge_context: str = "",
+    acronym_glossary: Optional[Dict[str, str]] = None,
     max_output_tokens: int = 900,
     timeout_s: int = 60,
 ) -> str:
@@ -540,13 +542,27 @@ def gerar_resposta_openrouter_free_chat(
         "qwen/qwen3-14b:free",
     ]
 
+    glossary_lines = ""
+    if acronym_glossary:
+        glossary_lines = "\n".join([f"- {k}: {v}" for k, v in acronym_glossary.items()])
+
+    context_block = (knowledge_context or "").strip()
+    if len(context_block) > 12000:
+        context_block = context_block[:12000]
+
     system_prompt = (
         "Você é um assistente de suporte do MedquestResearch. "
         "Responda em português brasileiro, com clareza e objetividade. "
         "Ajude o usuário a entender funcionalidades, fluxo de metanálise, "
         "interpretação de warnings e uso de exportações. "
-        "Se faltar dado para confirmar algo, diga explicitamente."
+        "Se faltar dado para confirmar algo, diga explicitamente. "
+        "Sempre explique siglas na primeira ocorrência da resposta (ex.: PRISMA, PICO, SMD, RR, OR, I², tau²). "
+        "Não invente funcionalidades que não estejam no manual."
     )
+    if glossary_lines:
+        system_prompt += f"\n\nGlossário de siglas:\n{glossary_lines}"
+    if context_block:
+        system_prompt += f"\n\nManual de referência do produto:\n{context_block}"
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     for item in (history or [])[-8:]:
         role = (item.get("role") or "").strip().lower()

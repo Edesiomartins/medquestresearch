@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { helpChat, HelpChatMessage } from '@/app/lib/api';
+import { clearHelpChatHistory, getHelpChatHistory, helpChat, HelpChatMessage } from '@/app/lib/api';
 
 interface HelpAssistantProps {
   token: string;
@@ -19,6 +19,15 @@ export default function HelpAssistant({ token }: HelpAssistantProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const history = await getHelpChatHistory(token, 80);
+      if (history.data?.messages && history.data.messages.length > 0) {
+        setMessages(history.data.messages);
+      }
+    })();
+  }, [token]);
 
   const send = async () => {
     const question = input.trim();
@@ -38,6 +47,25 @@ export default function HelpAssistant({ token }: HelpAssistantProps) {
     }
 
     setMessages((prev) => [...prev, { role: 'assistant', content: response.data!.answer }]);
+    setLoading(false);
+  };
+
+  const clearHistory = async () => {
+    setLoading(true);
+    setError(null);
+    const response = await clearHelpChatHistory(token);
+    if (response.erro) {
+      setError(response.erro);
+      setLoading(false);
+      return;
+    }
+    setMessages([
+      {
+        role: 'assistant',
+        content:
+          'Histórico limpo. Posso te ajudar com qualquer dúvida sobre o MedquestResearch.',
+      },
+    ]);
     setLoading(false);
   };
 
@@ -82,6 +110,14 @@ export default function HelpAssistant({ token }: HelpAssistantProps) {
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Enviar
+        </button>
+        <button
+          type="button"
+          onClick={clearHistory}
+          disabled={loading}
+          className="rounded bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+        >
+          Limpar
         </button>
       </div>
     </section>

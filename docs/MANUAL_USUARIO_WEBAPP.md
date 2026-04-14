@@ -18,44 +18,70 @@ O MedquestResearch é um webapp para apoiar revisões sistemáticas e metanális
 - **Manual** (`/manual`): guia de uso e chatbot de dúvidas.
 - **Sidebar**: acesso a créditos, perfil, histórico de jobs e navegação.
 
-## 3. Fluxo de metanálise
+## 3. Fluxo de metanálise (detalhado por situação)
 
 ### Etapa A. Ingestão
-- Envie múltiplos artigos em PDF/DOCX.
-- Limite atual: até 25 arquivos por lote.
-- O sistema inicia extração inicial dos estudos.
+- Objetivo: carregar os artigos que serão triados e extraídos.
+- Ação do usuário: enviar arquivos PDF/DOCX (até 25 por lote).
+- Resultado esperado: criação de um `project_id` e lista inicial de estudos detectados.
+
+Situações comuns:
+- **Upload bem-sucedido**: você avança para B-C com estudos listados.
+- **Formato inválido**: aparece erro indicando arquivo não suportado.
+- **Arquivo grande**: arquivos muito grandes podem ser recusados para proteger desempenho.
 
 ### Etapa B-C. Extração/Revisão
-- Revise estudos e outcomes extraídos.
-- Inclua/exclua estudos manualmente.
-- Edite campos numéricos críticos:
-  - contínuos: mean, sd, total (intervenção/comparador)
-  - dicotômicos: events, total (intervenção/comparador)
-- Use snippets e page hints para rastreabilidade.
+- Objetivo: revisar manualmente a extração e preparar dados para pooling.
+- Ação do usuário:
+  - incluir/excluir estudos;
+  - registrar motivo de exclusão;
+  - ajustar outcomes e números (mean/sd/events/totals);
+  - usar snippets/page hints para conferência.
+
+Situações comuns:
+- **Estudo incluído sem dados numéricos completos**: o sistema mantém a inclusão, mas gera nota de limitação para pooling.
+- **Exclusão manual sem motivo**: o sistema sugere motivo padrão.
+- **Dados conflitantes**: recomenda-se revisar o PDF e corrigir manualmente os campos.
 
 ### Etapa D-F. Modelagem/Pooling
-- Defina pergunta da revisão.
-- Escolha medida de efeito:
-  - SMD (Hedges g)
-  - log RR
-  - log OR
-- Escolha modelo:
-  - fixed
-  - random DL
-  - random REML
-  - random Paule-Mandel
-- Se faltarem dados numéricos mínimos, o sistema pode cair para síntese narrativa.
+- Objetivo: executar a metanálise quantitativa e análises complementares.
+- Ação do usuário:
+  - definir pergunta da revisão;
+  - escolher medida de efeito;
+  - escolher modelo estatístico.
+
+Interpretação da escolha de medida:
+- **SMD (Hedges g)**: para desfechos contínuos com média/desvio padrão.
+- **log RR**: para desfechos dicotômicos baseados em risco.
+- **log OR**: para desfechos dicotômicos baseados em odds/chances.
+
+Interpretação da escolha de modelo:
+- **fixed**: assume efeito verdadeiro comum entre estudos.
+- **random DL**: efeitos aleatórios com DerSimonian-Laird.
+- **random REML**: efeitos aleatórios com estimativa REML de heterogeneidade.
+- **random PM**: efeitos aleatórios com Paule-Mandel.
+
+Situações comuns:
+- **Pooling quantitativo disponível**: gera efeito combinado, IC95%, p global, heterogeneidade e plots.
+- **Pooling quantitativo indisponível**: ocorre quando faltam dados numéricos mínimos em estudos suficientes; o sistema retorna síntese narrativa e warning.
+- **Erro de configuração**: pode acontecer se menos de 2 estudos estiverem incluídos.
 
 ### Etapa G-H. Síntese/Manuscrito
-- Visualize:
-  - resumo estatístico
-  - tabela de efeitos
-  - heterogeneidade
-  - viés de publicação
-  - subgrupos
-  - sensibilidade leave-one-out
-  - forest e funnel plot
-- Gere texto científico por seções.
+- Objetivo: transformar resultados em saída científica utilizável.
+- Entregas exibidas:
+  - resumo estatístico;
+  - tabela de efeitos;
+  - heterogeneidade (Q, I², tau², p heterogeneidade);
+  - viés de publicação (Egger/Begg);
+  - subgrupos;
+  - sensibilidade leave-one-out;
+  - forest plot e funnel plot;
+  - texto científico por seções (resumo, introdução, métodos, resultados, discussão, conclusão).
+
+Situações comuns:
+- **Warning metodológico**: indica limitação de dados, sem necessariamente ser erro técnico.
+- **Exportação concluída**: DOCX e ZIP ficam disponíveis para submissão/auditoria.
+- **Necessidade de ajuste**: você pode clicar nas etapas do topo para voltar e corrigir.
 
 ## 4. Exportações
 
@@ -99,4 +125,5 @@ Como corrigir:
 ## 8. Suporte
 
 Use o chatbot da página `/manual` para dúvidas operacionais e metodológicas.
+O histórico do chat é persistido por usuário autenticado e pode ser limpo pelo botão "Limpar".
 

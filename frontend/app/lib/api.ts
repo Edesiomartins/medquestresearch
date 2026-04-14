@@ -470,12 +470,14 @@ export async function chatFollowUp(
 export interface HelpChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  id?: number;
+  created_at?: string | null;
 }
 
 export async function helpChat(
   token: string,
   message: string,
-  history: HelpChatMessage[],
+  history: HelpChatMessage[] = [],
 ): Promise<ApiResponse<{ answer: string; model_tier: string }>> {
   try {
     const response = await authenticatedFetch(
@@ -498,5 +500,44 @@ export async function helpChat(
     return { data: data as { answer: string; model_tier: string } };
   } catch (error: any) {
     return { erro: error.message || 'Erro ao consultar chatbot de ajuda.' };
+  }
+}
+
+export async function getHelpChatHistory(
+  token: string,
+  limit: number = 50,
+): Promise<ApiResponse<{ messages: HelpChatMessage[] }>> {
+  try {
+    const response = await authenticatedFetch(
+      `/api/help/history?limit=${limit}`,
+      { method: 'GET' },
+      token,
+      60000,
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { erro: (data as any).detail || (data as any).erro || `Erro ${response.status}` };
+    }
+    return { data: data as { messages: HelpChatMessage[] } };
+  } catch (error: any) {
+    return { erro: error.message || 'Erro ao carregar histórico do chatbot.' };
+  }
+}
+
+export async function clearHelpChatHistory(token: string): Promise<ApiResponse<{ status: string; message: string }>> {
+  try {
+    const response = await authenticatedFetch(
+      '/api/help/history',
+      { method: 'DELETE' },
+      token,
+      60000,
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { erro: (data as any).detail || (data as any).erro || `Erro ${response.status}` };
+    }
+    return { data: data as { status: string; message: string } };
+  } catch (error: any) {
+    return { erro: error.message || 'Erro ao limpar histórico do chatbot.' };
   }
 }
