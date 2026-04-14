@@ -868,7 +868,6 @@ def escrever_secao_artigo(
     estilo_referencia: str = "Vancouver",
     idioma: str = "pt",
     instrucoes_adicionais: str = "",
-    model: str = "qwen/qwen-2.5-7b-instruct",
 ) -> str:
     """
     Gera uma seção do artigo científico usando dados consolidados do projeto.
@@ -895,7 +894,12 @@ def escrever_secao_artigo(
         prompt += f"\nInstruções adicionais: {instrucoes_adicionais}"
 
     try:
-        return gerar_resposta(prompt, model=model, max_tokens=2200, temperatura=0.5)
+        return gerar_resposta(
+            prompt,
+            temperatura=0.5,
+            max_output_tokens=2200,
+            tipo="redacao",
+        )
     except Exception as e:
         logging.error(f"[META_ANALYSIS] Erro ao escrever seção '{secao_norm}': {e}")
         return f"Erro ao gerar seção '{secao_norm}': {e}"

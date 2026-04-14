@@ -7,10 +7,11 @@ Requer no banco:
 """
 
 from fastapi import APIRouter, Request, HTTPException
+import math
 import os
 
 # Regra de monetização (igual api.py)
-PRECO_CREDITO = 0.25
+PRECO_CREDITO = math.ceil(0.25 * 1.2 * 100) / 100  # R$ 0,30
 BONUS_THRESHOLD = 300
 BONUS_PERCENT = 0.20
 

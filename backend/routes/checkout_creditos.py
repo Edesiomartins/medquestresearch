@@ -5,6 +5,7 @@ Se o usuário não tiver asaas_customer_id, cria o cliente no Asaas (com cpfCnpj
 
 from datetime import datetime, timedelta
 import logging
+import math
 import os
 
 import httpx
@@ -44,7 +45,7 @@ def get_current_user(authorization: str = Header(None)):
 
 router = APIRouter(prefix="/genapi", tags=["checkout"])
 
-PRECO_CREDITO = 0.25
+PRECO_CREDITO = math.ceil(0.25 * 1.2 * 100) / 100  # R$ 0,30 (base 0,25 +20% arredondado para cima)
 BONUS_THRESHOLD = 300
 BONUS_PERCENT = 0.20
 

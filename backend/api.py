@@ -12,6 +12,7 @@ import logging
 import threading
 import traceback
 import json
+import math
 try:
     import bcrypt
 except ImportError:
@@ -972,11 +973,12 @@ def login(request: Request, data: LoginRequest):
         raise HTTPException(status_code=500, detail=f"Erro ao fazer login: {str(e)}")
 
 # ============================================
-# Monetiza??o: apenas compra de cr?ditos
-# R$ 0,25/cr?dito; +20% de b?nus acima de 300 cr?ditos
+# Monetização: apenas compra de créditos
+# Preço base histórico R$ 0,25/crédito; reajuste +20% arredondado para cima => R$ 0,30/crédito
+# +20% de bônus em créditos acima de 300 unidades compradas
 # ============================================
 
-PRECO_CREDITO = 0.25
+PRECO_CREDITO = math.ceil(0.25 * 1.2 * 100) / 100  # 0.30
 BONUS_THRESHOLD = 300
 BONUS_PERCENT = 0.20
 
@@ -992,7 +994,7 @@ def calcular_creditos_entregues(quantidade_comprada: int) -> int:
 
 
 def calcular_preco_reais(quantidade_comprada: int) -> float:
-    """Pre?o em R$ para comprar essa quantidade: valor = quantidade * PRECO_CREDITO."""
+    """Preço em R$: valor = quantidade * PRECO_CREDITO."""
     return round(quantidade_comprada * PRECO_CREDITO, 2)
 
 
@@ -1000,25 +1002,25 @@ def calcular_preco_reais(quantidade_comprada: int) -> float:
 @limiter.limit("30 per minute")
 def listar_planos(request: Request):
     """
-    Monetiza??o ? apenas compra de cr?ditos; n?o h? planos de assinatura.
+    Monetização é apenas compra de créditos; não há planos de assinatura.
     Retorna lista vazia para compatibilidade com o frontend.
     """
-    return {"planos": [], "mensagem": "Monetiza??o apenas por compra de cr?ditos. Use GET /pacotes."}
+    return {"planos": [], "mensagem": "Monetização apenas por compra de créditos. Use GET /pacotes."}
 
 
 @api_router.get("/pacotes")
 @limiter.limit("30 per minute")
 def listar_pacotes(request: Request):
     """
-    Lista pacotes de cr?ditos: R$ 0,25/cr?dito; +20% de b?nus acima de 300 cr?ditos.
+    Lista pacotes de créditos: preço unitário PRECO_CREDITO; bônus acima de 300 créditos comprados.
     """
     sugestoes = [
-        {"id": "50", "nome": "50 cr?ditos", "quantidade": 50, "creditos_entregues": 50, "preco_reais": calcular_preco_reais(50)},
-        {"id": "100", "nome": "100 cr?ditos", "quantidade": 100, "creditos_entregues": 100, "preco_reais": calcular_preco_reais(100)},
-        {"id": "300", "nome": "300 cr?ditos", "quantidade": 300, "creditos_entregues": 300, "preco_reais": calcular_preco_reais(300)},
-        {"id": "400", "nome": "400 cr?ditos (+20%)", "quantidade": 400, "creditos_entregues": calcular_creditos_entregues(400), "preco_reais": calcular_preco_reais(400), "destaque": True},
-        {"id": "500", "nome": "500 cr?ditos (+20%)", "quantidade": 500, "creditos_entregues": calcular_creditos_entregues(500), "preco_reais": calcular_preco_reais(500)},
-        {"id": "1000", "nome": "1000 cr?ditos (+20%)", "quantidade": 1000, "creditos_entregues": calcular_creditos_entregues(1000), "preco_reais": calcular_preco_reais(1000)},
+        {"id": "50", "nome": "50 créditos", "quantidade": 50, "creditos_entregues": 50, "preco_reais": calcular_preco_reais(50)},
+        {"id": "100", "nome": "100 créditos", "quantidade": 100, "creditos_entregues": 100, "preco_reais": calcular_preco_reais(100)},
+        {"id": "300", "nome": "300 créditos", "quantidade": 300, "creditos_entregues": 300, "preco_reais": calcular_preco_reais(300)},
+        {"id": "400", "nome": "400 créditos (+20%)", "quantidade": 400, "creditos_entregues": calcular_creditos_entregues(400), "preco_reais": calcular_preco_reais(400), "destaque": True},
+        {"id": "500", "nome": "500 créditos (+20%)", "quantidade": 500, "creditos_entregues": calcular_creditos_entregues(500), "preco_reais": calcular_preco_reais(500)},
+        {"id": "1000", "nome": "1000 créditos (+20%)", "quantidade": 1000, "creditos_entregues": calcular_creditos_entregues(1000), "preco_reais": calcular_preco_reais(1000)},
     ]
     return {
         "pacotes": sugestoes,

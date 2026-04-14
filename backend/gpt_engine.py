@@ -80,29 +80,49 @@ def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     return val if val else default
 
 
+def _normalize_secret(val: str) -> str:
+    """Remove aspas envoltas comuns ao colar no Railway/.env e espaços."""
+    s = (val or "").strip()
+    if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+        s = s[1:-1].strip()
+    return s
+
+
 def _get_api_key(use_backup: bool = False) -> str:
-    """Chave principal ou backup (OpenRouter)."""
+    """
+    Chave OpenRouter (sk-or-v1-...). Ordem intencional:
+    1) OPENROUTER_API_KEY — nome recomendado
+    2) API_OPENAI_KEY_RESEARCH — legado (muitos deploys Railway só têm esta)
+    3) OPENROUTER_API_KEY_MAIN — evite duplicar: se estiver errada, apague ou corrija
+
+    Antes OPENROUTER_API_KEY_MAIN vinha antes de API_OPENAI_KEY_RESEARCH e podia
+    'sombrear' a chave legada com um valor vazio/placeholder no Railway.
+    """
     if use_backup:
-        return (_env("OPENROUTER_API_KEY_BACKUP") or "").strip()
-    return (
-        _env("API_OPENAI_KEY_RESEARCH")
-        or _env("OPENROUTER_API_KEY_MAIN")
-        or _env("OPENROUTER_API_KEY")
-        or ""
-    ).strip()
+        return _normalize_secret(_env("OPENROUTER_API_KEY_BACKUP") or "")
+    for name in (
+        "OPENROUTER_API_KEY",
+        "API_OPENAI_KEY_RESEARCH",
+        "OPENROUTER_API_KEY_MAIN",
+    ):
+        raw = _env(name)
+        if raw:
+            return _normalize_secret(raw)
+    return ""
 
 
 def _check_research_env() -> None:
     if not _get_api_key(use_backup=False):
         raise RuntimeError(
-            "Defina API_OPENAI_KEY_RESEARCH, OPENROUTER_API_KEY_MAIN ou OPENROUTER_API_KEY."
+            "Defina OPENROUTER_API_KEY ou API_OPENAI_KEY_RESEARCH (mesma chave sk-or-v1-... do OpenRouter). "
+            "Se usar várias variáveis, remova valores vazios/placeholder — só uma chave válida é necessária."
         )
 
 
 def _parse_models() -> List[str]:
     """Lista de modelos a partir de ENV. Se vazio, usa model_router em gerar_resposta."""
-    main = _env("OPENAI_MODEL")
-    fb_raw = _env("OPENAI_MODEL_FALLBACK", "") or ""
+    main = _env("OPENROUTER_MODEL") or _env("OPENAI_MODEL")
+    fb_raw = (_env("OPENROUTER_MODEL_FALLBACK", "") or _env("OPENAI_MODEL_FALLBACK", "") or "")
     fallbacks = [m.strip() for m in fb_raw.split(",") if m.strip()]
     models: List[str] = []
     if main:
@@ -118,8 +138,16 @@ def _prioritize_models(models: List[str]) -> List[str]:
     Garante motores principais estáveis no topo da lista.
     Pode ser sobrescrito por ENV.
     """
-    primary = _env("OPENAI_MODEL_PRIMARY", "qwen/qwen3.6-plus-preview:free")
-    secondary = _env("OPENAI_MODEL_SECONDARY", "nvidia/nemotron-3-super-120b-a12b:free")
+    primary = (
+        _env("OPENROUTER_MODEL_PRIMARY")
+        or _env("OPENAI_MODEL_PRIMARY")
+        or "nvidia/nemotron-3-super-120b-a12b:free"
+    )
+    secondary = (
+        _env("OPENROUTER_MODEL_SECONDARY")
+        or _env("OPENAI_MODEL_SECONDARY")
+        or "openrouter/elephant-alpha"
+    )
     ordered: List[str] = []
     for m in [primary, secondary] + list(models):
         if m and m not in ordered:
@@ -170,7 +198,11 @@ def _cache_set(key: str, value: str) -> None:
 # -----------------------------
 # Cliente OpenRouter
 # -----------------------------
-OPENAI_API_BASE = _env("OPENAI_API_BASE", "https://openrouter.ai/api/v1") or "https://openrouter.ai/api/v1"
+OPENAI_API_BASE = (
+    _env("OPENROUTER_API_BASE")
+    or _env("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    or "https://openrouter.ai/api/v1"
+)
 HTTP_REFERER = _env("OPENROUTER_HTTP_REFERER") or _env("OPENROUTER_REFERRER", "https://medquestresearch.up.railway.app") or ""
 APP_TITLE = _env("OPENROUTER_APP_TITLE", "MedQuestResearch") or "MedQuestResearch"
 
@@ -231,13 +263,14 @@ def _is_transient(err: Exception) -> bool:
 
 def _is_provider_offline_error(err: Exception) -> bool:
     """
-    Detecta indisponibilidade de provedor/modelo (ex.: OpenInference ngrok offline).
+    Detecta indisponibilidade de provedor/modelo (ex.: modelo removido no OpenRouter).
     """
     msg = str(err).lower()
     return (
         "err_ngrok_3200" in msg
         or "openinference.ngrok.io is offline" in msg
         or ("provider returned error" in msg and "404" in msg and "openinference" in msg)
+        or "no endpoints found" in msg
     )
 
 
@@ -283,7 +316,7 @@ def gerar_resposta(
     """
     Gera resposta via OpenRouter com fallback de modelos e retry.
 
-    - Modelos: ENV (OPENAI_MODEL + OPENAI_MODEL_FALLBACK) ou model_router por tipo.
+    - Modelos: ENV (OPENROUTER_MODEL + OPENROUTER_MODEL_FALLBACK; legado OPENAI_*) ou model_router por tipo.
     - Cache opcional em memória (por model+prompt+temp+max_tokens).
     - Retry para 429/timeout; troca de modelo se persistir; 401 tenta chave backup.
     """
@@ -295,7 +328,7 @@ def gerar_resposta(
     max_tokens = min(max_tokens, 4000)
 
     # Lista de modelos: ENV ou model_router por tipo
-    models_from_env = _parse_models() if _env("OPENAI_MODEL") else None
+    models_from_env = _parse_models() if (_env("OPENROUTER_MODEL") or _env("OPENAI_MODEL")) else None
     if models_from_env and len(models_from_env) > 0:
         models = _prioritize_models(models_from_env)
     else:

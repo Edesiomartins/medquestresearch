@@ -20,14 +20,6 @@ interface Regra {
   bonus_percentual?: number;
 }
 
-const USO_CREDITOS = [
-  { icon: '📄', label: 'Upload PDF/DOCX', creditos: 3 },
-  { icon: '🔍', label: 'Análise crítica', creditos: 7 },
-  { icon: '🌍', label: 'Perspectivas científicas', creditos: 10 },
-  { icon: '📊', label: 'Metanálise (por etapa)', creditos: 12 },
-  { icon: '📑', label: 'Upload + análise PRISMA por artigo', creditos: 15 },
-];
-
 export default function PlanosPage() {
   const { token } = useAuth();
   const [pacotes, setPacotes] = useState<Pacote[]>([]);
@@ -138,15 +130,16 @@ export default function PlanosPage() {
             Comprar créditos
           </h1>
           <p className="text-slate-600 text-lg max-w-2xl mx-auto">
-            Use créditos para análises de artigos, metanálise PRISMA, explicações e mais.
-            Compre a quantidade que precisar.
+            Use créditos para análise crítica de artigos e metanálise PRISMA. Compre a quantidade que precisar.
           </p>
           {regra && (
             <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0c3d66]/10 border border-[#0c3d66]/20 text-[#0c3d66] text-sm font-medium">
-              <span>R$ 0,25/crédito</span>
+              <span>
+                {formatarPreco(regra.preco_por_credito_reais ?? 0.3)}/crédito
+              </span>
               <span className="text-slate-400">•</span>
               <span>
-                +{regra.bonus_percentual ?? 20}% bônus acima de {regra.bonus_acima_de ?? 300} créditos
+                +{regra.bonus_percentual ?? 20}% bônus em créditos acima de {regra.bonus_acima_de ?? 300} unidades
               </span>
             </div>
           )}
@@ -243,33 +236,6 @@ export default function PlanosPage() {
                     </div>
                   );
                 })}
-              </div>
-            </section>
-
-            {/* Uso dos créditos */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
-              <h2 className="text-xl font-semibold text-slate-800 mb-5">
-                Como funcionam os créditos?
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {USO_CREDITOS.map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-slate-50/80 border border-slate-100"
-                  >
-                    <span className="text-2xl" aria-hidden>
-                      {item.icon}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 text-sm">
-                        {item.label}
-                      </p>
-                      <p className="text-slate-500 text-xs">
-                        {item.creditos} créditos
-                      </p>
-                    </div>
-                  </div>
-                ))}
               </div>
             </section>
           </>

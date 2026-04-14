@@ -5,6 +5,7 @@ Usado pelo endpoint POST /genapi/checkout/creditos.
 
 import os
 import logging
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -17,7 +18,7 @@ if SANDBOX:
     ASAAS_BASE_URL = os.getenv("ASAAS_BASE_URL", "https://sandbox.asaas.com/api/v3")
 
 # Regra de preço (igual ao restante do sistema)
-PRECO_CREDITO = 0.25
+PRECO_CREDITO = math.ceil(0.25 * 1.2 * 100) / 100  # R$ 0,30
 BONUS_THRESHOLD = 300
 BONUS_PERCENT = 0.20
 

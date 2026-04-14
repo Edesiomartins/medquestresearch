@@ -41,6 +41,7 @@ Tradução em português brasileiro:"""
     return gerar_resposta(
         f"Traduza para português brasileiro (mantenha termos técnicos e formatação). Responda só com a tradução:\n\n{chunk}",
         temperatura=0.3,
+        tipo="pdf",
     )
 
 def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
@@ -402,7 +403,7 @@ Texto a traduzir:
 {chunk}
 
 Tradução em português brasileiro:"""
-                    chunk_traduzido = gerar_resposta(prompt_traducao, temperatura=0.3)
+                    chunk_traduzido = gerar_resposta(prompt_traducao, temperatura=0.3, tipo="pdf")
                     chunks.append(chunk_traduzido)
             
             # Juntar chunks traduzidos
