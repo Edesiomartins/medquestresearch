@@ -99,7 +99,7 @@ class HelpChatRequest(BaseModel):
 
 class HelpChatResponse(BaseModel):
     answer: str
-    model_tier: str = "openrouter_free"
+    model_tier: str = "openrouter_elephant_alpha"
 
 
 class HelpHistoryItem(BaseModel):

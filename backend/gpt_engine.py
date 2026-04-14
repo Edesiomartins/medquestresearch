@@ -536,6 +536,7 @@ def gerar_resposta_openrouter_free_chat(
         raise ValueError("Mensagem vazia.")
 
     free_models = [
+        "openrouter/elephant-alpha",
         "nvidia/nemotron-3-super-120b-a12b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "deepseek/deepseek-r1:free",
