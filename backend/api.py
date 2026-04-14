@@ -1593,7 +1593,8 @@ class TraducaoInput(BaseModel):
 @limiter.limit("20 per minute")
 def rota_traducao(request: Request, data: TraducaoInput, user=Depends(require_api_key)):
     """
-    Traduz o texto extra?do para portugu?s brasileiro (Qwen/Groq quando dispon?vel).
+    Traduz o texto extra?do para portugu?s brasileiro usando m?dulo dedicado de tradu??o.
+    Motor principal: openrouter/elephant-alpha; fallback: openai/gpt-oss-120b:free.
     Usado quando o usu?rio clica em "Traduzir texto" na aba do texto extra?do.
     """
     if not data.texto or not data.texto.strip():

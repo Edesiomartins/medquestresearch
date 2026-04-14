@@ -3,7 +3,15 @@ import fitz  # PyMuPDF
 import re
 import unicodedata
 
-# Tentar importação relativa primeiro, depois absoluta
+try:
+    from .services.translation_service import translate_to_pt_br_health_literature
+except ImportError:
+    try:
+        from services.translation_service import translate_to_pt_br_health_literature
+    except ImportError:
+        from backend.services.translation_service import translate_to_pt_br_health_literature  # type: ignore
+
+# Compatibilidade para funções legadas internas deste módulo
 try:
     from .gpt_engine import gerar_resposta
 except ImportError:
@@ -432,20 +440,14 @@ def _precisa_traduzir_para_pt(texto):
 
 def obter_versao_portugues(texto):
     """
-    Retorna a versão em português do texto (usando Qwen/Groq quando disponível).
-    Se o texto já estiver em português ou tradução falhar, retorna o próprio texto.
+    Retorna a versão em português do texto via módulo dedicado de tradução.
+    Motor principal: openrouter/elephant-alpha
+    Fallback: openai/gpt-oss-120b:free
     """
     if not texto or not texto.strip():
         return texto
     try:
-        chunk_size = 2000
-        chunks = []
-        for i in range(0, len(texto), chunk_size):
-            chunk = texto[i:i + chunk_size]
-            if chunk.strip():
-                chunk_traduzido = _traduzir_chunk_qwen(chunk)
-                chunks.append(chunk_traduzido)
-        return '\n\n'.join(chunks) if chunks else texto
+        return translate_to_pt_br_health_literature(texto)
     except Exception as e:
         print(f"Erro ao obter versão em português: {e}")
         return texto

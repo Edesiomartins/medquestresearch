@@ -595,3 +595,42 @@ def gerar_resposta_openrouter_free_chat(
         "Não foi possível responder com os modelos free da OpenRouter no momento. "
         f"Último erro: {last_error}"
     )
+
+
+def gerar_resposta_com_modelos_preferenciais(
+    prompt: str,
+    preferred_models: List[str],
+    temperatura: float = 0.2,
+    max_output_tokens: int = 1200,
+    timeout_s: int = 60,
+) -> str:
+    """
+    Gera resposta tentando modelos em ordem explícita.
+    Útil para módulos com política de modelo fixa (ex.: tradução).
+    """
+    _check_research_env()
+    if not prompt or not prompt.strip():
+        raise ValueError("prompt vazio")
+    if not preferred_models:
+        raise ValueError("Lista de modelos preferenciais vazia.")
+
+    last_error: Optional[Exception] = None
+    for model in preferred_models:
+        try:
+            client = _get_client(use_backup=False)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperatura,
+                max_tokens=min(max_output_tokens, 1800),
+                timeout=timeout_s,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            if text:
+                return text
+        except Exception as error:
+            last_error = error
+            logger.warning(f"[GPT_ENGINE] modelo preferencial '{model}' falhou: {error}")
+            continue
+
+    raise Exception(f"Falha em todos os modelos preferenciais. Último erro: {last_error}")
