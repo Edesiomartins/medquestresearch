@@ -5,6 +5,20 @@ from typing import List
 
 from backend.schemas.studies import OutcomeExtraction, StudyExtraction
 
+TITLE_MARKER = "[[MEDQUEST_TITLE]]:"
+
+
+def _split_embedded_title(text: str) -> tuple[str, str]:
+    if not text:
+        return "", ""
+    pattern = rf"{re.escape(TITLE_MARKER)}\s*(.+?)(?:\n|$)"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return "", text
+    title = re.sub(r"\s+", " ", match.group(1)).strip()
+    clean_text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+    return title, clean_text
+
 
 def _is_likely_section_header(line: str) -> bool:
     normalized = (line or "").strip().lower().rstrip(":")
@@ -33,7 +47,10 @@ def _is_likely_author_line(line: str) -> bool:
     return False
 
 
-def _citation_from_text(text: str, fallback: str) -> str:
+def _citation_from_text(text: str, fallback: str, embedded_title: str = "") -> str:
+    if embedded_title and len(embedded_title) >= 12:
+        return embedded_title[:320]
+
     if not text:
         return fallback
 
@@ -52,9 +69,9 @@ def _citation_from_text(text: str, fallback: str) -> str:
             continue
         if re.fullmatch(r"[0-9\W_]+", line):
             continue
-        return line[:220]
+        return line[:320]
 
-    return lines[0][:220]
+    return lines[0][:320]
 
 
 def _extract_year(text: str) -> int | None:
@@ -65,13 +82,14 @@ def _extract_year(text: str) -> int | None:
 def extract_studies_from_texts(project_id: str, texts: List[str]) -> List[StudyExtraction]:
     studies: List[StudyExtraction] = []
     for index, text in enumerate(texts, start=1):
-        citation = _citation_from_text(text, f"Study {index}")
-        year = _extract_year(text)
+        embedded_title, clean_text = _split_embedded_title(text or "")
+        citation = _citation_from_text(clean_text, f"Study {index}", embedded_title=embedded_title)
+        year = _extract_year(clean_text)
         outcome = OutcomeExtraction(
             outcome_id=f"{project_id}_outcome_{index}",
             outcome_name="Primary outcome",
             outcome_type="continuous",
-            evidence_snippets=[(text or "")[:280]],
+            evidence_snippets=[clean_text[:280]],
             page_hints=["not_reported"],
             needs_user_confirmation=True,
         )
@@ -81,7 +99,7 @@ def extract_studies_from_texts(project_id: str, texts: List[str]) -> List[StudyE
                 citation=citation,
                 year=year,
                 outcomes=[outcome],
-                evidence_snippets=[(text or "")[:280]],
+                evidence_snippets=[clean_text[:280]],
                 page_hints=["not_reported"],
                 needs_user_confirmation=True,
             )

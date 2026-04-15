@@ -3,6 +3,8 @@ import fitz  # PyMuPDF
 import re
 import unicodedata
 
+TITLE_MARKER = "[[MEDQUEST_TITLE]]:"
+
 try:
     from .services.translation_service import translate_to_pt_br_health_literature
 except ImportError:
@@ -79,35 +81,47 @@ def _extrair_titulo_pdf(doc):
     except Exception:
         pass
 
-    # 2) Heurística: maior tamanho de fonte na primeira página
+    # 2) Heurística: linhas maiores e mais ao topo na primeira página
     try:
         if len(doc) == 0:
             return ""
         page = doc[0]
         page_dict = page.get_text("dict")
-        spans = []
+        page_height = float(page.rect.height or 0.0)
+        lines_data = []
         for block in page_dict.get("blocks", []):
             for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    text = re.sub(r"\s+", " ", span.get("text", "")).strip()
-                    if len(text) < 3:
-                        continue
-                    size = float(span.get("size", 0) or 0)
-                    if size <= 0:
-                        continue
-                    bbox = span.get("bbox", [0, 0, 0, 0])
-                    y0 = float(bbox[1]) if len(bbox) > 1 else 0.0
-                    spans.append((size, y0, text))
+                spans = line.get("spans", [])
+                if not spans:
+                    continue
+                full_line = re.sub(r"\s+", " ", "".join(span.get("text", "") for span in spans)).strip()
+                if len(full_line) < 8:
+                    continue
+                if re.fullmatch(r"[0-9\W_]+", full_line):
+                    continue
+                max_size = max(float(span.get("size", 0) or 0) for span in spans)
+                if max_size <= 0:
+                    continue
+                bbox = line.get("bbox", [0, 0, 0, 0])
+                y0 = float(bbox[1]) if len(bbox) > 1 else 0.0
+                lines_data.append((max_size, y0, full_line))
 
-        if not spans:
+        if not lines_data:
             return ""
 
-        max_size = max(s[0] for s in spans)
-        # Considera spans com tamanho próximo ao maior (normalmente múltiplas linhas do título)
-        candidate_spans = [s for s in spans if s[0] >= (max_size - 0.5)]
-        # Prioriza o topo da página e ordem de leitura
-        candidate_spans.sort(key=lambda x: (x[1], -x[0]))
-        title_parts = [text for _, _, text in candidate_spans[:8]]
+        max_size = max(s[0] for s in lines_data)
+        top_limit = page_height * 0.45 if page_height > 0 else 350.0
+        candidate_lines = [
+            item for item in lines_data
+            if item[0] >= (max_size - 0.4)
+            and item[1] <= top_limit
+            and not _limpar_titulo_extraido(item[2]).lower().startswith(("abstract", "keywords"))
+        ]
+        if not candidate_lines:
+            candidate_lines = [item for item in lines_data if item[1] <= top_limit]
+
+        candidate_lines.sort(key=lambda x: (x[1], -x[0]))
+        title_parts = [text for _, _, text in candidate_lines[:4]]
         guessed_title = _limpar_titulo_extraido(" ".join(title_parts))
         return guessed_title
     except Exception:
@@ -163,12 +177,9 @@ def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
     # Normalizar e limpar formatação
     texto_completo = _formatar_texto(texto_completo)
 
-    # Garante que o título apareça no início do texto para uso nas etapas seguintes de extração.
+    # Embute o título em marcador estável para consumo no extraction_service.
     if titulo_extraido:
-        prefixo_normalizado = re.sub(r"\s+", " ", texto_completo[:400]).strip().lower()
-        titulo_normalizado = re.sub(r"\s+", " ", titulo_extraido).strip().lower()
-        if titulo_normalizado and titulo_normalizado not in prefixo_normalizado:
-            texto_completo = f"{titulo_extraido}\n\n{texto_completo}"
+        texto_completo = f"{TITLE_MARKER} {titulo_extraido}\n{texto_completo}"
     
     # Manter texto original na extração; versão em português é gerada na API
     # texto_completo = _traduzir_para_portugues(texto_completo)  # desativado: retornamos original + pt na rota
