@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { analyzeMeta, exportMetaDocx, exportMetaZip, reviewMetaStudies, uploadMetaFiles } from '@/app/lib/meta-api';
@@ -28,6 +28,7 @@ type WizardStep = 'upload' | 'review' | 'analysis' | 'results';
 
 export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
   const router = useRouter();
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [step, setStep] = useState<WizardStep>('upload');
   const [projectId, setProjectId] = useState<string>('');
   const [question, setQuestion] = useState('');
@@ -68,6 +69,7 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
   };
 
   const handleUpload = async (files: File[]) => {
+    if (!files.length) return;
     setLoading(true);
     setError(null);
     try {
@@ -183,6 +185,32 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-end gap-2">
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept=".pdf,.docx"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const selected = Array.from(event.target.files || []);
+            if (selected.length) {
+              void handleUpload(selected);
+            }
+            // Permite subir o mesmo arquivo novamente em tentativas futuras.
+            event.currentTarget.value = '';
+          }}
+        />
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => uploadInputRef.current?.click()}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? 'Processando upload...' : 'Upload de estudos (PDF/DOCX)'}
+        </button>
+      </div>
+
       <MetaStepper steps={steps} activeKey={step} onStepClick={handleStepClick} />
 
       {error && (
