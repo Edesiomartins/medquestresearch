@@ -6,9 +6,55 @@ from typing import List
 from backend.schemas.studies import OutcomeExtraction, StudyExtraction
 
 
+def _is_likely_section_header(line: str) -> bool:
+    normalized = (line or "").strip().lower().rstrip(":")
+    return normalized in {
+        "abstract",
+        "introduction",
+        "background",
+        "methods",
+        "methodology",
+        "results",
+        "discussion",
+        "conclusion",
+        "keywords",
+    }
+
+
+def _is_likely_author_line(line: str) -> bool:
+    text = (line or "").strip()
+    if not text:
+        return False
+    if "@" in text:
+        return True
+    comma_count = text.count(",")
+    if comma_count >= 3 and len(text.split()) <= 20:
+        return True
+    return False
+
+
 def _citation_from_text(text: str, fallback: str) -> str:
-    first_line = (text or "").strip().splitlines()[0] if text else ""
-    return first_line[:220] if first_line else fallback
+    if not text:
+        return fallback
+
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in text.splitlines()]
+    lines = [ln for ln in lines if ln]
+    if not lines:
+        return fallback
+
+    # Busca nas primeiras linhas por um candidato robusto a título.
+    for line in lines[:20]:
+        if len(line) < 12:
+            continue
+        if _is_likely_section_header(line):
+            continue
+        if _is_likely_author_line(line):
+            continue
+        if re.fullmatch(r"[0-9\W_]+", line):
+            continue
+        return line[:220]
+
+    return lines[0][:220]
 
 
 def _extract_year(text: str) -> int | None:

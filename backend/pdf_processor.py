@@ -52,8 +52,71 @@ Tradução em português brasileiro:"""
         tipo="pdf",
     )
 
+
+def _limpar_titulo_extraido(titulo):
+    """Normaliza e valida título extraído do PDF."""
+    if not titulo:
+        return ""
+    titulo = re.sub(r"\s+", " ", str(titulo)).strip()
+    if len(titulo) < 12:
+        return ""
+    # Evitar cabeçalhos genéricos que frequentemente aparecem no topo
+    if titulo.lower() in {"abstract", "introduction", "methods", "results", "conclusion"}:
+        return ""
+    return titulo
+
+
+def _extrair_titulo_pdf(doc):
+    """
+    Extrai título preferencialmente dos metadados e, se ausente, infere pela maior fonte na 1ª página.
+    """
+    # 1) Metadado do PDF (quando disponível)
+    try:
+        metadata = doc.metadata or {}
+        meta_title = _limpar_titulo_extraido(metadata.get("title", ""))
+        if meta_title:
+            return meta_title
+    except Exception:
+        pass
+
+    # 2) Heurística: maior tamanho de fonte na primeira página
+    try:
+        if len(doc) == 0:
+            return ""
+        page = doc[0]
+        page_dict = page.get_text("dict")
+        spans = []
+        for block in page_dict.get("blocks", []):
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    text = re.sub(r"\s+", " ", span.get("text", "")).strip()
+                    if len(text) < 3:
+                        continue
+                    size = float(span.get("size", 0) or 0)
+                    if size <= 0:
+                        continue
+                    bbox = span.get("bbox", [0, 0, 0, 0])
+                    y0 = float(bbox[1]) if len(bbox) > 1 else 0.0
+                    spans.append((size, y0, text))
+
+        if not spans:
+            return ""
+
+        max_size = max(s[0] for s in spans)
+        # Considera spans com tamanho próximo ao maior (normalmente múltiplas linhas do título)
+        candidate_spans = [s for s in spans if s[0] >= (max_size - 0.5)]
+        # Prioriza o topo da página e ordem de leitura
+        candidate_spans.sort(key=lambda x: (x[1], -x[0]))
+        title_parts = [text for _, _, text in candidate_spans[:8]]
+        guessed_title = _limpar_titulo_extraido(" ".join(title_parts))
+        return guessed_title
+    except Exception:
+        return ""
+
+
 def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
     doc = fitz.open(caminho_pdf)
+    titulo_extraido = _extrair_titulo_pdf(doc)
     texto_completo = ""
     
     # Tentar diferentes métodos de extração para melhor qualidade
@@ -99,6 +162,13 @@ def extrair_texto_pdf(caminho_pdf, max_chars_por_chunk=5000):
     
     # Normalizar e limpar formatação
     texto_completo = _formatar_texto(texto_completo)
+
+    # Garante que o título apareça no início do texto para uso nas etapas seguintes de extração.
+    if titulo_extraido:
+        prefixo_normalizado = re.sub(r"\s+", " ", texto_completo[:400]).strip().lower()
+        titulo_normalizado = re.sub(r"\s+", " ", titulo_extraido).strip().lower()
+        if titulo_normalizado and titulo_normalizado not in prefixo_normalizado:
+            texto_completo = f"{titulo_extraido}\n\n{texto_completo}"
     
     # Manter texto original na extração; versão em português é gerada na API
     # texto_completo = _traduzir_para_portugues(texto_completo)  # desativado: retornamos original + pt na rota
