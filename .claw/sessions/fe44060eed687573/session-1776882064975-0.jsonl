@@ -1,3 +1,0 @@
-{"created_at_ms":1776882064974,"model":"qwen/qwen3-coder:free","session_id":"session-1776882064975-0","type":"session_meta","updated_at_ms":1776882064974,"version":1,"workspace_root":"C:\\Users\\Dr. Edesio Martins\\Documents\\PROJETOS\\MedquestResearch"}
-{"text":"analise o projeto e me sugira 3 pontos de melhorias","timestamp_ms":1776882084221,"type":"prompt_history"}
-{"message":{"blocks":[{"text":"analise o projeto e me sugira 3 pontos de melhorias","type":"text"}],"role":"user"},"type":"message"}
