@@ -13,7 +13,10 @@ export default function StudyUploadPanel({ loading, onUpload }: StudyUploadPanel
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <h3 className="mb-3 text-lg font-semibold text-slate-800">Ingestão de estudos</h3>
-      <p className="mb-4 text-sm text-slate-600">Envie múltiplos PDFs/DOCX para extração estruturada e revisão humana.</p>
+      <p className="mb-4 text-sm text-slate-600">
+        Envie múltiplos PDFs/DOCX. A IA extrai automaticamente PICO, desenho e dados numéricos dos
+        desfechos de cada artigo para sua revisão — a extração pode levar até ~1 minuto por artigo.
+      </p>
       <input
         type="file"
         multiple

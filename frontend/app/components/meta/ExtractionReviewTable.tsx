@@ -28,6 +28,24 @@ export default function ExtractionReviewTable({ studies, onChange }: ExtractionR
     onChange(next);
   };
 
+  const updateOutcomeField = (
+    studyId: string,
+    outcomeId: string,
+    field: 'outcome_name' | 'outcome_type',
+    value: string,
+  ) => {
+    const next = studies.map((study) => {
+      if (study.study_id !== studyId) return study;
+      return {
+        ...study,
+        outcomes: study.outcomes.map((outcome) =>
+          outcome.outcome_id === outcomeId ? { ...outcome, [field]: value } : outcome,
+        ),
+      };
+    });
+    onChange(next);
+  };
+
   const updateOutcomeNumericField = (
     studyId: string,
     outcomeId: string,
@@ -85,7 +103,15 @@ export default function ExtractionReviewTable({ studies, onChange }: ExtractionR
               </button>
             </div>
             <p className="mt-2 text-xs text-slate-600">
-              Outcomes: {study.outcomes.map((outcome) => outcome.outcome_name).join(', ') || 'N/D'}
+              {[
+                study.year ? `Ano: ${study.year}` : null,
+                study.design ? `Desenho: ${study.design}` : null,
+                study.country ? `País: ${study.country}` : null,
+                study.sample_size ? `N: ${study.sample_size}` : null,
+                study.follow_up ? `Seguimento: ${study.follow_up}` : null,
+              ]
+                .filter(Boolean)
+                .join(' | ') || 'Metadados não extraídos — preencha os desfechos abaixo.'}
             </p>
             {!study.included && (
               <div className="mt-3">
@@ -103,9 +129,43 @@ export default function ExtractionReviewTable({ studies, onChange }: ExtractionR
             <div className="mt-3 space-y-3 rounded border border-slate-100 bg-slate-50 p-2">
               {study.outcomes.map((outcome) => (
                 <div key={outcome.outcome_id} className="rounded border border-slate-200 bg-white p-2">
-                  <p className="text-xs font-semibold text-slate-700">{outcome.outcome_name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={outcome.outcome_name}
+                      onChange={(event) =>
+                        updateOutcomeField(study.study_id, outcome.outcome_id, 'outcome_name', event.target.value)
+                      }
+                      className="min-w-[200px] flex-1 rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700"
+                    />
+                    <select
+                      value={outcome.outcome_type}
+                      onChange={(event) =>
+                        updateOutcomeField(study.study_id, outcome.outcome_id, 'outcome_type', event.target.value)
+                      }
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      <option value="continuous">Contínuo (mean/SD)</option>
+                      <option value="binary">Binário (eventos/N)</option>
+                      <option value="generic">Genérico</option>
+                    </select>
+                    {(() => {
+                      const confidence = outcome.confidence_flags?.extraction_confidence as string | undefined;
+                      if (!confidence) return null;
+                      const palette: Record<string, string> = {
+                        high: 'bg-emerald-100 text-emerald-800',
+                        medium: 'bg-amber-100 text-amber-800',
+                        low: 'bg-red-100 text-red-800',
+                      };
+                      return (
+                        <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${palette[confidence] || 'bg-slate-100 text-slate-600'}`}>
+                          Confiança da extração: {confidence}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <p className="mt-1 text-[11px] text-slate-500">
-                    Tipo: {outcome.outcome_type} | Measure: {outcome.measure_type || 'N/D'}
+                    {outcome.timepoint ? `Momento: ${outcome.timepoint} | ` : ''}Measure: {outcome.measure_type || 'N/D'}
                   </p>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
                     <input

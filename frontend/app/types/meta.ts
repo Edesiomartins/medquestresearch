@@ -1,8 +1,12 @@
+export type EffectMeasure = 'SMD' | 'MD' | 'log_RR' | 'log_OR';
+export type MetaModel = 'fixed' | 'random_DL' | 'random_REML' | 'random_PM';
+
 export interface OutcomeExtraction {
   outcome_id: string;
   outcome_name: string;
   outcome_type: 'continuous' | 'binary' | 'generic';
   measure_type?: string;
+  timepoint?: string;
   intervention_mean?: number;
   intervention_sd?: number;
   intervention_events?: number;
@@ -13,6 +17,7 @@ export interface OutcomeExtraction {
   comparator_total?: number;
   evidence_snippets: string[];
   page_hints: string[];
+  confidence_flags?: Record<string, unknown>;
   needs_user_confirmation: boolean;
 }
 
@@ -23,7 +28,12 @@ export interface StudyExtraction {
   country?: string;
   design?: string;
   sample_size?: number;
+  arms?: string[];
+  interventions?: string[];
+  comparators?: string[];
+  follow_up?: string;
   outcomes: OutcomeExtraction[];
+  confidence_flags?: Record<string, unknown>;
   included: boolean;
   exclusion_reason?: string;
 }

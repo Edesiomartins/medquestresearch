@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { analyzeMeta, exportMetaDocx, exportMetaZip, reviewMetaStudies, uploadMetaFiles } from '@/app/lib/meta-api';
-import type { MetaAnalysisResponse, StudyExtraction } from '@/app/types/meta';
+import type { EffectMeasure, MetaAnalysisResponse, MetaModel, StudyExtraction } from '@/app/types/meta';
 
 import ArticleWriterPanel from './ArticleWriterPanel';
 import EffectsTablePanel from './EffectsTablePanel';
@@ -32,8 +32,8 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
   const [step, setStep] = useState<WizardStep>('upload');
   const [projectId, setProjectId] = useState<string>('');
   const [question, setQuestion] = useState('');
-  const [effectMeasure, setEffectMeasure] = useState<'SMD' | 'log_RR' | 'log_OR'>('SMD');
-  const [model, setModel] = useState<'fixed' | 'random_DL' | 'random_REML' | 'random_PM'>('random_REML');
+  const [effectMeasure, setEffectMeasure] = useState<EffectMeasure>('SMD');
+  const [model, setModel] = useState<MetaModel>('random_REML');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [studies, setStudies] = useState<StudyExtraction[]>([]);
@@ -269,10 +269,11 @@ export default function MetaAnalysisWizard({ token }: MetaAnalysisWizardProps) {
               placeholder="Pergunta clínica / questão da revisão"
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:col-span-3"
             />
-            <select value={effectMeasure} onChange={(event) => setEffectMeasure(event.target.value as any)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="SMD">SMD (Hedges g)</option>
-              <option value="log_RR">log RR</option>
-              <option value="log_OR">log OR</option>
+            <select value={effectMeasure} onChange={(event) => setEffectMeasure(event.target.value as EffectMeasure)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option value="SMD">SMD (Hedges g) — contínuo</option>
+              <option value="MD">MD (diferença de médias) — contínuo</option>
+              <option value="log_RR">RR (risco relativo) — binário</option>
+              <option value="log_OR">OR (odds ratio) — binário</option>
             </select>
             <select value={model} onChange={(event) => setModel(event.target.value as any)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
               <option value="fixed">Fixed</option>

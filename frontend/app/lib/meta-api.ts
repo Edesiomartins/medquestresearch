@@ -1,5 +1,5 @@
 import { API_BASE_URL } from './api-config';
-import type { MetaAnalysisResponse, MetaUploadResponse, StudyExtraction } from '@/app/types/meta';
+import type { EffectMeasure, MetaAnalysisResponse, MetaModel, MetaUploadResponse, StudyExtraction } from '@/app/types/meta';
 
 function withAuth(token: string): HeadersInit {
   return {
@@ -50,8 +50,8 @@ export async function analyzeMeta(
   body: {
     project_id: string;
     question: string;
-    effect_measure: 'SMD' | 'log_RR' | 'log_OR';
-    model_used: 'fixed' | 'random_DL' | 'random_REML' | 'random_PM';
+    effect_measure: EffectMeasure;
+    model_used: MetaModel;
     studies: StudyExtraction[];
     generate_article?: boolean;
   },
@@ -76,8 +76,8 @@ export async function exportMetaDocx(
   body: {
     project_id: string;
     question: string;
-    effect_measure: 'SMD' | 'log_RR' | 'log_OR';
-    model_used: 'fixed' | 'random_DL' | 'random_REML' | 'random_PM';
+    effect_measure: EffectMeasure;
+    model_used: MetaModel;
     studies: StudyExtraction[];
     generate_article?: boolean;
   },
@@ -102,8 +102,8 @@ export async function exportMetaZip(
   body: {
     project_id: string;
     question: string;
-    effect_measure: 'SMD' | 'log_RR' | 'log_OR';
-    model_used: 'fixed' | 'random_DL' | 'random_REML' | 'random_PM';
+    effect_measure: EffectMeasure;
+    model_used: MetaModel;
     studies: StudyExtraction[];
     generate_article?: boolean;
   },

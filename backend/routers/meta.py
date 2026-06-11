@@ -16,7 +16,10 @@ from backend.schemas.meta import (
     MetaUploadResponse,
     MetaPipelineStatus,
 )
-from backend.services.article_generation_service import generate_article_sections
+from backend.services.article_generation_service import (
+    VALID_SECTIONS,
+    generate_article_section,
+)
 from backend.services.docx_export_service import build_meta_docx
 from backend.services.export_bundle_service import build_submission_zip
 from backend.services.extraction_service import extract_studies_from_texts
@@ -35,6 +38,23 @@ except Exception:
 
 
 router = APIRouter(prefix="/api/meta", tags=["meta-analysis-v2"])
+
+TITLE_MARKER = "[[MEDQUEST_TITLE]]:"
+
+
+def _extract_docx_text(path: str, filename: str) -> str:
+    from docx import Document  # python-docx
+
+    document = Document(path)
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+    title = os.path.splitext(os.path.basename(filename))[0].replace("_", " ").strip()
+    body = "\n".join(parts)
+    return f"{TITLE_MARKER} {title}\n{body}" if title else body
 
 
 def require_api_key(authorization: str = Header(None)):
@@ -55,6 +75,8 @@ async def upload_studies(files: List[UploadFile] = File(...), user=Depends(requi
         raise HTTPException(status_code=400, detail="Máximo de 25 arquivos por upload.")
 
     texts: List[str] = []
+    notes: List[str] = []
+    failed_files: List[str] = []
     for file in files:
         if not file.filename or not file.filename.lower().endswith((".pdf", ".docx")):
             raise HTTPException(status_code=400, detail=f"Formato não suportado: {file.filename}")
@@ -64,31 +86,47 @@ async def upload_studies(files: List[UploadFile] = File(...), user=Depends(requi
                 status_code=400,
                 detail=f"Arquivo {file.filename} excede 20MB.",
             )
+        safe_suffix = ".pdf" if file.filename.lower().endswith(".pdf") else ".docx"
         temp_name = os.path.join(
             tempfile.gettempdir(),
-            f"meta_upload_{time.time_ns()}_{file.filename}",
+            f"meta_upload_{time.time_ns()}{safe_suffix}",
         )
         with open(temp_name, "wb") as stream:
             stream.write(payload)
         try:
-            if file.filename.lower().endswith(".pdf"):
+            if safe_suffix == ".pdf":
                 text = extrair_texto_pdf(temp_name)
                 if isinstance(text, list):
                     text = "\n".join(text)
-                texts.append(text or "")
             else:
-                texts.append(payload.decode("utf-8", errors="ignore"))
+                text = _extract_docx_text(temp_name, file.filename)
+            if not (text or "").strip():
+                failed_files.append(file.filename)
+                notes.append(f"{file.filename}: nenhum texto extraível (PDF escaneado sem OCR?). Arquivo ignorado.")
+                continue
+            texts.append(text)
+        except Exception as error:
+            failed_files.append(file.filename)
+            notes.append(f"{file.filename}: falha ao processar ({type(error).__name__}). Arquivo ignorado.")
         finally:
             if os.path.exists(temp_name):
                 os.remove(temp_name)
 
-    project_id = str(int(time.time()))
-    studies = extract_studies_from_texts(project_id=project_id, texts=texts)
+    if not texts:
+        raise HTTPException(
+            status_code=422,
+            detail="Nenhum arquivo pôde ser processado. " + " ".join(notes),
+        )
+
+    project_id = f"meta_{time.time_ns()}"
+    studies = extract_studies_from_texts(project_id=project_id, texts=texts, notes=notes)
+    status = MetaPipelineStatus.warning if failed_files else MetaPipelineStatus.success
+    notes.insert(0, f"{len(texts)} de {len(files)} arquivos processados.")
     return MetaUploadResponse(
-        status=MetaPipelineStatus.success,
+        status=status,
         project_id=project_id,
         studies=studies,
-        notes=[f"Usuário {user.get('id')} enviou {len(files)} arquivos."],
+        notes=notes,
     )
 
 
@@ -140,11 +178,17 @@ def plots(payload: MetaAnalyzeRequest, user=Depends(require_api_key)):
 @router.post("/article", response_model=ArticleSectionResponse)
 def article(payload: MetaAnalyzeRequest, section: str = "results", user=Depends(require_api_key)):
     _ = user
+    if section not in VALID_SECTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Seção inválida: {section}. Use uma de: {', '.join(sorted(VALID_SECTIONS))}.",
+        )
+    # A seção solicitada é gerada à parte; evita gerar as 6 seções dentro da análise.
+    payload.generate_article = False
     result = analyze_meta(payload)
-    sections = generate_article_sections(result.dict())
-    content = getattr(sections, section, None)
+    content = generate_article_section(result.dict(), section)
     if not content:
-        raise HTTPException(status_code=400, detail=f"Seção inválida: {section}")
+        raise HTTPException(status_code=502, detail=f"Falha ao gerar a seção '{section}'. Tente novamente.")
     return ArticleSectionResponse(
         section=section,
         content=content,
